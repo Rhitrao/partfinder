@@ -1,5 +1,8 @@
 // Brand and model words that hint at a manufacturer. Hints re-rank candidates; they never remove one.
 // Words match whole words only, case-insensitive. A space inside a word matches any run of whitespace.
+// The longest word matches first, and text it consumes is not matched again.
+// A token that is exactly a hint word (e.g. PC200) is a hint only, never a part number.
+// CAT is also an English word; hints only re-rank, so a stray English 'cat' costs nothing.
 
 export interface HintWord {
   words: string[];

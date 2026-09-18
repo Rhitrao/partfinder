@@ -32,29 +32,73 @@ const EDGE_PUNCTUATION = /^[^0-9A-Z]+|[^0-9A-Z]+$/g;
 const SEPARATORS = /[\s\-./\\]/g;
 const TRAILING_SEPARATORS = /[\s\-./\\]+$/;
 
-/** Split free text into candidate part-number tokens, uppercased. */
+/** Hint words that can stand alone as a token, e.g. PC200. Such a token is a hint, never a part number. */
+const HINT_TOKENS = new Set(HINT_WORDS.flatMap((h) => h.words).map((w) => w.toUpperCase()));
+
+/**
+ * Split free text into candidate part-number tokens, uppercased.
+ * "VOE" followed by an 8-digit token merges into one token. Hint words are dropped. Tokens are
+ * deduplicated by compact form, keeping the first spelling in order of appearance.
+ */
 export function extractTokens(text: string): string[] {
-  return text
+  const raw = text
     .toUpperCase()
     .split(TOKEN_SPLIT)
-    .map((t) => t.replace(EDGE_PUNCTUATION, ""))
-    .filter((t) => t.length >= 5 && /\d/.test(t));
+    .map((t) => t.replace(EDGE_PUNCTUATION, ""));
+
+  const merged: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i] ?? "";
+    const next = raw[i + 1];
+    if (t === "VOE" && next !== undefined && /^\d{8}$/.test(next)) {
+      merged.push(t + next);
+      i++;
+    } else {
+      merged.push(t);
+    }
+  }
+
+  const seen = new Set<string>();
+  return merged.filter((t) => {
+    if (t.length < 5 || !/\d/.test(t) || HINT_TOKENS.has(t)) return false;
+    const key = compact(t);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-const HINT_PATTERNS = HINT_WORDS.map((h) => ({
-  hints: h.hints,
-  patterns: h.words.map(
-    (w) => new RegExp(`(?<![0-9A-Z])${w.split(" ").join("\\s+")}(?![0-9A-Z])`, "i"),
-  ),
-}));
+/** Every hint word with its hint-table row, longest word first. */
+const HINT_PATTERNS = HINT_WORDS.flatMap((h, row) =>
+  h.words.map((w) => ({
+    row,
+    length: w.length,
+    pattern: new RegExp(`(?<![0-9A-Z])${w.split(" ").join("\\s+")}(?![0-9A-Z])`, "gi"),
+  })),
+).sort((a, b) => b.length - a.length);
 
-/** Manufacturer hints from brand and model words, in hint-table order, without duplicates. */
+/**
+ * Manufacturer hints from brand and model words, in hint-table order, without duplicates.
+ * Longer words match first; text consumed by a longer match is not matched again,
+ * so "TATA HITACHI" hints Tata Hitachi only.
+ */
 export function extractHints(text: string): string[] {
-  const found: string[] = [];
-  for (const { hints, patterns } of HINT_PATTERNS) {
-    if (!patterns.some((p) => p.test(text))) continue;
-    for (const h of hints) if (!found.includes(h)) found.push(h);
+  const consumed: [number, number][] = [];
+  const rows = new Set<number>();
+  for (const { row, pattern } of HINT_PATTERNS) {
+    for (const m of text.matchAll(pattern)) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (consumed.some(([s, e]) => start < e && end > s)) continue;
+      consumed.push([start, end]);
+      rows.add(row);
+    }
   }
+  const found: string[] = [];
+  HINT_WORDS.forEach((h, row) => {
+    if (!rows.has(row)) return;
+    for (const hint of h.hints) if (!found.includes(hint)) found.push(hint);
+  });
   return found;
 }
 

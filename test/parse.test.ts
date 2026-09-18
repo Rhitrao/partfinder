@@ -180,6 +180,28 @@ describe("10. extraction from a message", () => {
   });
 });
 
+describe("step 1b: tokens and hints", () => {
+  it("VOE 14589129 merges into one Volvo CE token, distinctive", () => {
+    expect(extractTokens("VOE 14589129")).toEqual(["VOE14589129"]);
+    const c = first("VOE14589129");
+    expect(c).toMatchObject({ oem: "Volvo CE", canonical: "VOE14589129", strength: "distinctive" });
+  });
+
+  it("a hint word is a hint only, never a part-number token", () => {
+    const msg = "for PC200 need 205-70-19570";
+    expect(extractTokens(msg)).toEqual(["205-70-19570"]);
+    expect(extractHints(msg)).toEqual(["Komatsu"]);
+  });
+
+  it("TATA HITACHI consumes HITACHI, so only Tata Hitachi is hinted", () => {
+    expect(extractHints("TATA HITACHI TD02217")).toEqual(["Tata Hitachi"]);
+  });
+
+  it("tokens are deduplicated by compact form, keeping the first spelling", () => {
+    expect(extractTokens("1u3352 and 1U-3352")).toEqual(["1U3352"]);
+  });
+});
+
 describe("compact", () => {
   it("removes spaces, dashes, dots, slashes and backslashes", () => {
     expect(compact("40 / 300.893-A\\B")).toBe("40300893AB");
