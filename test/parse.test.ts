@@ -165,6 +165,28 @@ describe("step 1c: hint-gated rules", () => {
   });
 });
 
+describe("step 1c: machine model words are hints", () => {
+  it.each([
+    ["PC200-8", "Komatsu"],
+    ["EX200LC", "Hitachi"],
+    ["SK210LC-8", "Kobelco"],
+    ["3CX", "JCB"],
+  ])("%s yields a hint and no token", (text, hint) => {
+    expect(extractHints(text)).toContain(hint);
+    expect(extractTokens(text)).toEqual([]);
+  });
+
+  it("need 205-70-19570 for PC200-8: one token, hint Komatsu", () => {
+    const msg = "need 205-70-19570 for PC200-8";
+    expect(extractTokens(msg)).toEqual(["205-70-19570"]);
+    expect(extractHints(msg)).toEqual(["Komatsu"]);
+  });
+
+  it("hints come back in the order they first appear in the text", () => {
+    expect(extractHints("JCB 3200677 hitachi")).toEqual(["JCB", "Hitachi", "Tata Hitachi"]);
+  });
+});
+
 describe("normalisation", () => {
   it("keeps the original input and the compact form", () => {
     const r = parse("1u-3352rc");

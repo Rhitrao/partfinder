@@ -27,24 +27,47 @@ export interface ParseResult {
   reason?: string;
 }
 
-const TOKEN_SPLIT = /[\s,;]+/;
+const TOKEN = /[^\s,;]+/g;
 const EDGE_PUNCTUATION = /^[^0-9A-Z]+|[^0-9A-Z]+$/g;
+const LEADING_PUNCTUATION = /^[^0-9A-Z]*/;
 const SEPARATORS = /[\s\-./\\]/g;
 const TRAILING_SEPARATORS = /[\s\-./\\]+$/;
 
-/** Hint words that can stand alone as a token, e.g. PC200. Such a token is a hint, never a part number. */
+interface RawToken {
+  text: string;
+  /** Offset of the trimmed token in the input. */
+  index: number;
+}
+
+/** Split on whitespace, commas and semicolons, uppercase, and trim punctuation from each end. */
+function rawTokens(text: string): RawToken[] {
+  const upper = text.toUpperCase();
+  return [...upper.matchAll(TOKEN)].map((m) => ({
+    text: m[0].replace(EDGE_PUNCTUATION, ""),
+    index: m.index + (LEADING_PUNCTUATION.exec(m[0])?.[0].length ?? 0),
+  }));
+}
+
+/** Hint words that can stand alone as a token. Such a token is a hint, never a part number. */
 const HINT_TOKENS = new Set(HINT_WORDS.flatMap((h) => h.words).map((w) => w.toUpperCase()));
+
+/** Model-number patterns from the hint table, each with its hint-table row. */
+const MODEL_PATTERNS = HINT_WORDS.flatMap((h, row) =>
+  (h.patterns ?? []).map((pattern) => ({ row, pattern })),
+);
+
+function isHintToken(token: string): boolean {
+  return HINT_TOKENS.has(token) || MODEL_PATTERNS.some(({ pattern }) => pattern.test(token));
+}
 
 /**
  * Split free text into candidate part-number tokens, uppercased.
- * "VOE" followed by an 8-digit token merges into one token. Hint words are dropped. Tokens are
- * deduplicated by compact form, keeping the first spelling in order of appearance.
+ * "VOE" followed by an 8-digit token merges into one token. Hint words and model numbers
+ * (e.g. PC200-8) are dropped. Tokens are deduplicated by compact form, keeping the first
+ * spelling in order of appearance.
  */
 export function extractTokens(text: string): string[] {
-  const raw = text
-    .toUpperCase()
-    .split(TOKEN_SPLIT)
-    .map((t) => t.replace(EDGE_PUNCTUATION, ""));
+  const raw = rawTokens(text).map((t) => t.text);
 
   const merged: string[] = [];
   for (let i = 0; i < raw.length; i++) {
@@ -60,7 +83,7 @@ export function extractTokens(text: string): string[] {
 
   const seen = new Set<string>();
   return merged.filter((t) => {
-    if (t.length < 5 || !/\d/.test(t) || HINT_TOKENS.has(t)) return false;
+    if (t.length < 5 || !/\d/.test(t) || isHintToken(t)) return false;
     const key = compact(t);
     if (seen.has(key)) return false;
     seen.add(key);
@@ -69,7 +92,7 @@ export function extractTokens(text: string): string[] {
 }
 
 /** Every hint word with its hint-table row, longest word first. */
-const HINT_PATTERNS = HINT_WORDS.flatMap((h, row) =>
+const WORD_PATTERNS = HINT_WORDS.flatMap((h, row) =>
   h.words.map((w) => ({
     row,
     length: w.length,
@@ -78,27 +101,33 @@ const HINT_PATTERNS = HINT_WORDS.flatMap((h, row) =>
 ).sort((a, b) => b.length - a.length);
 
 /**
- * Manufacturer hints from brand and model words, in hint-table order, without duplicates.
- * Longer words match first; text consumed by a longer match is not matched again,
- * so "TATA HITACHI" hints Tata Hitachi only.
+ * Manufacturer hints from brand words and model numbers, in the order they first appear in the
+ * text, without duplicates. Model patterns match whole tokens. Words match longest first; text
+ * consumed by an earlier match is not matched again, so "TATA HITACHI" hints Tata Hitachi only.
  */
 export function extractHints(text: string): string[] {
-  const consumed: [number, number][] = [];
-  const rows = new Set<number>();
-  for (const { row, pattern } of HINT_PATTERNS) {
-    for (const m of text.matchAll(pattern)) {
+  const matches: { start: number; end: number; row: number }[] = [];
+  const free = (start: number, end: number) => !matches.some((m) => start < m.end && end > m.start);
+
+  for (const token of rawTokens(text)) {
+    const model = MODEL_PATTERNS.find(({ pattern }) => pattern.test(token.text));
+    if (!model) continue;
+    matches.push({ start: token.index, end: token.index + token.text.length, row: model.row });
+  }
+  // Offsets come from the uppercased text, as rawTokens' do (uppercasing can change length).
+  const upper = text.toUpperCase();
+  for (const { row, pattern } of WORD_PATTERNS) {
+    for (const m of upper.matchAll(pattern)) {
       const start = m.index;
       const end = start + m[0].length;
-      if (consumed.some(([s, e]) => start < e && end > s)) continue;
-      consumed.push([start, end]);
-      rows.add(row);
+      if (free(start, end)) matches.push({ start, end, row });
     }
   }
+
   const found: string[] = [];
-  HINT_WORDS.forEach((h, row) => {
-    if (!rows.has(row)) return;
-    for (const hint of h.hints) if (!found.includes(hint)) found.push(hint);
-  });
+  for (const { row } of matches.sort((a, b) => a.start - b.start)) {
+    for (const hint of HINT_WORDS[row]?.hints ?? []) if (!found.includes(hint)) found.push(hint);
+  }
   return found;
 }
 
