@@ -1,0 +1,5 @@
+name = "partfinder"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# No routes, D1 bindings or secrets yet. Routes are added only when a step prompt says so.
