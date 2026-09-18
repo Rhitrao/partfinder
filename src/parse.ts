@@ -3,7 +3,7 @@
 // suffix and alternate spellings are all returned.
 
 import { HINT_WORDS } from "./hints";
-import { RULES, SUFFIXES, type FormatRule, type Strength } from "./rules";
+import { RULES, SUFFIXES, UNCONFIRMED_SUFFIXES, type FormatRule, type Strength } from "./rules";
 
 export interface Candidate {
   oem: string;
@@ -69,7 +69,8 @@ interface Variant {
   suffix?: string;
 }
 
-/** The token as typed, plus one variant per known suffix it ends in, with that suffix split off. */
+/** The token as typed, plus one variant per known suffix it ends in, with that suffix split off.
+ * Only rules with `suffixes: true` match the split variants. */
 function variants(upper: string): Variant[] {
   const out: Variant[] = [{ typed: upper, compact: compact(upper) }];
   for (const suffix of SUFFIXES) {
@@ -84,25 +85,52 @@ function expand(template: string, groups: readonly (string | undefined)[]): stri
   return template.replace(/\$(\d)/g, (_, n: string) => groups[Number(n)] ?? "");
 }
 
-/** Letters and digits become "#", separators stay: "320-0677" -> "###-####". */
-function skeleton(s: string): string {
-  return s.replace(/[0-9A-Z]/g, "#");
+/**
+ * Where separators sit, counted in letters and digits before each run of separators.
+ * "320-0677" and "320/0677" -> "3"; "205-70-19570" -> "3,5"; "3200677" -> "".
+ */
+function separatorPositions(s: string): string {
+  const positions: number[] = [];
+  let alnum = 0;
+  let inSeparator = false;
+  for (const ch of s) {
+    if (/[0-9A-Z]/.test(ch)) {
+      alnum++;
+      inSeparator = false;
+    } else if (!inSeparator) {
+      positions.push(alnum);
+      inSeparator = true;
+    }
+  }
+  return positions.join(",");
 }
 
 interface Ranked extends Candidate {
   order: number;
-  separatorMatch: boolean;
+  /** The user typed separators in this reading of the token. */
+  typedSeparators: boolean;
+  /** The canonical form equals the token as typed, suffix aside. */
+  exactTyped: boolean;
+  /** The canonical form puts separators where the user typed them. */
+  positionMatch: boolean;
+  ignoresSeparators: boolean;
 }
 
 function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): Candidate[] {
+  if (v.suffix && !rule.suffixes) return [];
   const m = rule.regex.exec(rule.matchOn === "typed" ? v.typed : v.compact);
   if (!m) return [];
-  const groupSets: (string | undefined)[][] = rule.prefixSplits
-    ? rule.prefixSplits.map((n) => {
-        const g = m[1] ?? "";
-        return [m[0], g.slice(0, n), g.slice(n)];
-      })
-    : [[...m]];
+  let groupSets: (string | undefined)[][] = [[...m]];
+  if (rule.prefixSplits) {
+    const g = m[1] ?? "";
+    const [min, max] = rule.splitBodyLength ?? [0, Infinity];
+    groupSets = rule.prefixSplits
+      .filter((n) => g.length - n >= min && g.length - n <= max)
+      .map((n) => [m[0], g.slice(0, n), g.slice(n)]);
+  }
+  const warnings: string[] = [];
+  if (rule.warning) warnings.push(rule.warning);
+  if (v.suffix && UNCONFIRMED_SUFFIXES.includes(v.suffix)) warnings.push("suffix meaning unconfirmed");
   return groupSets.map((groups) => ({
     oem: rule.oem,
     canonical: expand(rule.canonical, groups),
@@ -112,18 +140,28 @@ function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): 
     basis: "T5" as const,
     ruleId: rule.id,
     strength: rule.strength,
-    warnings: rule.warning ? [rule.warning] : [],
+    warnings: [...warnings],
     hintMatched: hints.includes(rule.oem),
   }));
 }
 
 /**
- * Match one token against every format rule and rank the candidates:
- * 1. a hint match first;
- * 2. then distinctive before shared, where a distinctive rule only counts as distinctive
+ * Match one token against every format rule and rank the candidates.
+ *
+ * When the user typed separators, they are evidence:
+ * - a manufacturer with any candidate that puts separators where the user typed them keeps only
+ *   those candidates;
+ * - candidates that put separators elsewhere (or nowhere) are warned
+ *   "ignores the separators you typed".
+ *
+ * Ranking, in order:
+ * 1. canonical form equals the token as typed (only when separators were typed);
+ * 2. candidates that ignore the typed separators go last;
+ * 3. a hint match;
+ * 4. distinctive before shared, where a distinctive rule only counts as distinctive
  *    when no other manufacturer's rule also matched the token;
- * 3. then a candidate whose separators match what the user typed (only when they typed any);
- * 4. then rule-table order.
+ * 5. separators in the typed positions;
+ * 6. rule-table order.
  * Hints re-rank; they never remove a candidate.
  */
 export function parse(token: string, hints: readonly string[] = []): ParseResult {
@@ -131,19 +169,32 @@ export function parse(token: string, hints: readonly string[] = []): ParseResult
   const result: ParseResult = { input: token, compact: compact(upper), candidates: [] };
 
   const vs = variants(upper);
-  const found: Ranked[] = [];
+  let found: Ranked[] = [];
   RULES.forEach((rule) => {
     for (const v of vs) {
+      const typedPositions = separatorPositions(v.typed);
+      const typedSeparators = typedPositions !== "";
       for (const c of candidatesFor(rule, v, hints)) {
-        const typedHasSeparators = skeleton(v.typed) !== skeleton(v.compact);
         found.push({
           ...c,
           order: found.length,
-          separatorMatch: typedHasSeparators && skeleton(v.typed) === skeleton(c.canonical),
+          typedSeparators,
+          exactTyped: typedSeparators && c.canonical === v.typed,
+          positionMatch: typedSeparators && separatorPositions(c.canonical) === typedPositions,
+          ignoresSeparators: false,
         });
       }
     }
   });
+
+  const matchedOems = new Set(found.filter((c) => c.positionMatch).map((c) => c.oem));
+  found = found.filter((c) => c.positionMatch || !matchedOems.has(c.oem));
+  for (const c of found) {
+    if (c.typedSeparators && !c.positionMatch) {
+      c.ignoresSeparators = true;
+      c.warnings.push("ignores the separators you typed");
+    }
+  }
 
   const oems = [...new Set(found.map((c) => c.oem))];
   if (oems.length > 1) {
@@ -156,15 +207,17 @@ export function parse(token: string, hints: readonly string[] = []): ParseResult
 
   found.sort(
     (a, b) =>
+      Number(b.exactTyped) - Number(a.exactTyped) ||
+      Number(a.ignoresSeparators) - Number(b.ignoresSeparators) ||
       Number(b.hintMatched) - Number(a.hintMatched) ||
       Number(distinctive(b)) - Number(distinctive(a)) ||
-      Number(b.separatorMatch) - Number(a.separatorMatch) ||
+      Number(b.positionMatch) - Number(a.positionMatch) ||
       a.order - b.order,
   );
 
-  // The same reading can come from two rules (e.g. jcb-typed and jcb-compact); keep the best-ranked.
+  // The same reading can come from two rules (e.g. jcb-slash and jcb-compact); keep the best-ranked.
   const seen = new Set<string>();
-  for (const { order: _o, separatorMatch: _s, ...c } of found) {
+  for (const { order, typedSeparators, exactTyped, positionMatch, ignoresSeparators, ...c } of found) {
     const key = `${c.oem}|${c.canonical}|${c.suffix ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
