@@ -19,6 +19,8 @@ export interface FormatRule {
   note: string;
   /** Whether a known suffix (RC, TL, WTL) may be split off before matching. */
   suffixes: boolean;
+  /** Run this rule only when the input carries a hint for its manufacturer. Default false. */
+  requiresHint?: boolean;
   /** Split capture group 1 after each of these lengths, giving one candidate per split as $1 and $2. */
   prefixSplits?: number[];
   /** With prefixSplits: keep only splits whose body ($2) length is within [min, max]. */
@@ -174,6 +176,7 @@ export const RULES: readonly FormatRule[] = [
     alternates: ["VOE$1"],
     note: "hypothesis: Volvo CE numbers often written without VOE",
     suffixes: false,
+    requiresHint: true,
   },
 ];
 

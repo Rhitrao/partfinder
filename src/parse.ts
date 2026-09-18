@@ -162,6 +162,7 @@ interface Ranked extends Candidate {
 
 function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): Candidate[] {
   if (v.suffix && !rule.suffixes) return [];
+  if (rule.requiresHint && !hints.includes(rule.oem)) return [];
   const m = rule.regex.exec(rule.matchOn === "typed" ? v.typed : v.compact);
   if (!m) return [];
   let groupSets: (string | undefined)[][] = [[...m]];
@@ -206,7 +207,8 @@ function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): 
  *    when no other manufacturer's rule also matched the token;
  * 5. separators in the typed positions;
  * 6. rule-table order.
- * Hints re-rank; they never remove a candidate.
+ * Hints re-rank; they never remove a candidate. A rule marked requiresHint runs only when its
+ * manufacturer is hinted.
  */
 export function parse(token: string, hints: readonly string[] = []): ParseResult {
   const upper = token.trim().toUpperCase();

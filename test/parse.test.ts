@@ -40,17 +40,13 @@ describe("parse", () => {
     expect(c.alternates).toEqual(expect.arrayContaining(["40\\300893", "40-300893", "40300893"]));
   });
 
-  it("5. 40300893 gives two JCB splits and Volvo CE, all flagged ambiguous", () => {
+  it("5. 40300893 gives two JCB candidates, each flagged prefix-ambiguous", () => {
     const { candidates } = parse("40300893");
     expect(candidates.map((c) => [c.oem, c.canonical])).toEqual([
       ["JCB", "40/300893"],
       ["JCB", "403/00893"],
-      ["Volvo CE", "40300893"],
     ]);
-    for (const c of candidates) {
-      expect(c.warnings.some((w) => w.startsWith("ambiguous format"))).toBe(true);
-      if (c.oem === "JCB") expect(c.warnings).toContain("prefix length ambiguous");
-    }
+    for (const c of candidates) expect(c.warnings).toContain("prefix length ambiguous");
   });
 
   it("6. YN32W01029P1 is Kobelco, canonical unchanged", () => {
@@ -112,16 +108,19 @@ describe("step 1b: typed separators and tighter rules", () => {
     const jcb = candidates.findIndex((c) => c.oem === "JCB");
     expect(jcb).toBeGreaterThan(0);
     expect(candidates[jcb]).toMatchObject({ ruleId: "jcb-dash", canonical: "320/0677" });
+    const hitachi = candidates[candidates.length - 1];
+    expect(hitachi).toMatchObject({ oem: "Hitachi", canonical: "3200677" });
+    expect(hitachi?.warnings).toContain(ignores);
   });
 
-  it("40/300893: exactly one JCB candidate; other manufacturers ignore the separators", () => {
+  it("40/300893: one candidate, JCB 40/300893, distinctive", () => {
     const { candidates } = parse("40/300893");
-    const jcb = candidates.filter((c) => c.oem === "JCB");
-    expect(jcb.map((c) => c.canonical)).toEqual(["40/300893"]);
-    expect(candidates[0]?.canonical).toBe("40/300893");
-    const others = candidates.filter((c) => c.oem !== "JCB");
-    expect(others.length).toBeGreaterThan(0);
-    for (const c of others) expect(c.warnings).toContain(ignores);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      oem: "JCB",
+      canonical: "40/300893",
+      strength: "distinctive",
+    });
   });
 
   it("403008930: JCB 403/008930 only, no 7-character body", () => {
@@ -151,6 +150,18 @@ describe("step 1b: typed separators and tighter rules", () => {
     const c = first("1U3352WTL");
     expect(c).toMatchObject({ oem: "Caterpillar", canonical: "1U-3352", suffix: "WTL" });
     expect(c.warnings).toContain("suffix meaning unconfirmed");
+  });
+});
+
+describe("step 1c: hint-gated rules", () => {
+  it("40300893 with a Volvo hint also gives Volvo CE 40300893", () => {
+    const text = "40300893 volvo";
+    const hints = extractHints(text);
+    expect(hints).toEqual(["Volvo CE"]);
+    const [token] = extractTokens(text);
+    const { candidates } = parse(token ?? "", hints);
+    expect(candidates.map((c) => [c.oem, c.canonical])).toContainEqual(["Volvo CE", "40300893"]);
+    expect(candidates.some((c) => c.oem === "JCB")).toBe(true);
   });
 });
 
