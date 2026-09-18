@@ -41,7 +41,8 @@ read the commit history.
 
 - **Normalisation never destroys information.** Keep the original input, canonical form, base,
   suffix and every alternate spelling.
-- Ambiguity is reported, not resolved, with one exception: separators the user typed are evidence. Within one manufacturer, a reading that contradicts them is dropped.
+- **Ambiguity is reported, not resolved.** With one exception: separators the user typed are
+  evidence. Within one manufacturer, a reading that contradicts them is dropped.
 - **"Not determined" is an answer.** Every unresolved field carries a reason code:
   `no_public_source | login_required | only_excluded_sources | ambiguous_format |
   no_rule_matched | cap_reached`.

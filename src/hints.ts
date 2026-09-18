@@ -4,6 +4,8 @@
 // Patterns match a whole token (e.g. PC200-8, SK210LC-8). A token that is exactly a hint word or
 // matches a pattern is a hint only, never a part number.
 // Hints come back in the order they first appear in the text.
+// Model patterns claim whole tokens. A real part number shaped like PC plus 2 to 4 digits would be
+// read as a hint. No current rule matches that shape.
 // CAT is also an English word; hints only re-rank, so a stray English 'cat' costs nothing.
 
 export interface HintWord {
