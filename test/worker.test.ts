@@ -14,7 +14,7 @@ describe("11. X-Robots-Tag: noindex", () => {
   });
 
   it("is on 404s", async () => {
-    // "/parts" now serves the page, so it is no longer a 404; it is covered in page.test.ts.
+    // "/parts/" serves the page and "/parts" redirects to it; both are covered elsewhere.
     for (const path of ["/", "/partsx", "/parts/api/nope"]) {
       const res = await get(path);
       expect(res.status).toBe(404);
@@ -30,6 +30,26 @@ describe("11. X-Robots-Tag: noindex", () => {
     const post = await get("/parts/api/parse?q=1u3352", { method: "POST" });
     expect(post.status).toBe(405);
     expect(post.headers.get("X-Robots-Tag")).toBe("noindex");
+  });
+});
+
+describe("GET /parts", () => {
+  it("redirects to /parts/ with a 301, keeping the query string", async () => {
+    const res = await get("/parts?q=1u3352&country=AE");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("Location")).toBe("/parts/?q=1u3352&country=AE");
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
+  });
+
+  it("redirects the bare path too", async () => {
+    const res = await get("/parts");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("Location")).toBe("/parts/");
+  });
+
+  it("does not redirect anything else that starts with parts", async () => {
+    expect((await get("/partsxyz")).status).toBe(404);
+    expect((await get("/parts/xyz")).status).toBe(404);
   });
 });
 

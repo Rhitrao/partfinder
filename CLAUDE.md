@@ -165,7 +165,8 @@ test/               vitest; no network; public part numbers only
 ```
 npm test              run the test suite
 npx wrangler dev      run the Worker locally
-npx wrangler deploy   ONLY when a step prompt says to deploy
+Never run wrangler deploy. Deploys happen only when main changes, through Cloudflare's
+Git integration.
 ```
 
 ## Project history (keep this sentence verbatim in the README)

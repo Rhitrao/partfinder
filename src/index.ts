@@ -1,5 +1,10 @@
 // Worker entry and routing under /parts. Every response carries X-Robots-Tag: noindex.
 // q and hint are never logged.
+//
+// The page is served at /parts/, with a trailing slash, and /parts redirects to it. That is a
+// routing constraint, not a preference: a Cloudflare route pattern with no trailing "*" matches
+// the bare path only, and a pattern may not contain query parameters, so the page has to sit
+// under "rohitrao.in/parts/*" for /parts/?q=... to reach the Worker at all. See wrangler.toml.
 
 import { extractHints, extractTokens, parse } from "./parse";
 import { renderPage, resolveCountry } from "./page";
@@ -53,6 +58,19 @@ function handleParse(url: URL): Response {
   return respond(200, { hints, results });
 }
 
+/**
+ * 301 from /parts to /parts/, keeping the query string, so an old or hand-typed link still
+ * reaches the page. The query string is copied from the parsed URL, which cannot hold a CR or
+ * LF; control characters are dropped anyway, because this value goes into a response header.
+ */
+function redirectToPage(url: URL): Response {
+  const search = url.search.replace(/[\u0000-\u001f\u007f]/g, "");
+  return new Response(null, {
+    status: 301,
+    headers: { Location: `/parts/${search}`, "X-Robots-Tag": "noindex" },
+  });
+}
+
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -60,9 +78,13 @@ export default {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
       return handleParse(url);
     }
-    if (url.pathname === "/parts") {
+    if (url.pathname === "/parts/") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
       return handlePage(url);
+    }
+    if (url.pathname === "/parts") {
+      if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
+      return redirectToPage(url);
     }
     return respond(404, { error: "not found" });
   },

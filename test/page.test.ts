@@ -1,11 +1,11 @@
-// Tests for the server-rendered /parts page. The handler is called in-process; no network.
+// Tests for the server-rendered page at /parts/. The handler is called in-process; no network.
 
 import { describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { WHATSAPP_LIMIT } from "../src/page";
 
 const page = async (query = ""): Promise<string> => {
-  const res = await worker.fetch(new Request(`https://rohitrao.in/parts${query}`));
+  const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${query}`));
   expect(res.status).toBe(200);
   return res.text();
 };
@@ -25,10 +25,10 @@ const whatsappLink = (html: string) => hrefs(html).find((h) => h.startsWith("htt
 /** The text of every candidate's manufacturer line, in rendered order. */
 const oems = (html: string) => [...html.matchAll(/<p class="oem">([^<]*)<\/p>/g)].map((m) => m[1]);
 
-describe("GET /parts with no q", () => {
+describe("GET /parts/ with no q", () => {
   it("renders the form", async () => {
     const html = await page();
-    expect(html).toContain('<form method="GET" action="/parts">');
+    expect(html).toContain('<form method="GET" action="/parts/">');
     expect(html).toContain('name="q"');
     expect(html).toContain("Paste part numbers or a WhatsApp message");
     expect(html).toContain('name="hint"');
@@ -127,7 +127,7 @@ describe("escaping", () => {
 
 describe("not determined", () => {
   it("is an answer, not an error", async () => {
-    const res = await worker.fetch(new Request(`https://rohitrao.in/parts${q("HELLO12")}`));
+    const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${q("HELLO12")}`));
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Not determined: no known number format matched.");
@@ -149,7 +149,7 @@ describe("the WhatsApp link", () => {
     const url = new URL(whatsappLink(html)!);
     const message = url.searchParams.get("text")!;
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_LIMIT);
-    expect(message).toContain("https://rohitrao.in/parts?q=1U3352%2040%2F300893");
+    expect(message).toContain("https://rohitrao.in/parts/?q=1U3352%2040%2F300893");
     expect(message).toContain("1U3352");
     expect(message).toContain("Caterpillar (from number format, unconfirmed)");
     expect(message).toContain("40/300893");
@@ -159,7 +159,7 @@ describe("the WhatsApp link", () => {
     const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
     const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
 
-    const link = message.match(/https:\/\/rohitrao\.in\/parts\?q=(\S+)/)![1]!;
+    const link = message.match(/https:\/\/rohitrao\.in\/parts\/\?q=(\S+)/)![1]!;
     expect(decodeURIComponent(link)).toBe("1U3352");
 
     for (const secret of ["Ramesh", "9876543210", "4500"]) {
@@ -178,7 +178,7 @@ describe("the WhatsApp link", () => {
   it("drops a number with a country code from the message", async () => {
     const html = await page(q("+91 98765 43210 need 1u3352"));
     const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
-    const link = message.match(/https:\/\/rohitrao\.in\/parts\?q=(\S+)/)![1]!;
+    const link = message.match(/https:\/\/rohitrao\.in\/parts\/\?q=(\S+)/)![1]!;
     expect(decodeURIComponent(link)).toBe("1U3352");
     expect(message).not.toContain("98765");
     expect(message).not.toContain("43210");
@@ -203,7 +203,7 @@ describe("the WhatsApp link", () => {
     const html = await page(q(numbers.join(" ")));
     const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_LIMIT);
-    expect(message).toContain("https://rohitrao.in/parts?q=");
+    expect(message).toContain("https://rohitrao.in/parts/?q=");
   });
 });
 
@@ -212,7 +212,7 @@ describe("prices", () => {
     for (const text of ["price \u20b945,000 for 40/300893", "Rs. 125000 40/300893"]) {
       const html = await page(q(text));
       const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
-      const link = message.match(/https:\/\/rohitrao\.in\/parts\?q=(\S+)/)![1]!;
+      const link = message.match(/https:\/\/rohitrao\.in\/parts\/\?q=(\S+)/)![1]!;
       expect(decodeURIComponent(link)).toBe("40/300893");
       for (const price of ["45,000", "45000", "125000"]) expect(message).not.toContain(price);
     }
@@ -228,7 +228,7 @@ describe("prices", () => {
 
 describe("headers", () => {
   it("carry noindex, the CSP and no-referrer", async () => {
-    const res = await worker.fetch(new Request("https://rohitrao.in/parts"));
+    const res = await worker.fetch(new Request("https://rohitrao.in/parts/"));
     expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
     expect(res.headers.get("Content-Security-Policy")).toBe(
       "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
