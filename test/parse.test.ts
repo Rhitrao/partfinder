@@ -240,3 +240,22 @@ describe("compact", () => {
     expect(compact("40 / 300.893-A\\B")).toBe("40300893AB");
   });
 });
+
+describe("step 2b: contact numbers are not part numbers", () => {
+  it("drops a bare mobile number from a pasted message", () => {
+    expect(extractTokens("Ramesh 9876543210 needs 1u3352 at Rs 4500")).toEqual(["1U3352"]);
+  });
+
+  it("drops a bare number with a country code", () => {
+    expect(extractTokens("call 919876543210 for 1u3352")).toEqual(["1U3352"]);
+  });
+
+  it("keeps a 10-digit number the user typed with separators", () => {
+    expect(extractTokens("205-70-19570")).toEqual(["205-70-19570"]);
+    expect(first("205-70-19570").oem).toBe("Komatsu");
+  });
+
+  it("keeps a bare 10-digit number that cannot be a mobile", () => {
+    expect(extractTokens("2057019570")).toEqual(["2057019570"]);
+  });
+});

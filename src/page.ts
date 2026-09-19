@@ -111,10 +111,15 @@ function messageBlock(result: ParseResult, index: number, maxSpellings: number):
 /**
  * The plain-text message the wa.me link pre-fills. There is no phone number: the user picks the
  * contact. Kept within WHATSAPP_LIMIT by trimming spellings first, then whole numbers off the end.
- * The back-link is never trimmed, so a very long q can still push the message past the limit.
+ *
+ * The back-link carries the extracted part numbers, never the pasted text. What a user pastes can
+ * hold a customer name, a phone number or a price, and none of that may leave in a link. Numbers
+ * trimmed out of the message above still appear in the link, because the link is how the reader
+ * gets back to the full page.
  */
-export function whatsappMessage(results: readonly ParseResult[], q: string): string {
-  const link = `Details: https://rohitrao.in/parts?q=${encodeURIComponent(q)}`;
+export function whatsappMessage(results: readonly ParseResult[]): string {
+  const tokens = results.map((r) => r.input).join(" ");
+  const link = `Details: https://rohitrao.in/parts?q=${encodeURIComponent(tokens)}`;
   const assemble = (count: number, maxSpellings: number): string => {
     const blocks = results.slice(0, count).map((r, i) => messageBlock(r, i, maxSpellings));
     const omitted = results.length - count;
@@ -133,8 +138,8 @@ export function whatsappMessage(results: readonly ParseResult[], q: string): str
   return assemble(1, 0);
 }
 
-export function whatsappUrl(results: readonly ParseResult[], q: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(whatsappMessage(results, q))}`;
+export function whatsappUrl(results: readonly ParseResult[]): string {
+  return `https://wa.me/?text=${encodeURIComponent(whatsappMessage(results))}`;
 }
 
 const STYLE = `
@@ -241,7 +246,7 @@ function renderCard(result: ParseResult, country: Country): string {
       </section>`;
 }
 
-function renderResults(results: readonly ParseResult[], q: string, country: Country): string {
+function renderResults(results: readonly ParseResult[], country: Country): string {
   if (results.length === 0) {
     return `<section class="card">
         <p class="answer">Not determined: nothing in what you pasted looks like a part number.</p>
@@ -249,7 +254,7 @@ function renderResults(results: readonly ParseResult[], q: string, country: Coun
   }
   const cards = results.map((r) => renderCard(r, country)).join("\n      ");
   const whatsapp =
-    `<a class="whatsapp" href="${escapeHtml(whatsappUrl(results, q))}">` +
+    `<a class="whatsapp" href="${escapeHtml(whatsappUrl(results))}">` +
     `Send this to a supplier on WhatsApp</a>`;
   return `${cards}\n      ${whatsapp}`;
 }
@@ -290,7 +295,7 @@ export function renderPage(input: PageInput): string {
         `<p class="note">Showing the first ${MAX_CARDS} numbers. ${truncated} more were not read.</p>`,
       );
     }
-    sections.push(renderResults(results, q, country));
+    sections.push(renderResults(results, country));
   }
 
   return `<!doctype html>

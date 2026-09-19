@@ -131,10 +131,30 @@ describe("the WhatsApp link", () => {
     const url = new URL(whatsappLink(html)!);
     const message = url.searchParams.get("text")!;
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_LIMIT);
-    expect(message).toContain(`https://rohitrao.in/parts?q=${encodeURIComponent(text)}`);
+    expect(message).toContain("https://rohitrao.in/parts?q=1U3352%2040%2F300893");
     expect(message).toContain("1U3352");
     expect(message).toContain("Caterpillar (from number format, unconfirmed)");
     expect(message).toContain("40/300893");
+  });
+
+  it("carries only the part numbers in the back-link, never the pasted text", async () => {
+    const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
+    const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
+
+    const link = message.match(/https:\/\/rohitrao\.in\/parts\?q=(\S+)/)![1]!;
+    expect(decodeURIComponent(link)).toBe("1U3352");
+
+    for (const secret of ["Ramesh", "9876543210", "4500"]) {
+      expect(message).not.toContain(secret);
+    }
+  });
+
+  it("keeps a phone number off the page entirely", async () => {
+    const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
+    // The pasted text is echoed in the textarea, so look at the cards only.
+    const cards = html.slice(html.indexOf('<section class="card"'));
+    expect(cards).not.toContain("9876543210");
+    expect(cards).toContain("1U3352");
   });
 
   it("stays inside the limit for a long list, trimming spellings first", async () => {
