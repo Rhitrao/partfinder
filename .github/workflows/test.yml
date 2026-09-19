@@ -1,0 +1,29 @@
+# Tests and the typecheck, on every pull request and every push to main.
+# No secrets, no deploy: nothing here touches Cloudflare, and no test touches the network.
+
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: npx tsc --noEmit
