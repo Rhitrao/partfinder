@@ -131,6 +131,14 @@ describe("not determined", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Not determined: no known number format matched.");
+    expect(html).toContain("No format matched, so it's left out of the WhatsApp message.");
+    expect(html).toContain("Add it yourself if it's a part number.");
+  });
+
+  it("offers nothing to send when no number was recognised", async () => {
+    const html = await page(q("HELLO12"));
+    expect(whatsappLink(html)).toBeUndefined();
+    expect(html).toContain("Nothing to send: no part number was recognised.");
   });
 });
 
@@ -159,12 +167,35 @@ describe("the WhatsApp link", () => {
     }
   });
 
-  it("keeps a phone number off the page entirely", async () => {
+  it("shows a phone-shaped number on the page, with the reason it is not sent", async () => {
     const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
-    // The pasted text is echoed in the textarea, so look at the cards only.
     const cards = html.slice(html.indexOf('<section class="card"'));
-    expect(cards).not.toContain("9876543210");
-    expect(cards).toContain("1U3352");
+    expect(cards).toContain("9876543210");
+    expect(cards).toContain("Looks like a phone number, so it's left out of the WhatsApp message.");
+    expect(cards).toContain("Type it with dashes if it's a part number.");
+  });
+
+  it("drops a number with a country code from the message", async () => {
+    const html = await page(q("+91 98765 43210 need 1u3352"));
+    const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
+    const link = message.match(/https:\/\/rohitrao\.in\/parts\?q=(\S+)/)![1]!;
+    expect(decodeURIComponent(link)).toBe("1U3352");
+    expect(message).not.toContain("98765");
+    expect(message).not.toContain("43210");
+  });
+
+  it("sends a phone-shaped number once the user types it with dashes", async () => {
+    const bare = await page(q("6754611102"));
+    expect(bare).toContain("Looks like a phone number");
+    expect(whatsappLink(bare)).toBeUndefined();
+    expect(bare).toContain("Nothing to send: no part number was recognised.");
+
+    const dashed = await page(q("6754-61-1102"));
+    expect(oems(dashed)).toContain("Komatsu");
+    expect(dashed).not.toContain("Looks like a phone number");
+    const message = new URL(whatsappLink(dashed)!).searchParams.get("text")!;
+    expect(message).toContain("6754-61-1102");
+    expect(message).toContain("Komatsu");
   });
 
   it("stays inside the limit for a long list, trimming spellings first", async () => {

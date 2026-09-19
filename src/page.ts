@@ -52,6 +52,43 @@ const STRENGTH_TEXT = {
 /** Shown when a number fits more than one manufacturer: the hint field can settle it. */
 export const NARROW_PROMPT = "Add the brand or machine to narrow this.";
 
+/**
+ * A bare digit run shaped like a phone number: 10 digits starting 0 or 6 to 9, or 11 to 15
+ * digits. "Bare" means the user typed no separators, so 6754-61-1102 is never phone-shaped.
+ */
+const PHONE_SHAPED = /^(?:[06-9]\d{9}|\d{11,15})$/;
+
+/** Why a number stayed on the page but out of the WhatsApp message. */
+export const OUTBOUND_NOTES = {
+  phone:
+    "Looks like a phone number, so it's left out of the WhatsApp message. " +
+    "Type it with dashes if it's a part number.",
+  noFormat:
+    "No format matched, so it's left out of the WhatsApp message. " +
+    "Add it yourself if it's a part number.",
+} as const;
+
+export const NOTHING_TO_SEND = "Nothing to send: no part number was recognised.";
+
+/**
+ * Why this number is left out of the WhatsApp message, or null when it goes in.
+ *
+ * A number leaves this page only if it was recognised and is not phone-shaped. Everything the
+ * user pasted is shown to them; only what Partfinder is confident is a part number is put in a
+ * message to a third party. A phone-shaped run is checked first, because "looks like a phone
+ * number" explains a bare 12-digit run better than "no format matched" does.
+ */
+function outboundNote(result: ParseResult): string | null {
+  if (PHONE_SHAPED.test(result.input)) return OUTBOUND_NOTES.phone;
+  if (result.candidates.length === 0) return OUTBOUND_NOTES.noFormat;
+  return null;
+}
+
+/** The numbers the WhatsApp message and its back-link may carry. */
+export function outbound(results: readonly ParseResult[]): ParseResult[] {
+  return results.filter((r) => outboundNote(r) === null);
+}
+
 const ESCAPES: Record<string, string> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -115,10 +152,10 @@ function messageBlock(result: ParseResult, index: number, maxSpellings: number):
  * The plain-text message the wa.me link pre-fills. There is no phone number: the user picks the
  * contact. Kept within WHATSAPP_LIMIT by trimming spellings first, then whole numbers off the end.
  *
- * The back-link carries the extracted part numbers, never the pasted text. What a user pastes can
- * hold a customer name, a phone number or a price, and none of that may leave in a link. Numbers
- * trimmed out of the message above still appear in the link, because the link is how the reader
- * gets back to the full page.
+ * Both the message and the back-link carry only the numbers outbound() passed, never the pasted
+ * text. What a user pastes can hold a customer name, a phone number or a price, and none of that
+ * may leave in a message to a supplier. Numbers trimmed out of the message for length still
+ * appear in the link, because the link is how the reader gets back to the full page.
  */
 export function whatsappMessage(results: readonly ParseResult[]): string {
   const tokens = results.map((r) => r.input).join(" ");
@@ -181,6 +218,8 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .basis, .strength, .suffix { font-size: .9rem; margin: .15rem 0; opacity: .85; }
 .warnings { font-size: .9rem; margin: .35rem 0 0; padding-left: 1.1rem; }
 .narrow { font-size: .9rem; font-weight: 600; margin: .75rem 0 0; }
+.excluded { font-size: .9rem; margin: .75rem 0 0; opacity: .85; }
+.nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
 .answer { margin: 0; }
 .answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
 .search, .whatsapp {
@@ -245,24 +284,29 @@ function renderCard(result: ParseResult, country: Country): string {
         </div>`;
   const narrow =
     oems(result).length > 1 ? `\n        <p class="narrow">${NARROW_PROMPT}</p>` : "";
+  const note = outboundNote(result);
+  const excluded = note === null ? "" : `\n        <p class="excluded">${note}</p>`;
   return `<section class="card">
         <h2>${escapeHtml(result.input)}</h2>
-        ${body}${narrow}
+        ${body}${narrow}${excluded}
         <a class="search" href="${escapeHtml(searchUrl(result, country))}">Search all spellings</a>
       </section>`;
 }
 
 function renderResults(results: readonly ParseResult[], country: Country): string {
-  if (results.length === 0) {
-    return `<section class="card">
+  const cards =
+    results.length > 0
+      ? results.map((r) => renderCard(r, country)).join("\n      ")
+      : `<section class="card">
         <p class="answer">Not determined: nothing in what you pasted looks like a part number.</p>
       </section>`;
-  }
-  const cards = results.map((r) => renderCard(r, country)).join("\n      ");
-  const whatsapp =
-    `<a class="whatsapp" href="${escapeHtml(whatsappUrl(results))}">` +
-    `Send this to a supplier on WhatsApp</a>`;
-  return `${cards}\n      ${whatsapp}`;
+  const sending = outbound(results);
+  const action =
+    sending.length > 0
+      ? `<a class="whatsapp" href="${escapeHtml(whatsappUrl(sending))}">` +
+        `Send this to a supplier on WhatsApp</a>`
+      : `<p class="nothing">${NOTHING_TO_SEND}</p>`;
+  return `${cards}\n      ${action}`;
 }
 
 export interface PageInput {

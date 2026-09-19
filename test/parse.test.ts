@@ -241,13 +241,14 @@ describe("compact", () => {
   });
 });
 
-describe("step 2b: contact numbers are not part numbers", () => {
-  it("drops a bare mobile number from a pasted message", () => {
-    expect(extractTokens("Ramesh 9876543210 needs 1u3352 at Rs 4500")).toEqual(["1U3352"]);
+describe("step 2c: phone-shaped numbers are still tokens", () => {
+  it("keeps a bare run that could be a phone number or a part number", () => {
+    expect(extractTokens("Ramesh 9876543210 needs 1u3352")).toEqual(["9876543210", "1U3352"]);
   });
 
-  it("drops a bare number with a country code", () => {
-    expect(extractTokens("call 919876543210 for 1u3352")).toEqual(["1U3352"]);
+  it("reads a bare Komatsu number that is shaped like a phone number", () => {
+    expect(extractTokens("6754611102")).toEqual(["6754611102"]);
+    expect(first("6754611102").oem).toBe("Komatsu");
   });
 
   it("keeps a 10-digit number the user typed with separators", () => {
@@ -255,7 +256,7 @@ describe("step 2b: contact numbers are not part numbers", () => {
     expect(first("205-70-19570").oem).toBe("Komatsu");
   });
 
-  it("keeps a bare 10-digit number that cannot be a mobile", () => {
-    expect(extractTokens("2057019570")).toEqual(["2057019570"]);
+  it("reads 6754-61-1102 as Komatsu", () => {
+    expect(first("6754-61-1102")).toMatchObject({ oem: "Komatsu", canonical: "6754-61-1102" });
   });
 });

@@ -28,17 +28,6 @@ export interface ParseResult {
 }
 
 const TOKEN = /[^\s,;]+/g;
-/**
- * Bare digit runs that read as a contact number rather than a part number: a 10-digit Indian
- * mobile (first digit 6 to 9), or 11 to 15 digits, which is an international number with its
- * country code. A pasted WhatsApp message usually carries one, and it must never reach a card,
- * a search link or the link back to this page.
- *
- * Only bare runs are dropped. A number the user typed with separators (205-70-19570) is always
- * kept, and no format rule matches more than 10 digits, so nothing but a bare 10-digit Komatsu
- * number starting 6 to 9 is lost. That reading is indistinguishable from a mobile number here.
- */
-const CONTACT_NUMBER = /^(?:[6-9]\d{9}|\d{11,15})$/;
 const EDGE_PUNCTUATION = /^[^0-9A-Z]+|[^0-9A-Z]+$/g;
 const LEADING_PUNCTUATION = /^[^0-9A-Z]*/;
 const SEPARATORS = /[\s\-./\\]/g;
@@ -74,8 +63,11 @@ function isHintToken(token: string): boolean {
 /**
  * Split free text into candidate part-number tokens, uppercased.
  * "VOE" followed by an 8-digit token merges into one token. Hint words and model numbers
- * (e.g. PC200-8) are dropped, as are bare digit runs shaped like a phone number. Tokens are
- * deduplicated by compact form, keeping the first spelling in order of appearance.
+ * (e.g. PC200-8) are dropped. Tokens are deduplicated by compact form, keeping the first
+ * spelling in order of appearance.
+ *
+ * A number shaped like a phone number is still a token: 6754611102 is a readable Komatsu number.
+ * Keeping it off the WhatsApp message is the page's job, not this one's.
  */
 export function extractTokens(text: string): string[] {
   const raw = rawTokens(text).map((t) => t.text);
@@ -95,7 +87,6 @@ export function extractTokens(text: string): string[] {
   const seen = new Set<string>();
   return merged.filter((t) => {
     if (t.length < 5 || !/\d/.test(t) || isHintToken(t)) return false;
-    if (CONTACT_NUMBER.test(t)) return false;
     const key = compact(t);
     if (seen.has(key)) return false;
     seen.add(key);
