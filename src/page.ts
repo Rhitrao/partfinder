@@ -159,7 +159,7 @@ function messageBlock(result: ParseResult, index: number, maxSpellings: number):
  */
 export function whatsappMessage(results: readonly ParseResult[]): string {
   const tokens = results.map((r) => r.input).join(" ");
-  const link = `Details: https://rohitrao.in/parts?q=${encodeURIComponent(tokens)}`;
+  const link = `Details: https://rohitrao.in/parts/?q=${encodeURIComponent(tokens)}`;
   const assemble = (count: number, maxSpellings: number): string => {
     const blocks = results.slice(0, count).map((r, i) => messageBlock(r, i, maxSpellings));
     const omitted = results.length - count;
@@ -243,7 +243,7 @@ function renderForm(q: string, hint: string, country: Country): string {
       `<option value="${escapeHtml(c.code)}"${c.code === country.code ? " selected" : ""}>` +
       `${escapeHtml(c.name)} (${escapeHtml(c.domain)})</option>`,
   ).join("\n        ");
-  return `<form method="GET" action="/parts">
+  return `<form method="GET" action="/parts/">
       <label for="q">Paste part numbers or a WhatsApp message</label>
       <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">${escapeHtml(q)}</textarea>
       <label for="hint">Brand or machine (optional)</label>
