@@ -207,6 +207,25 @@ describe("the WhatsApp link", () => {
   });
 });
 
+describe("prices", () => {
+  it("never reach the message", async () => {
+    for (const text of ["price \u20b945,000 for 40/300893", "Rs. 125000 40/300893"]) {
+      const html = await page(q(text));
+      const message = new URL(whatsappLink(html)!).searchParams.get("text")!;
+      const link = message.match(/https:\/\/rohitrao\.in\/parts\?q=(\S+)/)![1]!;
+      expect(decodeURIComponent(link)).toBe("40/300893");
+      for (const price of ["45,000", "45000", "125000"]) expect(message).not.toContain(price);
+    }
+  });
+
+  it("never reach a card either", async () => {
+    const html = await page(q("price \u20b945,000 for 40/300893"));
+    const cards = html.slice(html.indexOf('<section class="card"'));
+    expect(cards).not.toContain("45,000");
+    expect(cards).toContain("40/300893");
+  });
+});
+
 describe("headers", () => {
   it("carry noindex, the CSP and no-referrer", async () => {
     const res = await worker.fetch(new Request("https://rohitrao.in/parts"));
