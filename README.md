@@ -13,8 +13,9 @@ It runs as a Cloudflare Worker at `rohitrao.in/parts/`. The repo is public.
 Phase 0 is an offline page. Everything on it is computed from the number you typed and a table of
 manufacturer format rules. Nothing is fetched, nothing is stored, and no paid API is called.
 
-**The page, `GET /parts/`.** `GET /parts` redirects to it. One server-rendered HTML document, with no client-side JavaScript at
-all, because it is mostly read on a phone on a site or in a yard. Paste into the box, optionally
+**The page, `GET /parts/`.** `GET /parts` redirects to it. One server-rendered HTML document,
+with no client-side JavaScript at all, because it is mostly read on a phone on a site or in a
+yard. Paste into the box, optionally
 add a brand or machine, pick a country, and press Identify. You get:
 
 - one card per number found in what you pasted, with the manufacturer or manufacturers it could be,
@@ -93,7 +94,7 @@ Everything Partfinder returns today is T5.
 ## Layout
 
 ```
-src/index.ts      Worker entry and routing under /parts
+src/index.ts      Worker entry and routing under /parts/
 src/page.ts       the /parts/ page: form, cards, search link, WhatsApp handoff
 src/parse.ts      token and hint extraction, normalisation, candidate ranking
 src/rules.ts      manufacturer format rules, as data
@@ -117,3 +118,5 @@ npx wrangler dev      run the Worker locally
 ```
 
 Work on a branch and open a pull request. Tests and the typecheck run on every pull request.
+Nobody runs `wrangler deploy`: merging into `main` deploys, through Cloudflare's Git integration.
+See [docs/DEPLOY.md](docs/DEPLOY.md).
