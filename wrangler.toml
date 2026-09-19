@@ -2,7 +2,32 @@ name = "partfinder"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
-# No routes, D1 bindings or secrets yet. Routes are added only when a step prompt says so.
+# Two routes on the zone, and nothing wider than the page itself.
+#
+# A route pattern with no trailing "*" matches the bare path only. Cloudflare's route matching
+# considers the whole request URL including the query string, and a pattern may not contain query
+# parameters, so "rohitrao.in/parts" would never match "rohitrao.in/parts?q=1u3352":
+# https://developers.cloudflare.com/workers/configuration/routing/routes/
+#
+# The page is nothing but query string, so the page itself lives at /parts/ and is covered by
+# "rohitrao.in/parts/*", which also covers /parts/?q=... and /parts/api/parse?q=... The bare
+# "rohitrao.in/parts" route exists only so /parts can redirect to /parts/.
+#
+# "rohitrao.in/parts*" is deliberately not used. It would match the query string, but it would
+# also capture unrelated paths on the main site, such as /partsxyz.
+routes = [
+  { pattern = "rohitrao.in/parts", zone_name = "rohitrao.in" },
+  { pattern = "rohitrao.in/parts/*", zone_name = "rohitrao.in" },
+]
+
+# No public partfinder.<subdomain>.workers.dev address. The Worker is reachable on the two routes
+# above and nowhere else, so there is no second address serving the same page for search engines
+# to find or for anyone to paste a part number into.
+workers_dev = false
+
+# No per-version preview URLs either, for the same reason. wrangler's own default is already
+# false; it is written down so a change of default cannot quietly open one.
+preview_urls = false
 
 # Workers Logs are off. wrangler's own default for observability is enabled = true, and Workers
 # Logs record the request URL. The URL carries q, which is whatever the user pasted: a customer
