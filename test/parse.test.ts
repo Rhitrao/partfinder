@@ -240,3 +240,42 @@ describe("compact", () => {
     expect(compact("40 / 300.893-A\\B")).toBe("40300893AB");
   });
 });
+
+describe("step 2c: phone-shaped numbers are still tokens", () => {
+  it("keeps a bare run that could be a phone number or a part number", () => {
+    expect(extractTokens("Ramesh 9876543210 needs 1u3352")).toEqual(["9876543210", "1U3352"]);
+  });
+
+  it("reads a bare Komatsu number that is shaped like a phone number", () => {
+    expect(extractTokens("6754611102")).toEqual(["6754611102"]);
+    expect(first("6754611102").oem).toBe("Komatsu");
+  });
+
+  it("keeps a 10-digit number the user typed with separators", () => {
+    expect(extractTokens("205-70-19570")).toEqual(["205-70-19570"]);
+    expect(first("205-70-19570").oem).toBe("Komatsu");
+  });
+
+  it("reads 6754-61-1102 as Komatsu", () => {
+    expect(first("6754-61-1102")).toMatchObject({ oem: "Komatsu", canonical: "6754-61-1102" });
+  });
+});
+
+describe("step 2c: a number after a currency marker is a price", () => {
+  it("drops the price and keeps the part number", () => {
+    expect(extractTokens("price ₹45,000 for 40/300893")).toEqual(["40/300893"]);
+    expect(extractTokens("Rs. 125000 40/300893")).toEqual(["40/300893"]);
+    expect(extractTokens("US$1,299.00 1u3352")).toEqual(["1U3352"]);
+  });
+
+  it("covers the markers of every country in the list", () => {
+    for (const marker of ["Rs", "INR", "₹", "AED", "SAR", "KES", "KSh", "NGN", "₦", "ZAR", "USD"]) {
+      expect(extractTokens(`${marker} 45000 1u3352`)).toEqual(["1U3352"]);
+      expect(extractTokens(`${marker}45000 1u3352`)).toEqual(["1U3352"]);
+    }
+  });
+
+  it("does not read a marker out of the middle of a word", () => {
+    expect(extractTokens("cars 45000 and 1u3352")).toEqual(["45000", "1U3352"]);
+  });
+});

@@ -14,7 +14,8 @@ describe("11. X-Robots-Tag: noindex", () => {
   });
 
   it("is on 404s", async () => {
-    for (const path of ["/", "/parts", "/parts/api/nope"]) {
+    // "/parts" now serves the page, so it is no longer a 404; it is covered in page.test.ts.
+    for (const path of ["/", "/partsx", "/parts/api/nope"]) {
       const res = await get(path);
       expect(res.status).toBe(404);
       expect(res.headers.get("X-Robots-Tag")).toBe("noindex");

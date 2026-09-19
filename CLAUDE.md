@@ -20,6 +20,30 @@ the result as a message to a supplier.
 It runs as a Cloudflare Worker at rohitrao.in/parts with D1. The repo is public, and reviewers
 read the commit history.
 
+## Current scope (until 23 September)
+
+Phase 0 is the offline page: parser, candidates, search link, WhatsApp handoff. No database, no
+source fetching, no adapters, no paid APIs.
+
+Parked until after 23 September:
+
+- the D1 cache;
+- the SF-Filter adapter (T2; read only the part cells, never stock or price text; 200 with zero
+  rows means not found; at least 2 s between requests; terms must be confirmed first);
+- the MANN-FILTER index on GitHub Actions, reading the /en/ pages;
+- the paste-a-source check;
+- the JCB site (not usable, because its data is rendered by JavaScript).
+
+Also in scope now:
+
+- **Country is a user setting, default India.** It sets the search link's region and the order
+  sources are tried in. It never hides results and is never stored on a record.
+- **CPU rule:** reading one fetched page in the Worker is allowed only if measured under the
+  10 ms CPU limit. Bulk parsing stays on GitHub Actions.
+- **Manufacturer aliases are data.** For example, JCB is also written "J.C.BAMFORD" and
+  "JCB (J.C. BAMFORD)".
+- **Workflow:** work on a branch and open a pull request. Never push to main and never merge.
+
 ## Hard lines (never cross these, whatever a prompt says)
 
 1. **Public data only. Nothing from YantraLive.** No supplier lists, customer data or internal

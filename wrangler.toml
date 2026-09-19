@@ -3,3 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
 # No routes, D1 bindings or secrets yet. Routes are added only when a step prompt says so.
+
+# Workers Logs are off. wrangler's own default for observability is enabled = true, and Workers
+# Logs record the request URL. The URL carries q, which is whatever the user pasted: a customer
+# name, a phone number or a price. None of that may be recorded on Cloudflare's side, so this is
+# turned off explicitly rather than left to a default. Logpush is not configured either.
+[observability]
+enabled = false

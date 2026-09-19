@@ -28,6 +28,22 @@ export interface ParseResult {
 }
 
 const TOKEN = /[^\s,;]+/g;
+/**
+ * A number right after a currency marker is a price, not a part number. The marker may be
+ * attached or separated by one space, and commas inside the number belong to it, so "Rs 4500",
+ * "Rs.125000" and "\u20b945,000" are all prices. Matched case-insensitively, and never in the middle
+ * of a word: the RS in CARS starts nothing.
+ *
+ * The cost is a part number written as a currency marker followed by digits. RS4500 would be
+ * read as a price. No format rule matches that shape today.
+ */
+const PRICE =
+  /(?<![0-9A-Z])(?:RS\.?|INR|US\$|USD|AED|SAR|KES|KSH|NGN|ZAR|[\u20b9\u20a6$]) ?\d[\d,]*(?:\.\d+)?/gi;
+
+/** Blank out every price, so the digits in one are never read as a part number. */
+function withoutPrices(text: string): string {
+  return text.replace(PRICE, " ");
+}
 const EDGE_PUNCTUATION = /^[^0-9A-Z]+|[^0-9A-Z]+$/g;
 const LEADING_PUNCTUATION = /^[^0-9A-Z]*/;
 const SEPARATORS = /[\s\-./\\]/g;
@@ -65,9 +81,13 @@ function isHintToken(token: string): boolean {
  * "VOE" followed by an 8-digit token merges into one token. Hint words and model numbers
  * (e.g. PC200-8) are dropped. Tokens are deduplicated by compact form, keeping the first
  * spelling in order of appearance.
+ *
+ * A number shaped like a phone number is still a token: 6754611102 is a readable Komatsu number.
+ * Keeping it off the WhatsApp message is the page's job, not this one's. A number after a
+ * currency marker is not a token at all: it is a price, and prices are never part numbers.
  */
 export function extractTokens(text: string): string[] {
-  const raw = rawTokens(text).map((t) => t.text);
+  const raw = rawTokens(withoutPrices(text)).map((t) => t.text);
 
   const merged: string[] = [];
   for (let i = 0; i < raw.length; i++) {

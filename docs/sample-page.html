@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Partfinder</title>
+    <style>:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 1rem;
+  font: 1rem/1.5 system-ui, sans-serif;
+  max-width: 40rem;
+}
+h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 .5rem; }
+p { margin: .5rem 0; }
+.lede { margin-bottom: 1.25rem; }
+form { display: flex; flex-direction: column; gap: .35rem; }
+label { font-weight: 600; }
+textarea, input, select, button {
+  font: inherit;
+  width: 100%;
+  padding: .6rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  background: transparent;
+  color: inherit;
+}
+textarea { min-height: 6rem; resize: vertical; }
+button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
+.hints { font-size: .9rem; opacity: .8; }
+.card { border: 1px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1rem 0; }
+.card h2 { margin-top: 0; font-family: ui-monospace, monospace; word-break: break-all; }
+.candidate { border-top: 1px dashed currentColor; padding-top: .6rem; margin-top: .6rem; }
+.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.oem { font-weight: 700; margin: 0; }
+.canonical { font-family: ui-monospace, monospace; margin: .15rem 0; word-break: break-all; }
+.basis, .strength, .suffix { font-size: .9rem; margin: .15rem 0; opacity: .85; }
+.warnings { font-size: .9rem; margin: .35rem 0 0; padding-left: 1.1rem; }
+.narrow { font-size: .9rem; font-weight: 600; margin: .75rem 0 0; }
+.excluded { font-size: .9rem; margin: .75rem 0 0; opacity: .85; }
+.nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
+.answer { margin: 0; }
+.answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
+.search, .whatsapp {
+  display: inline-block;
+  margin-top: .75rem;
+  padding: .55rem .8rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  text-decoration: none;
+  color: inherit;
+}
+.whatsapp { display: block; text-align: center; font-weight: 700; margin: 1.25rem 0; }
+.notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
+.note { font-size: .9rem; opacity: .85; }
+@media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }</style>
+  </head>
+  <body>
+    <main>
+      <h1>Partfinder</h1>
+      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder says which
+      manufacturer's number format it matches, and gives you every spelling to search.</p>
+      <form method="GET" action="/parts">
+      <label for="q">Paste part numbers or a WhatsApp message</label>
+      <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">need 1u3352 and 40/300893 for JCB 3CX</textarea>
+      <label for="hint">Brand or machine (optional)</label>
+      <input id="hint" name="hint" type="text" value="" placeholder="Brand or machine (optional)">
+      <label for="country">Country</label>
+      <select id="country" name="country">
+        <option value="IN" selected>India (google.co.in)</option>
+        <option value="AE">UAE (google.ae)</option>
+        <option value="SA">Saudi Arabia (google.com.sa)</option>
+        <option value="ZA">South Africa (google.co.za)</option>
+        <option value="KE">Kenya (google.co.ke)</option>
+        <option value="NG">Nigeria (google.com.ng)</option>
+        <option value="OTHER">Other (google.com)</option>
+      </select>
+      <button type="submit">Identify</button>
+    </form>
+      <p class="hints">Hints used: JCB</p>
+      <section class="card">
+        <h2>1U3352</h2>
+        <div class="candidate">
+          <p class="oem">Caterpillar</p>
+          <p class="canonical">1U-3352</p>
+          <p class="basis">Guess from number format only. Not confirmed.</p>
+          <p class="strength">Format: usually unique to this manufacturer.</p>
+        </div>
+        <a class="search" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search all spellings</a>
+      </section>
+      <section class="card">
+        <h2>40/300893</h2>
+        <div class="candidate">
+          <p class="oem">JCB</p>
+          <p class="canonical">40/300893</p>
+          <p class="basis">Guess from number format only. Not confirmed.</p>
+          <p class="strength">Format: usually unique to this manufacturer.</p>
+        </div>
+        <a class="search" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search all spellings</a>
+      </section>
+      <a class="whatsapp" href="https://wa.me/?text=Part%20numbers%3A%0A%0A1.%201U3352%0A%20%20%20Likely%3A%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Other%20spellings%3A%201U-3352%0A%0A2.%2040%2F300893%0A%20%20%20Likely%3A%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Other%20spellings%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0A%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%3Fq%3D1U3352%252040%252F300893">Send this to a supplier on WhatsApp</a>
+      <section class="notes">
+        <h2>How to read this</h2>
+        <p>A format guess means the number matches a manufacturer's known numbering format, and
+        nothing more. No catalogue, document or page has been checked, so it is not a confirmed
+        identification.</p>
+        <p>No prices, stock or lead times are shown: industrial spares are quoted per account,
+        never published.</p>
+        <p>Identification aid only. Confirm fitment with your supplier.</p>
+        <p>Not affiliated with any manufacturer. Brand names identify the parts they make.</p>
+      </section>
+    </main>
+  </body>
+</html>
