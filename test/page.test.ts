@@ -69,7 +69,7 @@ describe("a candidate card", () => {
     expect(oems(html)).toContain("Caterpillar");
     expect(html).toContain("1U-3352");
     expect(html).toContain("Guess from number format only. Not confirmed.");
-    expect(html).toContain("format usually unique to this manufacturer");
+    expect(html).toContain("Format: usually unique to this manufacturer.");
   });
 
   it("links the search to google.co.in with every spelling", async () => {
@@ -82,7 +82,17 @@ describe("a candidate card", () => {
 
   it("says a shared format is shared", async () => {
     const html = await page(q("3200677"));
-    expect(html).toContain("format shared with other manufacturers");
+    expect(html).toContain("Format: shared with other manufacturers.");
+  });
+
+  it("nudges for a hint only when more than one manufacturer fits", async () => {
+    const ambiguous = await page(q("3200677"));
+    expect(new Set(oems(ambiguous)).size).toBeGreaterThan(1);
+    expect(ambiguous).toContain("Add the brand or machine to narrow this.");
+
+    const single = await page(q("1u3352"));
+    expect(new Set(oems(single)).size).toBe(1);
+    expect(single).not.toContain("Add the brand or machine to narrow this.");
   });
 });
 

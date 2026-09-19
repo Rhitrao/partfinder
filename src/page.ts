@@ -45,9 +45,12 @@ export const BASIS_TEXT = "Guess from number format only. Not confirmed.";
 export const NOT_DETERMINED = "Not determined: no known number format matched.";
 
 const STRENGTH_TEXT = {
-  distinctive: "format usually unique to this manufacturer",
-  shared: "format shared with other manufacturers",
+  distinctive: "usually unique to this manufacturer",
+  shared: "shared with other manufacturers",
 } as const;
+
+/** Shown when a number fits more than one manufacturer: the hint field can settle it. */
+export const NARROW_PROMPT = "Add the brand or machine to narrow this.";
 
 const ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -177,6 +180,7 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .canonical { font-family: ui-monospace, monospace; margin: .15rem 0; word-break: break-all; }
 .basis, .strength, .suffix { font-size: .9rem; margin: .15rem 0; opacity: .85; }
 .warnings { font-size: .9rem; margin: .35rem 0 0; padding-left: 1.1rem; }
+.narrow { font-size: .9rem; font-weight: 600; margin: .75rem 0 0; }
 .answer { margin: 0; }
 .answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
 .search, .whatsapp {
@@ -222,7 +226,7 @@ function renderCandidate(candidate: ParseResult["candidates"][number]): string {
     parts.push(`<p class="suffix">Suffix: ${escapeHtml(candidate.suffix)}</p>`);
   }
   parts.push(`<p class="basis">${BASIS_TEXT}</p>`);
-  parts.push(`<p class="strength">Basis: ${STRENGTH_TEXT[candidate.strength]}.</p>`);
+  parts.push(`<p class="strength">Format: ${STRENGTH_TEXT[candidate.strength]}.</p>`);
   if (candidate.warnings.length > 0) {
     const items = candidate.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("");
     parts.push(`<ul class="warnings">${items}</ul>`);
@@ -239,9 +243,11 @@ function renderCard(result: ParseResult, country: Country): string {
           <p class="reason">No manufacturer format rule matched this number. It may still be a real
           part number; Partfinder simply has no rule for its shape.</p>
         </div>`;
+  const narrow =
+    oems(result).length > 1 ? `\n        <p class="narrow">${NARROW_PROMPT}</p>` : "";
   return `<section class="card">
         <h2>${escapeHtml(result.input)}</h2>
-        ${body}
+        ${body}${narrow}
         <a class="search" href="${escapeHtml(searchUrl(result, country))}">Search all spellings</a>
       </section>`;
 }
