@@ -100,8 +100,12 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const passcode = String(form.get("passcode") ?? "");
   const next = safeNext(String(form.get("next") ?? ""));
   const token = await checkPasscode(passcode, env);
-  // No detail: a wrong passcode and a Worker with no passcode set look exactly the same.
-  if (token === null) return html(renderGate(next, WRONG_PASSCODE), 401);
+  if (token === null) {
+    // A wrong passcode says so. A Worker with no passcode set says that instead, because the
+    // owner can do something about it and no attacker learns anything they could not guess.
+    const configured = passcodeConfigured(env);
+    return html(renderGate(next, configured ? WRONG_PASSCODE : "", configured), 401);
+  }
   return redirect(next, { "Set-Cookie": setCookie(token) });
 }
 
