@@ -38,23 +38,27 @@ such as a quantity. Partfinder has no phone number of its own; you pick who to s
 "Partfinder" and opens straight back to the page. There is no service worker: it is a shortcut,
 not offline mode.
 
-**6. Find vendors.** `GET /parts/vendors/`, linked from the bottom of the page and carrying only
-the numbers that were recognised, never what you pasted. This page is not public: it costs money
-per view, so it is behind a shared passcode. Give it a city and it asks Google Places API (New) for
-shops listed for each of your brands, plus one search that names no brand, and merges the answers
-into one list. A shop listed for two of your brands says so, and sorts above one listed for one.
-Tick up to five, choose whether each is asked about all your parts or only its own brands', and
-`GET /parts/vendors/contact` fetches their phone numbers and websites and writes one message per
-shop, addressed to it by name. Every shop with a dialable number gets both "WhatsApp (if they use
-it)" and "Call", plus the message to copy and an email link. Partfinder does not guess which
-numbers are mobiles: India's mobile shape does not separate them, because Bengaluru's own area
-code is 80.
+**6. Suppliers, on the same page.** Give Partfinder a city and sign in with the shared passcode,
+and the shops appear under the cards: a Google map with numbered pins, and a numbered list to
+match. Each shop carries its address, its Google rating where there is one, which of your brands
+Google listed it for, and buttons - WhatsApp with the requirement already written and addressed to
+that shop, a second WhatsApp button for only its own brands' parts when it was listed for some of
+them, Call, Website, and Open in Google Maps. No second page and no form to fill in.
+
+It is not public, because it costs money per view. Signed out, the page is exactly what it was,
+plus one line offering the passcode form, which returns you to the same query.
 
 Being listed by Google is not a claim that a shop has your part. The page says so, above the list.
-Nothing is stored: a place id travels in a URL and nowhere else, no page is scraped, and no vendor
-list is kept. Google's listings are shown with its attribution. When Google will not answer - the
-daily limit, a timeout, no key - the page says so in its own words, never Google's, and falls back
-to the link-outs from section 3.
+Nothing is stored: a place id travels in a link and nowhere else, no page is scraped, and no
+vendor list is kept. Google's listings are shown with its attribution. When Google will not answer
+- the daily limit, a timeout, no key - the page says so in its own words, never Google's, and
+falls back to the link-outs from section 3.
+
+The map is the only client-side script this project ships. It loads only when there are shops to
+pin, carries a per-response CSP nonce, and takes its pin data from a JSON block rather than from
+anything interpolated into code. Without it - no key, no JavaScript, a loader that never arrives -
+the box says "Map unavailable. The list below has everything", and the list is where the phone
+numbers are anyway.
 
 **Terms and privacy, `GET /parts/terms` and `GET /parts/privacy`.** Public, static, linked from
 the footer of every page. Google's Places API policies require an app using its data to publish
@@ -135,16 +139,17 @@ Everything Partfinder returns today is T5.
 
 ```
 src/index.ts      Worker entry and routing under /parts/, plus the manifest and icons
-src/env.ts        the two Worker secrets, both optional: the page works without either
+src/env.ts        the three Worker secrets, all optional: the page works without any of them
 src/legal.ts      the public Terms and Privacy pages
-src/headers.ts    the response headers every page under /parts/ carries
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
-src/vendors/      the passcode-gated vendor pages
-  auth.ts         the passcode gate: a cookie derived from the passcode, nothing stored
+src/headers.ts    the response headers, including the map page's nonce CSP
+src/vendors/      the suppliers behind the passcode
+  auth.ts         the passcode gate and the remembered city, both cookies, nothing stored
   places.ts       the Google Places API (New) client, and the only fetch in the Worker
   search.ts       grouping the numbers by brand, and merging what came back
-  contact.ts      Place Details, the per-vendor message, and WhatsApp or call or email
-  page.ts         the vendor pages themselves
+  phone.ts        what can be done with a number: WhatsApp, a call, or neither
+  suppliers.ts    the Suppliers section on /parts/, the map, and the fallback links
+  page.ts         the passcode form
   index.ts        routing under /parts/vendors
 src/parse.ts      token and hint extraction, normalisation, candidate ranking
 src/rules.ts      manufacturer format rules, as data
@@ -176,6 +181,14 @@ npm run sample        regenerate docs/sample-page.html
 npm run icons         redraw the home-screen icons
 npx wrangler dev      run the Worker locally
 ```
+
+`GOOGLE_MAPS_BROWSER_KEY` is a browser key and is rendered into the page on purpose; its Google
+Cloud restrictions are what protect it. Restrict it by **origin** (`https://rohitrao.in/*`), not
+by path: the map page sends `Referrer-Policy: strict-origin-when-cross-origin`, so Google receives
+`https://rohitrao.in/` and never the path or the query string. That is deliberate - the query
+string holds what you pasted, and it must not reach Google in a `Referer` header - but it means a
+path-scoped restriction such as `https://rohitrao.in/parts/*` can never match, and the map would
+silently fail to load.
 
 Work on a branch and open a pull request. Tests and the typecheck run on every pull request.
 Nobody runs `wrangler deploy`: merging into `main` deploys, through Cloudflare's Git integration.

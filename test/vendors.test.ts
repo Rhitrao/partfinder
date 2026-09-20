@@ -1,209 +1,146 @@
-// Step 5: the passcode gate, the vendor search, the contact page and the fallbacks.
+// Step 6: the passcode gate, the inline supplier search on /parts/, and the fallbacks.
 //
-// No network. Global fetch is stubbed in every test that expects a Google call, and the tests
-// that expect none assert the stub was never called. No real key and no real passcode are used.
+// No network. Global fetch is stubbed in every test that expects a Google call, and the tests that
+// expect none assert the stub was never called. No real key and no real passcode are used.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { vendorToken } from "../src/vendors/auth";
-import { DETAILS_FIELD_MASK, TEXT_SEARCH_FIELD_MASK } from "../src/vendors/places";
-
-const PASSCODE = "step-five-passcode";
-const env = { VENDOR_PASSCODE: PASSCODE, GOOGLE_PLACES_KEY: "not-a-real-key" };
-
-/** The two numbers the step prompt names: one Caterpillar, one JCB. */
-const Q = "1u3352 40/300893";
-const SEARCH = `?q=${encodeURIComponent(Q)}&city=Bengaluru&country=IN`;
-
-const get = (path: string, init?: RequestInit) =>
-  worker.fetch(new Request(`https://rohitrao.in${path}`, init), env);
-
-async function cookie(passcode = PASSCODE): Promise<string> {
-  return `pf_vendor=${await vendorToken(passcode)}`;
-}
-
-async function signedIn(path: string): Promise<Response> {
-  return get(path, { headers: { Cookie: await cookie() } });
-}
-
-function unescapeHtml(text: string): string {
-  return text
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&amp;", "&");
-}
-
-const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => unescapeHtml(m[1]!));
-
-/** The text of every <textarea>, unescaped. */
-const textareas = (html: string) =>
-  [...html.matchAll(/<textarea[^>]*>([\s\S]*?)<\/textarea>/g)].map((m) => unescapeHtml(m[1]!));
-
-interface Call {
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  body: Record<string, unknown> | null;
-}
-
-/** Records every fetch and answers it with `reply`. Nothing leaves the process. */
-function stubFetch(reply: (call: Call) => Response): Call[] {
-  const calls: Call[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
-      const headers = Object.fromEntries(
-        Object.entries((init.headers ?? {}) as Record<string, string>),
-      );
-      const call: Call = {
-        url: String(input),
-        method: init.method ?? "GET",
-        headers,
-        body: init.body === undefined ? null : JSON.parse(String(init.body)),
-      };
-      calls.push(call);
-      return reply(call);
-    }),
-  );
-  return calls;
-}
-
-const place = (id: string, name: string) => ({
-  id,
-  displayName: { text: name, languageCode: "en" },
-  formattedAddress: `${name}, Bengaluru 560001`,
-  googleMapsUri: `https://maps.google.com/?cid=${id}`,
-});
-
-/** Caterpillar and JCB both return "Shared Spares"; each also returns one shop of its own. */
-function searchReply(call: Call): Response {
-  const query = String((call.body as { textQuery?: unknown } | null)?.textQuery ?? "");
-  const places = query.startsWith("Caterpillar")
-    ? [place("shared", "Shared Spares"), place("cat-only", "Cat Corner")]
-    : query.startsWith("JCB")
-      ? [place("jcb-only", "JCB Spares Co"), place("shared", "Shared Spares")]
-      : [place("multi", "Multi Brand Traders")];
-  return new Response(JSON.stringify({ places }), { status: 200 });
-}
-
-const DETAILS: Record<string, Record<string, unknown>> = {
-  mobile: {
-    id: "mobile",
-    displayName: { text: "Cat Corner" },
-    internationalPhoneNumber: "+91 98765 43210",
-    nationalPhoneNumber: "098765 43210",
-    websiteUri: "https://catcorner.example",
-    googleMapsUri: "https://maps.google.com/?cid=mobile",
-  },
-  landline: {
-    id: "landline",
-    displayName: { text: "JCB Spares Co" },
-    internationalPhoneNumber: "+91 80 2222 3333",
-    nationalPhoneNumber: "080 2222 3333",
-    googleMapsUri: "https://maps.google.com/?cid=landline",
-  },
-};
-
-function detailsReply(call: Call): Response {
-  const id = call.url.slice(call.url.lastIndexOf("/") + 1);
-  return new Response(JSON.stringify(DETAILS[id] ?? { id, displayName: { text: id } }), {
-    status: 200,
-  });
-}
+import { TEXT_SEARCH_FIELD_MASK } from "../src/vendors/places";
+import {
+  PASSCODE,
+  Q,
+  SEARCH,
+  cookie,
+  env,
+  get,
+  hrefs,
+  place,
+  searchReply,
+  signedIn,
+  stubFetch,
+  unescapeHtml,
+  whatsappMessage,
+} from "./helpers";
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("the passcode gate", () => {
-  it("shows the form and fetches nothing when there is no cookie", async () => {
-    const calls = stubFetch(() => new Response("{}", { status: 200 }));
-    const res = await get(`/parts/vendors/${SEARCH}`);
+describe("signed out", () => {
+  it("asks Google nothing, runs no script, and offers the passcode form", async () => {
+    const calls = stubFetch(searchReply);
+    const res = await get(`/parts/${SEARCH}`);
     const html = await res.text();
-    expect(res.status).toBe(200);
     expect(calls).toHaveLength(0);
-    expect(html).toContain('name="passcode"');
-    expect(html).not.toContain('class="vendor"');
-    // The query the browser asked for is kept, so signing in does not lose it.
-    expect(html).toContain(`value="/parts/vendors/?q=1u3352+40%2F300893&amp;city=Bengaluru`);
+    expect(html).not.toContain("maps.googleapis.com");
+    expect(html).not.toContain("pf-pins");
+    expect(html).toContain("Sign in to see suppliers here");
+    expect(hrefs(html)).toContain(
+      "/parts/vendors/login?q=1u3352%2040%2F300893&city=Bengaluru&country=IN",
+    );
+    // Today's page is otherwise untouched: the cards and their link-outs are still there.
+    expect(html).toContain("Find suppliers in India");
   });
 
-  it("carries no-store and the site's security headers", async () => {
-    const res = await get("/parts/vendors/");
-    expect(res.headers.get("Cache-Control")).toBe("no-store");
-    expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
+  it("keeps today's CSP and referrer policy", async () => {
+    const res = await get(`/parts/${SEARCH}`);
+    expect(res.headers.get("Content-Security-Policy")).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
+        "form-action 'self'; base-uri 'none'",
+    );
     expect(res.headers.get("Referrer-Policy")).toBe("no-referrer");
-    expect(res.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
+    expect(res.headers.get("Cache-Control")).toBe(null);
+  });
+});
+
+describe("the passcode gate", () => {
+  it("serves the form on GET, carrying the query into the return path", async () => {
+    const html = await (await get(`/parts/vendors/login${SEARCH}`)).text();
+    expect(html).toContain('name="passcode"');
+    expect(html).toContain('value="/parts/?q=1u3352+40%2F300893&amp;city=Bengaluru&amp;country=IN"');
   });
 
   it("refuses a wrong passcode with 401 and no cookie", async () => {
     const res = await get("/parts/vendors/login", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `passcode=wrong&next=${encodeURIComponent(`/parts/vendors/${SEARCH}`)}`,
+      body: `passcode=wrong&next=${encodeURIComponent(`/parts/${SEARCH}`)}`,
     });
     expect(res.status).toBe(401);
     expect(res.headers.get("Set-Cookie")).toBe(null);
-    const html = await res.text();
-    expect(unescapeHtml(html)).toContain("That passcode didn't match.");
-    expect(html).toContain('name="passcode"');
+    expect(unescapeHtml(await res.text())).toContain("That passcode didn't match.");
   });
 
-  it("accepts the right passcode, sets the cookie and redirects with the query", async () => {
+  it("accepts the right passcode and returns to the page that offered it", async () => {
     const res = await get("/parts/vendors/login", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `passcode=${encodeURIComponent(PASSCODE)}&next=${encodeURIComponent(`/parts/vendors/${SEARCH}`)}`,
+      body:
+        `passcode=${encodeURIComponent(PASSCODE)}` +
+        `&next=${encodeURIComponent(`/parts/${SEARCH}`)}`,
     });
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toBe(
-      "/parts/vendors/?q=1u3352+40%2F300893&city=Bengaluru&country=IN",
+      "/parts/?q=1u3352+40%2F300893&city=Bengaluru&country=IN",
     );
     const set = res.headers.get("Set-Cookie")!;
     expect(set).toContain(`pf_vendor=${await vendorToken(PASSCODE)}`);
-    expect(set).toContain("HttpOnly");
-    expect(set).toContain("Secure");
-    expect(set).toContain("SameSite=Lax");
-    expect(set).toContain("Path=/parts/");
-    expect(set).toContain("Max-Age=2592000");
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/parts/", "Max-Age=2592000"]) {
+      expect(set).toContain(attribute);
+    }
   });
 
   it("rejects a cookie made with an old passcode", async () => {
-    const res = await get("/parts/vendors/", { headers: { Cookie: await cookie("the-old-one") } });
-    expect(await res.text()).toContain('name="passcode"');
+    const calls = stubFetch(searchReply);
+    const res = await get(`/parts/${SEARCH}`, { headers: { Cookie: await cookie("the-old-one") } });
+    expect(calls).toHaveLength(0);
+    expect(await res.text()).toContain("Sign in to see suppliers here");
   });
 
-  it("never sends a login anywhere but the vendor pages", async () => {
+  it("never sends a login anywhere but the page", async () => {
     const res = await get("/parts/vendors/login", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `passcode=${encodeURIComponent(PASSCODE)}&next=https%3A%2F%2Felsewhere.example%2Ftake-me`,
     });
-    expect(res.headers.get("Location")).toBe("/parts/vendors/");
+    expect(res.headers.get("Location")).toBe("/parts/");
   });
 
-  it("clears the cookie on logout", async () => {
-    const res = await get("/parts/vendors/logout", { headers: { Cookie: await cookie() } });
-    expect(res.status).toBe(303);
-    expect(res.headers.get("Set-Cookie")).toContain("Max-Age=0");
-  });
+  it("clears the cookie on logout and allows POST only on login", async () => {
+    const out = await get("/parts/vendors/logout", { headers: { Cookie: await cookie() } });
+    expect(out.status).toBe(303);
+    expect(out.headers.get("Location")).toBe("/parts/");
+    expect(out.headers.get("Set-Cookie")).toContain("Max-Age=0");
 
-  it("allows POST on the login path only", async () => {
-    for (const path of ["/parts/vendors/", "/parts/vendors/contact", "/parts/vendors/logout"]) {
-      const res = await get(path, { method: "POST" });
-      expect(res.status, path).toBe(405);
-      expect(res.headers.get("Allow"), path).toBe("GET");
-    }
+    const post = await get("/parts/vendors/logout", { method: "POST" });
+    expect(post.status).toBe(405);
+    expect(post.headers.get("Allow")).toBe("GET");
     const put = await get("/parts/vendors/login", { method: "PUT" });
     expect(put.status).toBe(405);
     expect(put.headers.get("Allow")).toBe("POST");
   });
 });
 
-describe("the vendor search", () => {
+describe("the old vendor pages", () => {
+  it("redirect to the page that replaced them, keeping the query", async () => {
+    for (const path of ["/parts/vendors/", "/parts/vendors/contact", "/parts/vendors"]) {
+      const res = await get(`${path}${SEARCH}`);
+      expect(res.status, path).toBe(302);
+      expect(res.headers.get("Location"), path).toBe(
+        "/parts/?q=1u3352+40%2F300893&city=Bengaluru&country=IN",
+      );
+      expect(res.headers.get("Cache-Control"), path).toBe("no-store");
+    }
+  });
+
+  it("redirect to the bare page when there is no query", async () => {
+    expect((await get("/parts/vendors/")).headers.get("Location")).toBe("/parts/");
+  });
+});
+
+describe("the inline supplier search", () => {
   it("makes one Text Search call per brand group plus the multi-brand one", async () => {
     const calls = stubFetch(searchReply);
-    await signedIn(`/parts/vendors/${SEARCH}`);
+    await signedIn(`/parts/${SEARCH}`);
     expect(calls).toHaveLength(3);
     expect(calls.map((c) => c.body?.textQuery)).toEqual([
       "Caterpillar spare parts dealer in Bengaluru, India",
@@ -215,189 +152,138 @@ describe("the vendor search", () => {
       expect(call.method).toBe("POST");
       expect(call.headers["X-Goog-Api-Key"]).toBe(env.GOOGLE_PLACES_KEY);
       expect(call.headers["X-Goog-FieldMask"]).toBe(
-        "places.id,places.displayName,places.formattedAddress,places.googleMapsUri",
+        "places.id,places.displayName,places.formattedAddress,places.location," +
+          "places.googleMapsUri,places.internationalPhoneNumber,places.nationalPhoneNumber," +
+          "places.websiteUri,places.rating,places.userRatingCount",
       );
       expect(call.body).toMatchObject({ regionCode: "IN", languageCode: "en", pageSize: 10 });
     }
   });
 
-  it("asks for no field that costs more than a Pro row", async () => {
-    for (const field of ["hone", "ebsite", "ating", "eview", "pening", "rice"]) {
+  it("asks for nothing beyond what a supplier row and its pin need", async () => {
+    // Since step 6 this is the Enterprise tier, because of the phone and website fields. The list
+    // is closed: anything added here costs money on every search, so it is asserted whole.
+    expect(TEXT_SEARCH_FIELD_MASK.split(",")).toEqual([
+      "places.id",
+      "places.displayName",
+      "places.formattedAddress",
+      "places.location",
+      "places.googleMapsUri",
+      "places.internationalPhoneNumber",
+      "places.nationalPhoneNumber",
+      "places.websiteUri",
+      "places.rating",
+      "places.userRatingCount",
+    ]);
+    for (const field of ["review", "openingHours", "priceLevel", "photos", "editorialSummary"]) {
       expect(TEXT_SEARCH_FIELD_MASK).not.toContain(field);
     }
   });
 
-  it("puts the shop found for both brands first and defaults it to all parts", async () => {
+  it("puts the section under the cards, numbered, boxed and credited", async () => {
     stubFetch(searchReply);
-    const html = await (await signedIn(`/parts/vendors/${SEARCH}`)).text();
-    const names = [...html.matchAll(/<p class="vname">([^<]*)<\/p>/g)].map((m) => m[1]);
-    expect(names[0]).toBe("Shared Spares");
-    expect(html).toContain("Found for: Caterpillar, JCB");
-    expect(html).toContain("Appeared for 2 of your 2 brands");
-    expect(html).toContain('<input type="radio" name="scope_shared" value="all" checked>');
-    // A shop found for one brand of two defaults to that brand's parts instead.
-    expect(html).toContain('value="only:Caterpillar" checked');
-    expect(html).toContain('<input type="radio" name="scope_cat-only" value="all">');
-  });
-
-  it("says what the listing is and is not", async () => {
-    stubFetch(searchReply);
-    const html = unescapeHtml(await (await signedIn(`/parts/vendors/${SEARCH}`)).text());
-    expect(html).toContain(
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    expect(html).toContain("<h2>Suppliers near Bengaluru</h2>");
+    expect(unescapeHtml(html)).toContain(
       "These are shops Google lists for these brands in Bengaluru. " +
         "Being listed doesn't mean they have your part in stock. Ask them.",
     );
+    expect(html).toContain('<section class="gmaps" aria-label="Google Maps">');
+    expect(html).toContain('<p class="attribution">Google Maps</p>');
+    // The shop listed for both brands sorts first and is numbered 1.
+    const names = [...html.matchAll(/<p class="sname">([^<]*)<\/p>/g)].map((m) => m[1]);
+    expect(names).toEqual(["1. Shared Spares", "2. Cat Corner", "3. Multi Brand Traders"]);
+    expect(html).toContain('id="pf-shop-1"');
+    expect(html).toContain("Found for: Caterpillar, JCB");
+    expect(html).toContain("Appeared for 2 of your 2 brands");
+    expect(html).toContain("Rated 4.3 on Google (128 ratings)");
+    // The cards come first: the answer to "what is this number" precedes "who sells it".
+    expect(html.indexOf('class="card"')).toBeLessThan(html.indexOf('class="suppliers"'));
+    // Step 5's form is gone.
+    expect(html).not.toContain("Get contact details");
+    expect(html).not.toContain('type="checkbox"');
+    expect(html).not.toContain('type="radio"');
   });
 
-  it("asks for a city before it asks Google anything", async () => {
-    const calls = stubFetch(searchReply);
-    const html = await (await signedIn(`/parts/vendors/?q=${encodeURIComponent(Q)}`)).text();
-    expect(calls).toHaveLength(0);
-    expect(html).toContain('name="city"');
-    expect(unescapeHtml(html)).toContain("Enter a city");
-  });
-});
-
-describe("Google Maps attribution", () => {
-  /** The contents of every <section class="gmaps" aria-label="Google Maps"> on the page. */
-  function boxes(html: string): string[] {
-    return [...html.matchAll(/<section class="gmaps" aria-label="Google Maps">([\s\S]*?)<\/section>/g)]
-      .map((m) => m[1]!);
-  }
-
-  it("boxes the vendor list and labels it, with the words beside the listings", async () => {
+  it("gives a shop found for one brand of two both WhatsApp buttons", async () => {
     stubFetch(searchReply);
-    const html = await (await signedIn(`/parts/vendors/${SEARCH}`)).text();
-    const found = boxes(html);
-    expect(found).toHaveLength(1);
-    // Every listing is inside the box, and so is the attribution.
-    expect(found[0]).toContain('<ol class="vendors">');
-    expect(found[0]).toContain("Shared Spares");
-    expect(found[0]).toContain('<p class="attribution">Google Maps</p>');
-    // The border is what tells Google's content apart from the rest of the page.
-    expect(html).toContain(".gmaps {");
-    expect(html).toMatch(/\.gmaps \{[^}]*border: 2px solid/);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const everything = whatsappMessage(html, "WhatsApp \\(if they use it\\)")!;
+    const narrower = whatsappMessage(html, "WhatsApp: only Caterpillar parts")!;
+    // The wide button is on every shop with a number, so the first match is shop 1's.
+    expect(everything).toContain("1U3352");
+    expect(everything).toContain("40/300893");
+    // The narrow one belongs to Cat Corner, which Google listed for Caterpillar only.
+    expect(narrower.startsWith("Hi Cat Corner,")).toBe(true);
+    expect(narrower).toContain("1U3352");
+    expect(narrower).not.toContain("40/300893");
+    // The shop listed for both brands has nothing narrower to ask, so it gets one button.
+    const shared = html.slice(html.indexOf("pf-shop-1"), html.indexOf("pf-shop-2"));
+    expect(shared).not.toContain("WhatsApp: only");
+    expect(shared).toContain('href="tel:+919876543210"');
+    expect(shared).toContain("Website");
+    expect(shared).toContain("Open in Google Maps");
   });
 
-  it("boxes and labels each vendor block on the contact page", async () => {
-    stubFetch(detailsReply);
-    const html = await (
-      await signedIn(
-        `/parts/vendors/contact?q=${encodeURIComponent(Q)}&city=Bengaluru&country=IN` +
-          "&v=mobile&v=landline",
-      )
-    ).text();
-    const found = boxes(html);
-    expect(found).toHaveLength(2);
-    expect(found[0]).toContain("Cat Corner");
-    expect(found[0]).toContain('<p class="attribution">Google Maps</p>');
-    expect(found[1]).toContain("JCB Spares Co");
-    expect(found[1]).toContain('<p class="attribution">Google Maps</p>');
+  it("gives a shop with no international number a call and no wa.me link", async () => {
+    stubFetch(() =>
+      new Response(
+        JSON.stringify({
+          places: [place("local", "Local Only", { internationalPhoneNumber: undefined })],
+        }),
+        { status: 200 },
+      ),
+    );
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    // Scoped to the section: the step 4 send box above it always offers a WhatsApp contact picker.
+    const shops = html.slice(html.indexOf('class="suppliers"'));
+    expect(shops).toContain('href="tel:09876543210"');
+    expect(shops).not.toContain("wa.me");
   });
 
-  it("boxes the answer even when Google listed nothing", async () => {
-    stubFetch(() => new Response(JSON.stringify({}), { status: 200 }));
-    const html = await (await signedIn(`/parts/vendors/${SEARCH}`)).text();
-    expect(boxes(html)[0]).toContain('<p class="attribution">Google Maps</p>');
+  it("renders a shop the demo key returned no rating for", async () => {
+    stubFetch(() =>
+      new Response(
+        JSON.stringify({
+          places: [place("plain", "Plain Shop", { rating: undefined, userRatingCount: undefined })],
+        }),
+        { status: 200 },
+      ),
+    );
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    expect(html).toContain("1. Plain Shop");
+    expect(html).not.toContain('class="srating"');
+  });
+
+  it("asks Google nothing without a city, or without a recognised number", async () => {
+    const calls = stubFetch(searchReply);
+    const noCity = await (await signedIn(`/parts/?q=${encodeURIComponent(Q)}`)).text();
+    expect(calls).toHaveLength(0);
+    expect(noCity).not.toContain("Suppliers near");
+
+    const noParts = await (await signedIn("/parts/?q=hello%20there&city=Bengaluru")).text();
+    expect(calls).toHaveLength(0);
+    expect(noParts).not.toContain("Suppliers near");
   });
 });
 
-describe("contact details", () => {
-  const contactUrl =
-    `/parts/vendors/contact?q=${encodeURIComponent(Q)}&city=Bengaluru&country=IN` +
-    "&v=mobile&scope_mobile=only%3ACaterpillar&v=landline&scope_landline=all";
-
-  it("asks Place Details for exactly the fields the page shows", async () => {
-    const calls = stubFetch(detailsReply);
-    await signedIn(contactUrl);
-    expect(calls).toHaveLength(2);
-    expect(calls[0]!.url).toBe("https://places.googleapis.com/v1/places/mobile");
-    expect(calls[0]!.method).toBe("GET");
-    for (const call of calls) {
-      expect(call.headers["X-Goog-FieldMask"]).toBe(
-        "id,displayName,internationalPhoneNumber,nationalPhoneNumber,websiteUri,googleMapsUri",
-      );
-    }
-    expect(DETAILS_FIELD_MASK).toBe(
-      "id,displayName,internationalPhoneNumber,nationalPhoneNumber,websiteUri,googleMapsUri",
+describe("the remembered city", () => {
+  it("is set when one is typed, and prefills the field next time", async () => {
+    stubFetch(searchReply);
+    const res = await signedIn(`/parts/${SEARCH}`);
+    expect(res.headers.get("Set-Cookie")).toBe(
+      "pf_city=Bengaluru; HttpOnly; Secure; SameSite=Lax; Path=/parts/; Max-Age=2592000",
     );
-  });
 
-  it("offers WhatsApp to a +91 mobile, with that shop's parts and its own greeting", async () => {
-    stubFetch(detailsReply);
-    const html = await (await signedIn(contactUrl)).text();
-    const wa = hrefs(html).find((h) => h.startsWith("https://wa.me/"))!;
-    expect(wa.startsWith("https://wa.me/919876543210?text=")).toBe(true);
-    const message = decodeURIComponent(wa.slice(wa.indexOf("?text=") + 6));
-    expect(message.startsWith("Hi Cat Corner, we have a requirement for:")).toBe(true);
-    expect(message).toContain("1U3352");
-    // Scope "only:Caterpillar": the JCB number belongs to the other shop's message, not this one.
-    expect(message).not.toContain("40/300893");
-    expect(textareas(html)[0]).toBe(message);
-  });
-
-  it("offers WhatsApp and a call for every number, mobile or not", async () => {
-    stubFetch(detailsReply);
-    const html = await (await signedIn(contactUrl)).text();
-    // +91 98… is an Indian mobile; +91 80… is a Bengaluru landline that fits the same shape.
-    // Neither is classified any more: both get both links, labelled for what they are.
-    const mobile = html.slice(html.indexOf("Cat Corner"), html.indexOf("JCB Spares Co"));
-    const landline = html.slice(html.indexOf("JCB Spares Co"));
-    expect(mobile).toContain("https://wa.me/919876543210?text=");
-    expect(mobile).toContain('href="tel:+919876543210"');
-    expect(landline).toContain("https://wa.me/918022223333?text=");
-    expect(landline).toContain('href="tel:+918022223333"');
-    for (const block of [mobile, landline]) {
-      expect(block).toContain("WhatsApp (if they use it)");
-      expect(block).toContain("<textarea");
-      expect(block).toContain("Send by email");
-    }
-    expect(html).not.toContain("may not be on WhatsApp");
-    // Scope "all": the landline's message carries both numbers.
-    const message = textareas(html)[1]!;
-    expect(message).toContain("1U3352");
-    expect(message).toContain("40/300893");
-    expect(message.startsWith("Hi JCB Spares Co,")).toBe(true);
-  });
-
-  it("offers no WhatsApp link when Google has no international number", async () => {
-    stubFetch(
-      () =>
-        new Response(
-          JSON.stringify({
-            id: "local",
-            displayName: { text: "Local Only" },
-            nationalPhoneNumber: "080 2222 3333",
-          }),
-          { status: 200 },
-        ),
-    );
-    const html = await (
-      await signedIn(`/parts/vendors/contact?q=${encodeURIComponent(Q)}&city=Bengaluru&v=local`)
-    ).text();
-    expect(html).toContain('href="tel:08022223333"');
-    expect(html).not.toContain("wa.me");
-  });
-
-  it("emails the same message, with the step 4 subject", async () => {
-    stubFetch(detailsReply);
-    const html = await (await signedIn(contactUrl)).text();
-    const mailto = hrefs(html).find((h) => h.startsWith("mailto:"))!;
-    const params = new URL(mailto).searchParams;
-    expect(params.get("subject")).toBe("Requirement: 1U3352");
-    expect(params.get("body")).toBe(textareas(html)[0]);
-  });
-
-  it("contacts at most five shops and says so", async () => {
-    const calls = stubFetch(detailsReply);
-    const picked = ["a", "b", "c", "d", "e", "f", "g"].map((id) => `v=${id}`).join("&");
-    const html = await (
-      await signedIn(
-        `/parts/vendors/contact?q=${encodeURIComponent(Q)}&city=Bengaluru&country=IN&${picked}`,
-      )
-    ).text();
-    expect(calls).toHaveLength(5);
-    expect(html).toContain("You picked 7 shops. Contact details are shown for the first 5.");
+    // Same query, no city in the URL: the cookie supplies it, and the search still runs.
+    const calls = stubFetch(searchReply);
+    const back = await signedIn(`/parts/?q=${encodeURIComponent(Q)}`, "pf_city=Bengaluru");
+    const html = await back.text();
+    expect(calls).toHaveLength(3);
+    expect(html).toContain('id="city" name="city" type="text" value="Bengaluru"');
+    expect(html).toContain("<h2>Suppliers near Bengaluru</h2>");
+    // Nothing was typed, so nothing is rewritten.
+    expect(back.headers.get("Set-Cookie")).toBe(null);
   });
 });
 
@@ -406,41 +292,41 @@ describe("when Google will not answer", () => {
     error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Quota exceeded for quota metric" },
   });
 
-  it("shows the limit message and step 4's links, never Google's own words", async () => {
+  it("shows the limit message and step 4's links, never Google's own words, and no map", async () => {
     stubFetch(() => new Response(QUOTA_BODY, { status: 429 }));
-    const html = await (await signedIn(`/parts/vendors/${SEARCH}`)).text();
+    const res = await signedIn(`/parts/${SEARCH}`);
+    const html = await res.text();
     expect(unescapeHtml(html)).toContain(
       "Vendor search hit today's Google limit. Use the links below instead.",
     );
-    for (const word of ["RESOURCE_EXHAUSTED", "Quota exceeded", "429"]) {
+    for (const word of ["RESOURCE_EXHAUSTED", "Quota exceeded", "maps.googleapis.com", "pf-pins"]) {
       expect(html).not.toContain(word);
     }
-    const links = hrefs(html);
-    expect(links.some((h) => h.startsWith("https://www.google.co.in/search?q="))).toBe(true);
-    expect(links.some((h) => h.startsWith("https://www.google.com/maps/search/"))).toBe(true);
     expect(html).toContain("Caterpillar parts shops on Google Maps");
     expect(html).toContain("JCB parts shops on Google Maps");
-    expect(html).not.toContain('class="vendor"');
+    expect(html).not.toContain('class="shop"');
+    // A page with no script keeps today's CSP.
+    expect(res.headers.get("Content-Security-Policy")).not.toContain("nonce-");
   });
 
   it("treats a 403 that names a quota the same way", async () => {
     stubFetch(() => new Response(QUOTA_BODY, { status: 403 }));
-    const html = unescapeHtml(await (await signedIn(`/parts/vendors/${SEARCH}`)).text());
+    const html = unescapeHtml(await (await signedIn(`/parts/${SEARCH}`)).text());
     expect(html).toContain("Vendor search hit today's Google limit.");
   });
 
   it("says something neutral for anything else, with the same links", async () => {
     stubFetch(() => new Response("kaboom", { status: 500 }));
-    const html = unescapeHtml(await (await signedIn(`/parts/vendors/${SEARCH}`)).text());
+    const html = unescapeHtml(await (await signedIn(`/parts/${SEARCH}`)).text());
     expect(html).toContain("Vendor search isn't available right now. Use the links below instead.");
     expect(html).not.toContain("kaboom");
     expect(html).toContain("Caterpillar parts shops on Google Maps");
   });
 
-  it("falls back the same way with no key at all, and calls nothing", async () => {
+  it("falls back the same way with no Places key, and calls nothing", async () => {
     const calls = stubFetch(searchReply);
     const res = await worker.fetch(
-      new Request(`https://rohitrao.in/parts/vendors/${SEARCH}`, {
+      new Request(`https://rohitrao.in/parts/${SEARCH}`, {
         headers: { Cookie: await cookie() },
       }),
       { VENDOR_PASSCODE: PASSCODE },
@@ -452,32 +338,12 @@ describe("when Google will not answer", () => {
   });
 });
 
-describe("the way in from the public page", () => {
-  it("links the recognised numbers, never the pasted text", async () => {
-    const pasted = "need 1u3352 and 40/300893 for JCB 3CX, call Ramesh 9845012345";
-    const res = await worker.fetch(
-      new Request(
-        `https://rohitrao.in/parts/?q=${encodeURIComponent(pasted)}&city=Bengaluru&country=IN`,
-      ),
-      {},
+describe("what a redirect carries", () => {
+  it("carries the three parameters the page reads, and drops the rest", async () => {
+    const res = await get(
+      "/parts/vendors/?q=1u3352&city=Bengaluru&country=IN" +
+        "&v=leftover&scope_leftover=all&utm_source=somewhere",
     );
-    const html = await res.text();
-    expect(html).toContain("Find vendors for these parts");
-    const href = hrefs(html).find((h) => h.startsWith("/parts/vendors/"))!;
-    const carried = new URL(href, "https://rohitrao.in").searchParams;
-    expect(carried.get("q")).toBe("1U3352 40/300893");
-    expect(carried.get("city")).toBe("Bengaluru");
-    expect(carried.get("country")).toBe("IN");
-    expect(href).not.toContain("Ramesh");
-    expect(href).not.toContain("9845012345");
-  });
-
-  it("offers no vendor link when nothing was recognised", async () => {
-    const res = await worker.fetch(
-      new Request(`https://rohitrao.in/parts/?q=${encodeURIComponent("hello there")}`),
-      {},
-    );
-    const html = await res.text();
-    expect(html).not.toContain("Find vendors for these parts");
+    expect(res.headers.get("Location")).toBe("/parts/?q=1u3352&city=Bengaluru&country=IN");
   });
 });

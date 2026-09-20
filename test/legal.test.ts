@@ -18,6 +18,19 @@ const hrefs = (html: string) =>
 /** Just the footer element. */
 const footer = (html: string) => html.match(/<footer class="footer">[\s\S]*?<\/footer>/)?.[0];
 
+/** One shop, enough for the footer and attribution checks. */
+const SHOP = JSON.stringify({
+  places: [
+    {
+      id: "a",
+      displayName: { text: "A Shop" },
+      formattedAddress: "A Shop, Bengaluru",
+      location: { latitude: 12.97, longitude: 77.59 },
+      googleMapsUri: "https://maps.google.com/?cid=a",
+    },
+  ],
+});
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("GET /parts/terms and /parts/privacy", () => {
@@ -83,31 +96,10 @@ describe("the footer", () => {
     expect(footer(html)).toContain('href="/parts/privacy"');
   });
 
-  it("links both pages from the vendor search page", async () => {
-    const calls = vi.fn(async () => new Response("{}", { status: 200 }));
-    vi.stubGlobal("fetch", calls);
+  it("links both pages from a page showing suppliers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(SHOP, { status: 200 })));
     const html = await (
-      await get("/parts/vendors/?q=1u3352&city=Bengaluru", {
-        headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
-      })
-    ).text();
-    expect(footer(html)).toContain('href="/parts/terms"');
-    expect(footer(html)).toContain('href="/parts/privacy"');
-  });
-
-  it("links both pages from the contact page", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({ id: "x", displayName: { text: "A Shop" } }),
-            { status: 200 },
-          ),
-      ),
-    );
-    const html = await (
-      await get("/parts/vendors/contact?q=1u3352&city=Bengaluru&v=x", {
+      await get("/parts/?q=1u3352&city=Bengaluru", {
         headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
       })
     ).text();
@@ -117,7 +109,7 @@ describe("the footer", () => {
   });
 
   it("links both pages from the passcode gate and from the pages themselves", async () => {
-    for (const path of ["/parts/vendors/", "/parts/terms", "/parts/privacy"]) {
+    for (const path of ["/parts/vendors/login", "/parts/terms", "/parts/privacy"]) {
       const html = await (await get(path)).text();
       expect(footer(html), path).toContain('href="/parts/terms"');
       expect(footer(html), path).toContain('href="/parts/privacy"');
@@ -125,32 +117,25 @@ describe("the footer", () => {
   });
 
   it("keeps the Google attribution beside the listings, not down here", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              places: [
-                {
-                  id: "a",
-                  displayName: { text: "A Shop" },
-                  formattedAddress: "A Shop, Bengaluru",
-                  googleMapsUri: "https://maps.google.com/?cid=a",
-                },
-              ],
-            }),
-            { status: 200 },
-          ),
-      ),
-    );
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(SHOP, { status: 200 })));
     const html = await (
-      await get("/parts/vendors/?q=1u3352&city=Bengaluru", {
+      await get("/parts/?q=1u3352&city=Bengaluru", {
         headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
       })
     ).text();
     expect(html.indexOf('class="attribution"')).toBeGreaterThan(0);
-    expect(html.indexOf('class="attribution"')).toBeLessThan(html.indexOf('<footer'));
+    expect(html.indexOf('class="attribution"')).toBeLessThan(html.indexOf("<footer"));
     expect(footer(html)).not.toContain("Google");
+  });
+});
+
+describe("what the privacy page has to say since step 6", () => {
+  it("names both cookies and what the map sends to Google", async () => {
+    const html = await (await get("/parts/privacy")).text();
+    expect(html).toContain("pf_vendor");
+    expect(html).toContain("pf_city");
+    expect(html).toContain("the last city you typed");
+    expect(html).toContain("the map is loaded from Google");
+    expect(html).toContain("never the page's query string");
   });
 });

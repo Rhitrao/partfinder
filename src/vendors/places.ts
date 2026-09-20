@@ -1,9 +1,10 @@
 // The Google Places API (New) client: the only place Partfinder talks to Google.
 //
-// Two endpoints, each asked for the narrowest field mask that answers the question. Field masks
-// are what Places (New) bills on, so the search asks for Pro fields only - id, name, address and
-// the Maps link - and the phone number and website, which cost more, are fetched only for the
-// vendors the user actually picks.
+// Field masks are what Places (New) bills on. Since step 6 the search asks for the phone number
+// and the website in the same call, which is the Enterprise tier: one call per brand group now
+// answers everything a shop's row needs, instead of a second Place Details call per shop the user
+// picked. That is the right trade on a demo key and a decision to revisit before a billing key,
+// which is why CLAUDE.md says so.
 //
 // Nothing that comes back is stored: place ids travel in URLs and nowhere else. Nothing is logged,
 // and no Google error text ever reaches a page.
@@ -11,9 +12,11 @@
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const DETAILS_URL = "https://places.googleapis.com/v1/places/";
 
-/** The Pro-tier fields the vendor list shows, and not one field more. */
+/** Exactly the fields a supplier row and its map pin need, and not one more. */
 export const TEXT_SEARCH_FIELD_MASK =
-  "places.id,places.displayName,places.formattedAddress,places.googleMapsUri";
+  "places.id,places.displayName,places.formattedAddress,places.location," +
+  "places.googleMapsUri,places.internationalPhoneNumber,places.nationalPhoneNumber," +
+  "places.websiteUri,places.rating,places.userRatingCount";
 
 /** Asked for once per vendor the user picked, never for the whole list. */
 export const DETAILS_FIELD_MASK =
@@ -25,12 +28,22 @@ export const PAGE_SIZE = 10;
 /** One fetch has this long to finish, so a slow Google cannot hold a request open. */
 export const REQUEST_TIMEOUT_MS = 8000;
 
-/** What the vendor list needs about a shop. */
+/** What a supplier row and its map pin need about a shop. */
 export interface Place {
   id: string;
   name: string;
   address: string;
   mapsUri: string;
+  /** Null when Google returned no coordinates: the shop is listed, but it cannot be pinned. */
+  location: { lat: number; lng: number } | null;
+  /** In E.164-ish form, e.g. "+91 98765 43210". Empty when Google has none. */
+  internationalPhone: string;
+  /** As written locally, e.g. "098765 43210". Empty when Google has none. */
+  nationalPhone: string;
+  website: string;
+  /** Null when the key's tier does not return ratings. The row renders without them. */
+  rating: number | null;
+  ratingCount: number | null;
 }
 
 /** What the contact page needs, once the user has picked a shop. */
@@ -100,6 +113,19 @@ function displayName(value: unknown): string {
   return text((value as { text?: unknown }).text);
 }
 
+function count(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Google's { latitude, longitude }, or null when either half is missing or not a number. */
+function location(value: unknown): { lat: number; lng: number } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { latitude, longitude } = value as { latitude?: unknown; longitude?: unknown };
+  const lat = count(latitude);
+  const lng = count(longitude);
+  return lat === null || lng === null ? null : { lat, lng };
+}
+
 /**
  * Text Search. `regionCode` is a two-letter CLDR code, left out when the user's country setting is
  * "Other", which names no region. A 200 with no places is an empty list, not an error.
@@ -137,6 +163,12 @@ export async function searchText(
       name: displayName(place.displayName),
       address: text(place.formattedAddress),
       mapsUri: text(place.googleMapsUri),
+      location: location(place.location),
+      internationalPhone: text(place.internationalPhoneNumber),
+      nationalPhone: text(place.nationalPhoneNumber),
+      website: text(place.websiteUri),
+      rating: count(place.rating),
+      ratingCount: count(place.userRatingCount),
     });
   }
   return out;

@@ -379,6 +379,34 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .send h2 { margin-bottom: .75rem; }
 .send label { display: block; margin-top: .75rem; font-weight: 600; }
 .send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
+.suppliers { margin-top: 2rem; }
+.gmaps { border: 2px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1.25rem 0; }
+.gmaps > :first-child { margin-top: 0; }
+.caveat { font-weight: 600; }
+.attribution { font-size: .9rem; font-weight: 600; margin: 1rem 0 0; }
+.shops { list-style: none; margin: 1rem 0 0; padding: 0; }
+.shop { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
+.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.sname { font-weight: 700; margin: 0; }
+.saddr, .sfound, .scount, .srating { font-size: .9rem; margin: .15rem 0; opacity: .85; }
+.sphone { font-family: ui-monospace, monospace; margin: .35rem 0 .15rem; }
+.shop .whatsapp { margin: .4rem 0 0; }
+.shop .link { margin-top: .4rem; }
+.signin { font-weight: 600; }
+.map {
+  height: 260px;
+  margin-top: 1rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: .9rem;
+  padding: .5rem;
+}
+@media (min-width: 40rem) { .map { height: 340px; } }
+.warn { font-weight: 600; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
 .footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }
 .footer a { color: inherit; }
@@ -578,8 +606,23 @@ const FOOTER = `<footer class="footer">
  * JavaScript. `main` is the whole <main> element, indented to sit at four spaces. `extraStyle` is
  * for rules only one page needs, so the public page does not carry the vendor pages' CSS.
  */
-export function renderDocument(main: string, extraStyle = ""): string {
+export interface DocumentOptions {
+  /** Rules only this page needs, so other pages do not carry them. */
+  extraStyle?: string;
+  /**
+   * The CSP nonce, on pages whose Content-Security-Policy carries one. Our own <style> has to
+   * have it too: a nonce in script-src or style-src makes the browser ignore 'unsafe-inline',
+   * so an unnonced <style> would simply not apply.
+   */
+  nonce?: string;
+  /** Markup just before </body>. The Maps scripts, and nothing else so far. */
+  tail?: string;
+}
+
+export function renderDocument(main: string, options: DocumentOptions = {}): string {
+  const { extraStyle = "", nonce, tail = "" } = options;
   const style = extraStyle === "" ? STYLE : `${STYLE}\n${extraStyle.trim()}`;
+  const styleNonce = nonce === undefined ? "" : ` nonce="${escapeHtml(nonce)}"`;
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -591,21 +634,45 @@ export function renderDocument(main: string, extraStyle = ""): string {
     <link rel="manifest" href="/parts/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/parts/icon-192.png">
     <title>Partfinder</title>
-    <style>${style}</style>
+    <style${styleNonce}>${style}</style>
   </head>
   <body>
     ${main}
-    ${FOOTER}
+    ${FOOTER}${tail}
   </body>
 </html>
 `;
+}
+
+/** What one query turned into. Computed once per request, because the CPU budget is 10 ms. */
+export interface ParsedQuery {
+  hints: string[];
+  results: ParseResult[];
+  /** Tokens past MAX_CARDS, counted so the page can say how many it did not read. */
+  truncated: number;
+}
+
+/**
+ * Read a query into cards. Exported because the supplier search needs the same parse the cards
+ * are built from, and parsing twice would spend the request's budget twice.
+ */
+export function readQuery(q: string, hint: string): ParsedQuery {
+  if (q.trim() === "") return { hints: [], results: [], truncated: 0 };
+  const hints = [...extractHints(q)];
+  for (const h of extractHints(hint)) if (!hints.includes(h)) hints.push(h);
+  const tokens = extractTokens(q);
+  return {
+    hints,
+    results: tokens.slice(0, MAX_CARDS).map((token) => parse(token, hints)),
+    truncated: Math.max(0, tokens.length - MAX_CARDS),
+  };
 }
 
 export interface PageInput {
   q: string;
   hint: string;
   country: Country;
-  /** Narrows the supplier and Maps searches. Never stored, and never put in the back-link. */
+  /** Narrows the supplier and Maps searches. Never stored on a record; remembered in a cookie. */
   city: string;
   /** The supplier's WhatsApp number, as typed. Used to build the link, and nothing else. */
   to: string;
@@ -613,23 +680,21 @@ export interface PageInput {
   note: string;
   /** Shown above the form, e.g. when the input was too long. Not user text. */
   notice?: string;
+  /** The parse, when the caller already has it. Recomputed here when it does not. */
+  parsed?: ParsedQuery;
+  /** The Suppliers section, rendered by the caller because only it can reach Google. */
+  suppliers?: string;
+  /** Passed to renderDocument on a page whose CSP carries a nonce. */
+  nonce?: string;
+  /** Markup just before </body>: the Maps scripts. */
+  tail?: string;
 }
 
 /** The whole page, as one HTML document. */
 export function renderPage(input: PageInput): string {
   const { q, hint, country, city } = input;
   const trimmed = q.trim();
-  let results: ParseResult[] = [];
-  let hints: string[] = [];
-  let truncated = 0;
-
-  if (trimmed !== "") {
-    hints = [...extractHints(q)];
-    for (const h of extractHints(hint)) if (!hints.includes(h)) hints.push(h);
-    const tokens = extractTokens(q);
-    truncated = Math.max(0, tokens.length - MAX_CARDS);
-    results = tokens.slice(0, MAX_CARDS).map((token) => parse(token, hints));
-  }
+  const { hints, results, truncated } = input.parsed ?? readQuery(q, hint);
 
   const sections: string[] = [];
   if (input.notice) sections.push(`<p class="note">${escapeHtml(input.notice)}</p>`);
@@ -645,6 +710,8 @@ export function renderPage(input: PageInput): string {
     }
     sections.push(renderResults(results, country, city));
     sections.push(renderSend(input, results));
+    // Below the cards, because the answer to "what is this number" comes before "who sells it".
+    if (input.suppliers) sections.push(input.suppliers);
   }
 
   return renderDocument(`<main>
@@ -663,5 +730,8 @@ export function renderPage(input: PageInput): string {
         <p>Identification aid only. Confirm fitment with your supplier.</p>
         <p>Not affiliated with any manufacturer. Brand names identify the parts they make.</p>
       </section>
-    </main>`);
+    </main>`, {
+    ...(input.nonce === undefined ? {} : { nonce: input.nonce }),
+    ...(input.tail === undefined ? {} : { tail: input.tail }),
+  });
 }

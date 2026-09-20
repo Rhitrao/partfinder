@@ -7,13 +7,22 @@
 // under "rohitrao.in/parts/*" for /parts/?q=... to reach the Worker at all. See wrangler.toml.
 
 import type { Env } from "./env";
-import { PAGE_HEADERS } from "./headers";
+import { PAGE_HEADERS, mapPageHeaders, newNonce } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import { MAX_QUERY_LENGTH, renderPage, resolveCountry } from "./page";
+import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors";
+import { isSignedIn, readCity, setCity } from "./vendors/auth";
+import { MAX_LISTED, findVendors, groupByOem } from "./vendors/search";
+import {
+  pinsFor,
+  renderMapBox,
+  renderMapScripts,
+  renderSignIn,
+  renderSuppliers,
+} from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -26,28 +35,103 @@ function respond(status: number, body: unknown, extra: Record<string, string> = 
   });
 }
 
-function handlePage(url: URL): Response {
+/**
+ * The page. Since step 6 it also carries the Suppliers section, so it can reach Google and has to
+ * know who is asking.
+ *
+ * Nothing is fetched unless all three hold: the browser has a valid passcode cookie, there is a
+ * city, and at least one number passed the outbound rule. A signed-out visitor gets exactly
+ * today's page plus one line offering the passcode form.
+ */
+async function handlePage(request: Request, url: URL, env: Env): Promise<Response> {
   const q = url.searchParams.get("q") ?? "";
   const hint = url.searchParams.get("hint") ?? "";
-  const city = url.searchParams.get("city") ?? "";
+  const typedCity = url.searchParams.get("city");
   const to = url.searchParams.get("to") ?? "";
   const note = url.searchParams.get("note") ?? "";
   const country = resolveCountry(url.searchParams.get("country"));
+  // A city the user typed wins; otherwise the one this browser last typed, so a phone that has
+  // been here before does not have to type it again.
+  const city = typedCity ?? readCity(request);
   // Every text field is capped, not just q: each one is rendered, and the budget is the request's.
   const fields = [q, hint, city, to, note];
   const tooLong = fields.some((value) => value.length > MAX_QUERY_LENGTH);
+  if (tooLong) {
+    const html = renderPage({
+      q: "",
+      hint: "",
+      city: "",
+      to: "",
+      note: "",
+      country,
+      notice: `That is longer than ${MAX_QUERY_LENGTH} characters. Paste a shorter list.`,
+    });
+    return new Response(html, { status: 400, headers: PAGE_HEADERS });
+  }
+
+  const parsed = readQuery(q, hint);
+  const sending = outbound(parsed.results);
+  const extra: Record<string, string> = {};
+  // Only when the user typed one: a page view that merely read the cookie need not rewrite it.
+  if (typedCity !== null && typedCity.trim() !== "") extra["Set-Cookie"] = setCity(typedCity);
+
+  let suppliers: string | undefined;
+  let nonce: string | undefined;
+  let tail: string | undefined;
+  if (sending.length > 0) {
+    if (!(await isSignedIn(request, env))) {
+      suppliers = renderSignIn(q, city, country);
+    } else if (city.trim() !== "") {
+      const { groups } = groupByOem(sending);
+      if (groups.length > 0) {
+        const { vendors, failure } = await findVendors(
+          env.GOOGLE_PLACES_KEY,
+          groups,
+          country,
+          city,
+        );
+        const listed = vendors.slice(0, MAX_LISTED);
+        // The map is drawn only when there is a key to draw it with and a shop to pin. Without
+        // either, the section is the list, which is the part that carries the phone numbers.
+        const pins = pinsFor(listed);
+        const mapsKey = env.GOOGLE_MAPS_BROWSER_KEY;
+        const withMap = failure === null && pins.length > 0 && mapsKey !== undefined && mapsKey !== "";
+        if (withMap) {
+          nonce = newNonce();
+          tail = renderMapScripts(pins, mapsKey, nonce);
+        }
+        suppliers = renderSuppliers({
+          vendors: listed,
+          groups,
+          parts: sending,
+          city,
+          country,
+          failure,
+          omitted: vendors.length - listed.length,
+          ...(withMap ? { map: renderMapBox() } : {}),
+        });
+        // Supplier data, and who asked for it, are on this page. No cache may keep a copy.
+        extra["Cache-Control"] = "no-store";
+      }
+    }
+  }
+
   const html = renderPage({
-    q: tooLong ? "" : q,
-    hint: tooLong ? "" : hint,
-    city: tooLong ? "" : city,
-    to: tooLong ? "" : to,
-    note: tooLong ? "" : note,
+    q,
+    hint,
+    city,
+    to,
+    note,
     country,
-    ...(tooLong
-      ? { notice: `That is longer than ${MAX_QUERY_LENGTH} characters. Paste a shorter list.` }
-      : {}),
+    parsed,
+    ...(suppliers === undefined ? {} : { suppliers }),
+    ...(nonce === undefined ? {} : { nonce }),
+    ...(tail === undefined ? {} : { tail }),
   });
-  return new Response(html, { status: tooLong ? 400 : 200, headers: PAGE_HEADERS });
+  // Only a page that actually runs the Maps script relaxes the CSP for it. Every other page,
+  // including a signed-in page whose search found nothing to pin, keeps today's headers.
+  const base = nonce === undefined ? PAGE_HEADERS : mapPageHeaders(nonce);
+  return new Response(html, { status: 200, headers: { ...base, ...extra } });
 }
 
 function handleParse(url: URL): Response {
@@ -133,7 +217,7 @@ export default {
     }
     if (url.pathname === "/parts/") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
-      return handlePage(url);
+      return handlePage(request, url, env);
     }
     if (url.pathname === "/parts") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
