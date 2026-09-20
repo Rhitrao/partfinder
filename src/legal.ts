@@ -89,9 +89,16 @@ export function renderPrivacy(): string {
 
       <h2>Cookies</h2>
 
-      <p>One cookie, and only if you use the vendor pages: <code>pf_vendor</code>, set when you
-      enter the vendor passcode, so you are not asked again for 30 days. It holds a value derived
-      from the passcode, not your passcode and nothing about you. Nothing else sets a cookie.</p>
+      <ul>
+        <li><code>pf_vendor</code>, set when you enter the vendor passcode, so you are not asked
+        again for 30 days. It holds a value derived from the passcode, not your passcode and
+        nothing about you.</li>
+        <li><code>pf_city</code>, set when you type a city, so you do not have to type it again.
+        It holds the last city you typed and nothing else.</li>
+      </ul>
+
+      <p>Both are readable only by this site, not by any script on the page. Nothing else sets a
+      cookie, and neither is sent anywhere or joined to anything.</p>
 
       <h2>What goes to Google</h2>
 
@@ -100,6 +107,16 @@ export function renderPrivacy(): string {
       shop's place ID. Nothing else is sent, and what you pasted is never sent. Google's handling
       of those requests is covered by the
       <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a>.</p>
+
+      <h2>The map</h2>
+
+      <p>When suppliers are shown, the map is loaded from Google, so Google receives your browser's
+      request for it exactly as it does on any page with a Google Map: your IP address, your
+      browser, and the address of this site. Partfinder sends Google the site's address only -
+      "https://rohitrao.in/" - and never the page's query string, so what you pasted and the city
+      you typed are not in that request. The map is the only script on Partfinder, and it loads
+      only on a page that is showing you shops. The same
+      <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a> covers it.</p>
 
       <h2>Links out</h2>
 

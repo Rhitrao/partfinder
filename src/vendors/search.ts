@@ -5,8 +5,8 @@
 // search once per group, add one search that names no brand at all, then merge by place id so a
 // shop that came back for two brands is one row, not two.
 
-import { outbound, type Country } from "../page";
-import { extractHints, extractTokens, parse, type ParseResult } from "../parse";
+import type { Country } from "../page";
+import type { ParseResult } from "../parse";
 import { genericVendorQueryFor } from "../rules";
 import { PlacesError, searchText, type Place, type PlacesFailure } from "./places";
 
@@ -15,9 +15,6 @@ export const MAX_GROUPS = 3;
 
 /** Text Search calls per page view: one per brand group, plus the multi-brand one. */
 export const MAX_SEARCHES = MAX_GROUPS + 1;
-
-/** Vendors the user may ask at once. */
-export const MAX_PICKS = 5;
 
 /** Suppliers listed on the page. Four searches can return forty; nobody reads forty, and every
  * one of them is a map pin. */
@@ -36,12 +33,6 @@ export interface Vendor {
   brands: string[];
   /** It came back for the multi-brand search too. */
   generic: boolean;
-}
-
-/** The numbers on this page: parsed, then filtered the same way the WhatsApp message filters them. */
-export function partsFor(q: string): ParseResult[] {
-  const hints = extractHints(q);
-  return outbound(extractTokens(q).map((token) => parse(token, hints)));
 }
 
 /**
@@ -151,27 +142,15 @@ export async function findVendors(
   return { vendors, failure: null };
 }
 
-/** The scope field's value for "every part on this page". */
-export const SCOPE_ALL = "all";
-
-/** The scope field's value for "only the brands this shop was listed for". */
+/** Names the brands a shop was listed for, in the form scopedParts() reads back. */
 export function scopeOnly(vendor: Vendor): string {
   return `only:${vendor.brands.join("|")}`;
 }
 
 /**
- * All parts when the shop came back for every brand the user asked about, or for none of them:
- * a shop found only by the multi-brand search was never tied to one brand in the first place.
- */
-export function defaultsToAllParts(vendor: Vendor, groupCount: number): boolean {
-  return vendor.brands.length === 0 || vendor.brands.length >= groupCount;
-}
-
-/**
- * The parts one vendor's message carries. The scope field comes back from a form, so it is read
- * as a list of manufacturer names and nothing else; a name no group has is simply not matched.
- * A scope that matches nothing falls back to every part, because an empty requirement is not a
- * message anybody can answer.
+ * The parts one shop's narrower message carries: the ones whose first-ranked manufacturer is a
+ * brand that shop was listed for. A scope that matches nothing falls back to every part, because
+ * an empty requirement is not a message anybody can answer.
  */
 export function scopedParts(scope: string, all: readonly ParseResult[]): ParseResult[] {
   if (!scope.startsWith("only:")) return [...all];

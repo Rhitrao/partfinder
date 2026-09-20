@@ -3,11 +3,17 @@
 // Everything here is rendered from one Text Search round. Nothing is stored, nothing is logged,
 // and a place id travels no further than the links on this page.
 
-import { escapeHtml, requirementMessage, whatsappUrl, type Country } from "../page";
+import {
+  escapeHtml,
+  mapsUrl,
+  requirementMessage,
+  suppliersUrl,
+  whatsappUrl,
+  type Country,
+} from "../page";
 import type { ParseResult } from "../parse";
 import { NO_PHONE, WHATSAPP_LABEL, phoneFor } from "./phone";
 import type { PlacesFailure } from "./places";
-import { renderFallback } from "./page";
 import { scopeOnly, scopedParts, type BrandGroup, type Vendor } from "./search";
 
 /**
@@ -29,6 +35,10 @@ export function googleMapsBox(inner: string): string {
         </section>`;
 }
 
+function link(href: string, text: string, className = "link"): string {
+  return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+}
+
 /** Above every listing, in the same words each time. A listing is not an answer about stock. */
 export function listingCaveat(city: string): string {
   return (
@@ -47,6 +57,28 @@ export const MAP_UNAVAILABLE = "Map unavailable. The list below has everything."
 
 export const QUOTA_REACHED = "Vendor search hit today's Google limit. Use the links below instead.";
 export const UNAVAILABLE = "Vendor search isn't available right now. Use the links below instead.";
+
+/**
+ * The fallback under either message: step 4's own link-outs, one set per brand group. These fetch
+ * nothing and need no key, so the section is still useful with Google's API shut off entirely.
+ */
+export function renderFallback(
+  groups: readonly BrandGroup[],
+  country: Country,
+  city: string,
+): string {
+  if (groups.length === 0) return "";
+  return groups
+    .map((group) => {
+      const first = group.results[0]!;
+      return `<div class="group">
+        <h3>${escapeHtml(group.oem)}</h3>
+        ${link(suppliersUrl(first, country, city), `Find suppliers in ${country.name}`)}
+        ${link(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
+      </div>`;
+    })
+    .join("\n      ");
+}
 
 /** The passcode form, carrying enough to come back to this exact page afterwards. */
 export function signInUrl(q: string, city: string, country: Country): string {
@@ -209,10 +241,6 @@ export function renderSuppliers(input: SuppliersInput): string {
         ${heading(city)}
         ${googleMapsBox(inner.join("\n          "))}${more}
       </section>`;
-}
-
-function link(href: string, text: string, className = "link"): string {
-  return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
 }
 
 /** "Caterpillar", "Caterpillar and JCB", "Caterpillar, JCB and Komatsu". */
