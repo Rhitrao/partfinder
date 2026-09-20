@@ -19,8 +19,21 @@ function hrefs(html: string): string[] {
   );
 }
 
-const searchLinks = (html: string) => hrefs(html).filter((h) => h.includes("/search?q="));
+/** The href of the link whose visible text is exactly this. */
+const linkByText = (html: string, text: string) =>
+  html
+    .match(new RegExp(`href="([^"]*)"[^>]*>${text}<`))?.[1]
+    ?.replaceAll("&amp;", "&")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'");
 const whatsappLink = (html: string) => hrefs(html).find((h) => h.startsWith("https://wa.me/"));
+
+/**
+ * Just the cards. The send form below them carries q back as a hidden field, so slicing to the
+ * end of the document would find the pasted text again and prove nothing about the cards.
+ */
+const cards = (html: string) =>
+  html.slice(html.indexOf('<section class="card"'), html.indexOf('<section class="send"'));
 
 /** The text of every candidate's manufacturer line, in rendered order. */
 const oems = (html: string) => [...html.matchAll(/<p class="oem">([^<]*)<\/p>/g)].map((m) => m[1]);
@@ -73,9 +86,8 @@ describe("a candidate card", () => {
   });
 
   it("links the search to google.co.in with every spelling", async () => {
-    const links = searchLinks(await page(q("1u3352")));
-    expect(links).toHaveLength(1);
-    const url = new URL(links[0]!);
+    const html = await page(q("1u3352"));
+    const url = new URL(linkByText(html, "Search all spellings")!);
     expect(url.host).toBe("www.google.co.in");
     expect(url.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
   });
@@ -98,14 +110,14 @@ describe("a candidate card", () => {
 
 describe("country", () => {
   it("puts the search link on google.ae for AE", async () => {
-    const links = searchLinks(await page(q("1u3352", "&country=AE")));
-    expect(new URL(links[0]!).host).toBe("www.google.ae");
+    const html = await page(q("1u3352", "&country=AE"));
+    expect(new URL(linkByText(html, "Search all spellings")!).host).toBe("www.google.ae");
     expect(await page(q("1u3352", "&country=AE"))).toContain('<option value="AE" selected>');
   });
 
   it("falls back to India for an unknown code", async () => {
-    const links = searchLinks(await page(q("1u3352", "&country=ZZ")));
-    expect(new URL(links[0]!).host).toBe("www.google.co.in");
+    const html = await page(q("1u3352", "&country=ZZ"));
+    expect(new URL(linkByText(html, "Search all spellings")!).host).toBe("www.google.co.in");
   });
 });
 
@@ -169,10 +181,10 @@ describe("the WhatsApp link", () => {
 
   it("shows a phone-shaped number on the page, with the reason it is not sent", async () => {
     const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
-    const cards = html.slice(html.indexOf('<section class="card"'));
-    expect(cards).toContain("9876543210");
-    expect(cards).toContain("Looks like a phone number, so it's left out of the WhatsApp message.");
-    expect(cards).toContain("Type it with dashes if it's a part number.");
+    const shown = cards(html);
+    expect(shown).toContain("9876543210");
+    expect(shown).toContain("Looks like a phone number, so it's left out of the WhatsApp message.");
+    expect(shown).toContain("Type it with dashes if it's a part number.");
   });
 
   it("drops a number with a country code from the message", async () => {
@@ -220,9 +232,9 @@ describe("prices", () => {
 
   it("never reach a card either", async () => {
     const html = await page(q("price \u20b945,000 for 40/300893"));
-    const cards = html.slice(html.indexOf('<section class="card"'));
-    expect(cards).not.toContain("45,000");
-    expect(cards).toContain("40/300893");
+    const shown = cards(html);
+    expect(shown).not.toContain("45,000");
+    expect(shown).toContain("40/300893");
   });
 });
 
@@ -231,7 +243,8 @@ describe("headers", () => {
     const res = await worker.fetch(new Request("https://rohitrao.in/parts/"));
     expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
     expect(res.headers.get("Content-Security-Policy")).toBe(
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
+        "form-action 'self'; base-uri 'none'",
     );
     expect(res.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");

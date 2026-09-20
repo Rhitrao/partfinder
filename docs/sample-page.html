@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-title" content="Partfinder">
+    <link rel="manifest" href="/parts/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/parts/icon-192.png">
     <title>Partfinder</title>
     <style>:root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -44,6 +48,18 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
 .answer { margin: 0; }
 .answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
+.group { margin-top: .9rem; }
+.group h3 { font-size: .95rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; }
+.grouphint { font-size: .85rem; opacity: .8; margin: .35rem 0; }
+.link {
+  display: block;
+  margin-top: .4rem;
+  padding: .55rem .8rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  text-decoration: none;
+  color: inherit;
+}
 .search, .whatsapp {
   display: inline-block;
   margin-top: .75rem;
@@ -54,6 +70,10 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
   color: inherit;
 }
 .whatsapp { display: block; text-align: center; font-weight: 700; margin: 1.25rem 0; }
+.send { margin-top: 2rem; }
+.send h2 { margin-bottom: .75rem; }
+.send label { display: block; margin-top: .75rem; font-weight: 600; }
+.send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
 .note { font-size: .9rem; opacity: .85; }
 @media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }</style>
@@ -61,13 +81,16 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
   <body>
     <main>
       <h1>Partfinder</h1>
-      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder says which
-      manufacturer's number format it matches, and gives you every spelling to search.</p>
+      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
+      likely manufacturer, helps you check the part and find where to buy it, and drafts the
+      requirement for WhatsApp or email.</p>
       <form method="GET" action="/parts/">
       <label for="q">Paste part numbers or a WhatsApp message</label>
       <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">need 1u3352 and 40/300893 for JCB 3CX</textarea>
       <label for="hint">Brand or machine (optional)</label>
       <input id="hint" name="hint" type="text" value="" placeholder="Brand or machine (optional)">
+      <label for="city">City (optional)</label>
+      <input id="city" name="city" type="text" value="Bengaluru" placeholder="City (optional)">
       <label for="country">Country</label>
       <select id="country" name="country">
         <option value="IN" selected>India (google.co.in)</option>
@@ -89,7 +112,20 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
           <p class="basis">Guess from number format only. Not confirmed.</p>
           <p class="strength">Format: usually unique to this manufacturer.</p>
         </div>
-        <a class="search" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search all spellings</a>
+        <div class="group">
+          <h3>Check</h3>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search all spellings</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch">See images</a>
+          <p class="grouphint">Compare the shape before ordering.</p>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models">Check which machines it fits</a>
+        </div>
+        <div class="group">
+          <h3>Where to buy</h3>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Find suppliers in India</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
+          <p class="grouphint">These links open other sites. Partfinder doesn't store or vet
+          suppliers.</p>
+        </div>
       </section>
       <section class="card">
         <h2>40/300893</h2>
@@ -99,9 +135,47 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
           <p class="basis">Guess from number format only. Not confirmed.</p>
           <p class="strength">Format: usually unique to this manufacturer.</p>
         </div>
-        <a class="search" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search all spellings</a>
+        <div class="group">
+          <h3>Check</h3>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search all spellings</a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch">See images</a>
+          <p class="grouphint">Compare the shape before ordering.</p>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models">Check which machines it fits</a>
+        </div>
+        <div class="group">
+          <h3>Where to buy</h3>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Find suppliers in India</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
+          <p class="grouphint">These links open other sites. Partfinder doesn't store or vet
+          suppliers.</p>
+        </div>
       </section>
-      <a class="whatsapp" href="https://wa.me/?text=Part%20numbers%3A%0A%0A1.%201U3352%0A%20%20%20Likely%3A%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Other%20spellings%3A%201U-3352%0A%0A2.%2040%2F300893%0A%20%20%20Likely%3A%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Other%20spellings%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0A%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send this to a supplier on WhatsApp</a>
+      <section class="send">
+        <h2>Send the requirement</h2>
+        <form method="GET" action="/parts/">
+          <input type="hidden" name="q" value="need 1u3352 and 40/300893 for JCB 3CX">
+          <input type="hidden" name="hint" value="">
+          <input type="hidden" name="country" value="IN">
+          <input type="hidden" name="city" value="Bengaluru">
+          <label for="to">Supplier's WhatsApp number (optional)</label>
+          <input id="to" name="to" type="text" value="98765 43210" placeholder="Supplier's WhatsApp number (optional)">
+          <label for="note">Note to supplier, e.g. quantity (optional)</label>
+          <input id="note" name="note" type="text" value="Qty 4" placeholder="Note to supplier, e.g. quantity (optional)">
+          <button type="submit">Prepare message</button>
+        </form>
+        <label for="message">Your message (copy it into any app)</label>
+        <textarea id="message" rows="9" readonly>Hi, we have a requirement for:
+1. 1U3352: likely Caterpillar (from number format, unconfirmed)
+   Also written: 1U-3352
+2. 40/300893: likely JCB (from number format, unconfirmed)
+   Also written: 40\300893, 40-300893, 40300893
+Note: Qty 4
+Please share availability, price and delivery time.
+Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
+        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Open WhatsApp chat with +91 9876543210</a>
+        <a class="link" href="https://wa.me/?text=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Or pick a contact in WhatsApp</a>
+        <a class="link" href="mailto:?subject=Requirement%3A%201U3352%2C%2040%2F300893&amp;body=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send by email</a>
+      </section>
       <section class="notes">
         <h2>How to read this</h2>
         <p>A format guess means the number matches a manufacturer's known numbering format, and

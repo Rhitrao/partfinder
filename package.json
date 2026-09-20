@@ -8,7 +8,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev",
-    "sample": "node --import ./scripts/register-ts.mjs scripts/sample.ts"
+    "sample": "node --import ./scripts/register-ts.mjs scripts/sample.ts",
+    "icons": "node --import ./scripts/register-ts.mjs scripts/icons.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260918.1",

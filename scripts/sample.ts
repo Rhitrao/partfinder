@@ -14,8 +14,16 @@ import { renderPage, resolveCountry } from "../src/page";
 export const SAMPLE_QUERY = "need 1u3352 and 40/300893 for JCB 3CX";
 export const SAMPLE_FILE = "docs/sample-page.html";
 
+/** A city, a supplier's number and a note, so the sample shows the whole flow, not just cards. */
 export function renderSample(): string {
-  return renderPage({ q: SAMPLE_QUERY, hint: "", country: resolveCountry("IN") });
+  return renderPage({
+    q: SAMPLE_QUERY,
+    hint: "",
+    city: "Bengaluru",
+    to: "98765 43210",
+    note: "Qty 4",
+    country: resolveCountry("IN"),
+  });
 }
 
 const entry = process.argv[1];
