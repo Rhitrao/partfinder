@@ -30,8 +30,12 @@ export const CONTACT_PATH = "/parts/vendors/contact";
 /** The only paths a successful login may send a browser to. */
 const RETURNABLE_PATHS: readonly string[] = [VENDORS_PATH, CONTACT_PATH];
 
-/** Bounds the work one request can ask for; a browser never sends more than a handful. */
-const MAX_PARAMS = 40;
+/**
+ * Bounds the work one request can ask for. A full vendor list submits one scope field per shop
+ * whether or not it was ticked, so a twenty-shop page can reach forty-three parameters; this sits
+ * above that and well below anything a browser would send by accident.
+ */
+const MAX_PARAMS = 64;
 
 function html(body: string, status = 200, extra: Record<string, string> = {}): Response {
   return new Response(body, { status, headers: { ...VENDOR_PAGE_HEADERS, ...extra } });
