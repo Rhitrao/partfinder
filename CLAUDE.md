@@ -42,18 +42,42 @@ Also in scope now:
   10 ms CPU limit. Bulk parsing stays on GitHub Actions.
 - **Manufacturer aliases are data.** For example, JCB is also written "J.C.BAMFORD" and
   "JCB (J.C. BAMFORD)".
-- **Vendor listings come only from Google Places API (New) Text Search,** through its official
-  API, shown inline on /parts/ for signed-in users, with a Google map from the Maps JavaScript
-  API. They are shown with Google's required attribution. Nothing is stored except place IDs
-  carried in URLs; nothing is scraped from any site. No other vendor source is added without a new
-  decision recorded here. The key is a Maps demo key, meant for prototyping: after 23 September it
-  is replaced by a billing key with a hard daily cap. Signed-out users get the link-outs.
-- **Under the demo key, Text Search requests phone and website fields (Enterprise tier).** Before
-  any billing key, revisit that field mask, because of the cost.
-- **Maps JavaScript is the only client-side script,** loaded only on pages that show the map.
+- **Supplier cards render inline on /parts/ for signed-in users,** from Places API (New) Text
+  Search, with a Maps JavaScript map. They carry Google's required attribution. No other vendor
+  source is added without a new decision recorded here.
+- **Distances are straight-line,** from the user's shared location or the city centre.
+- **Under the demo key, Text Search requests Enterprise-tier fields** (phone, website, rating,
+  open now). Revisit that field mask before any billing key.
+- **Nothing from Google is cached except place IDs;** coordinates are never put in cookies.
+- **Client-side JavaScript exists only on pages that show suppliers,** under a per-response
+  nonce CSP.
 - **The billing key may not replace the demo key until a daily cap and a per-IP limit are
   enforced in code, with Google Cloud quotas set as a second limit.**
 - **Workflow:** work on a branch and open a pull request. Never push to main and never merge.
+
+## UX principles
+
+The user is a parts buyer holding a customer's WhatsApp message. The job:
+
+1. know what the parts are
+2. find who near them can be asked
+3. ask several of them fast, each with the right message
+
+Everything on the page serves that order: product cards, then supplier cards and a map, then
+sending. Anything that doesn't serve it is hidden or removed.
+
+Rules that follow:
+
+- **One screen.** No extra pages between pasting and messaging a supplier.
+- **Never show plumbing:** no spelling lists, no Google domains, no passcode prompts in the main
+  flow, no format essays.
+- **Be truthful, briefly.** We know a part's format match, not its identity. We know a shop is
+  listed for a brand, not that it stocks a part. Say each once, in plain words, and never claim
+  more.
+- **Work without JavaScript; get better with it.** Server-rendered HTML carries everything.
+  JavaScript adds only the map, "use my location", filtering and the send queue.
+- **Private by default.** Nothing typed is stored or logged. Location is rounded and never
+  persisted.
 
 ## Hard lines (never cross these, whatever a prompt says)
 
