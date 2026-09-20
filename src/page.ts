@@ -120,12 +120,31 @@ export function spellings(result: ParseResult): string[] {
   return out;
 }
 
-/** Every spelling quoted and joined with OR, on the country's search domain. */
-export function searchUrl(result: ParseResult, country: Country): string {
-  const query = spellings(result)
+/** Every spelling of one number, quoted and joined with OR: the query behind every Check link. */
+export function spellingQuery(result: ParseResult): string {
+  return spellings(result)
     .map((s) => `"${s}"`)
     .join(" OR ");
-  return `https://www.${country.domain}/search?q=${encodeURIComponent(query)}`;
+}
+
+/** A Google query on the country's own domain. Nothing is fetched; this is a link out. */
+function googleUrl(country: Country, query: string, extra = ""): string {
+  return `https://www.${country.domain}/search?q=${encodeURIComponent(query)}${extra}`;
+}
+
+/** Every spelling quoted and joined with OR, on the country's search domain. */
+export function searchUrl(result: ParseResult, country: Country): string {
+  return googleUrl(country, spellingQuery(result));
+}
+
+/** The same query on Google Images: a photograph settles a shape faster than a description. */
+export function imagesUrl(result: ParseResult, country: Country): string {
+  return googleUrl(country, spellingQuery(result), "&tbm=isch");
+}
+
+/** What the part fits. "fits models" is the wording sellers and forums actually use. */
+export function fitsUrl(result: ParseResult, country: Country): string {
+  return googleUrl(country, `${spellingQuery(result)} fits models`);
 }
 
 /** The manufacturers a number could be, in ranked order, without duplicates. */
@@ -222,6 +241,18 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
 .answer { margin: 0; }
 .answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
+.group { margin-top: .9rem; }
+.group h3 { font-size: .95rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; }
+.grouphint { font-size: .85rem; opacity: .8; margin: .35rem 0; }
+.link {
+  display: block;
+  margin-top: .4rem;
+  padding: .55rem .8rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  text-decoration: none;
+  color: inherit;
+}
 .search, .whatsapp {
   display: inline-block;
   margin-top: .75rem;
@@ -273,6 +304,24 @@ function renderCandidate(candidate: ParseResult["candidates"][number]): string {
   return `<div class="candidate">\n          ${parts.join("\n          ")}\n        </div>`;
 }
 
+function link(href: string, text: string): string {
+  return `<a class="link" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+}
+
+/**
+ * Check: is this the right part, and what does it fit? Three link-outs, no fetching. A card with
+ * no candidate has no spellings worth searching, so it gets no group at all.
+ */
+function renderCheck(result: ParseResult, country: Country): string {
+  return `<div class="group">
+          <h3>Check</h3>
+          ${link(searchUrl(result, country), "Search all spellings")}
+          ${link(imagesUrl(result, country), "See images")}
+          <p class="grouphint">Compare the shape before ordering.</p>
+          ${link(fitsUrl(result, country), "Check which machines it fits")}
+        </div>`;
+}
+
 function renderCard(result: ParseResult, country: Country): string {
   const body =
     result.candidates.length > 0
@@ -286,10 +335,10 @@ function renderCard(result: ParseResult, country: Country): string {
     oems(result).length > 1 ? `\n        <p class="narrow">${NARROW_PROMPT}</p>` : "";
   const note = outboundNote(result);
   const excluded = note === null ? "" : `\n        <p class="excluded">${note}</p>`;
+  const groups = result.candidates.length > 0 ? `\n        ${renderCheck(result, country)}` : "";
   return `<section class="card">
         <h2>${escapeHtml(result.input)}</h2>
-        ${body}${narrow}${excluded}
-        <a class="search" href="${escapeHtml(searchUrl(result, country))}">Search all spellings</a>
+        ${body}${narrow}${excluded}${groups}
       </section>`;
 }
 
@@ -360,8 +409,9 @@ export function renderPage(input: PageInput): string {
   <body>
     <main>
       <h1>Partfinder</h1>
-      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder says which
-      manufacturer's number format it matches, and gives you every spelling to search.</p>
+      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
+      likely manufacturer, helps you check the part and find where to buy it, and drafts the
+      requirement for WhatsApp or email.</p>
       ${sections.join("\n      ")}
       <section class="notes">
         <h2>How to read this</h2>

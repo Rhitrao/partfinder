@@ -44,6 +44,18 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
 .answer { margin: 0; }
 .answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
+.group { margin-top: .9rem; }
+.group h3 { font-size: .95rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; }
+.grouphint { font-size: .85rem; opacity: .8; margin: .35rem 0; }
+.link {
+  display: block;
+  margin-top: .4rem;
+  padding: .55rem .8rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  text-decoration: none;
+  color: inherit;
+}
 .search, .whatsapp {
   display: inline-block;
   margin-top: .75rem;
@@ -61,8 +73,9 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
   <body>
     <main>
       <h1>Partfinder</h1>
-      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder says which
-      manufacturer's number format it matches, and gives you every spelling to search.</p>
+      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
+      likely manufacturer, helps you check the part and find where to buy it, and drafts the
+      requirement for WhatsApp or email.</p>
       <form method="GET" action="/parts/">
       <label for="q">Paste part numbers or a WhatsApp message</label>
       <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">need 1u3352 and 40/300893 for JCB 3CX</textarea>
@@ -89,7 +102,13 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
           <p class="basis">Guess from number format only. Not confirmed.</p>
           <p class="strength">Format: usually unique to this manufacturer.</p>
         </div>
-        <a class="search" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search all spellings</a>
+        <div class="group">
+          <h3>Check</h3>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search all spellings</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch">See images</a>
+          <p class="grouphint">Compare the shape before ordering.</p>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models">Check which machines it fits</a>
+        </div>
       </section>
       <section class="card">
         <h2>40/300893</h2>
@@ -99,7 +118,13 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
           <p class="basis">Guess from number format only. Not confirmed.</p>
           <p class="strength">Format: usually unique to this manufacturer.</p>
         </div>
-        <a class="search" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search all spellings</a>
+        <div class="group">
+          <h3>Check</h3>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search all spellings</a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch">See images</a>
+          <p class="grouphint">Compare the shape before ordering.</p>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models">Check which machines it fits</a>
+        </div>
       </section>
       <a class="whatsapp" href="https://wa.me/?text=Part%20numbers%3A%0A%0A1.%201U3352%0A%20%20%20Likely%3A%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Other%20spellings%3A%201U-3352%0A%0A2.%2040%2F300893%0A%20%20%20Likely%3A%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Other%20spellings%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0A%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send this to a supplier on WhatsApp</a>
       <section class="notes">

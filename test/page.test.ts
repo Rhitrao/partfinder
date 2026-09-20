@@ -19,7 +19,13 @@ function hrefs(html: string): string[] {
   );
 }
 
-const searchLinks = (html: string) => hrefs(html).filter((h) => h.includes("/search?q="));
+/** The href of the link whose visible text is exactly this. */
+const linkByText = (html: string, text: string) =>
+  html
+    .match(new RegExp(`href="([^"]*)"[^>]*>${text}<`))?.[1]
+    ?.replaceAll("&amp;", "&")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'");
 const whatsappLink = (html: string) => hrefs(html).find((h) => h.startsWith("https://wa.me/"));
 
 /** The text of every candidate's manufacturer line, in rendered order. */
@@ -73,9 +79,8 @@ describe("a candidate card", () => {
   });
 
   it("links the search to google.co.in with every spelling", async () => {
-    const links = searchLinks(await page(q("1u3352")));
-    expect(links).toHaveLength(1);
-    const url = new URL(links[0]!);
+    const html = await page(q("1u3352"));
+    const url = new URL(linkByText(html, "Search all spellings")!);
     expect(url.host).toBe("www.google.co.in");
     expect(url.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
   });
@@ -98,14 +103,14 @@ describe("a candidate card", () => {
 
 describe("country", () => {
   it("puts the search link on google.ae for AE", async () => {
-    const links = searchLinks(await page(q("1u3352", "&country=AE")));
-    expect(new URL(links[0]!).host).toBe("www.google.ae");
+    const html = await page(q("1u3352", "&country=AE"));
+    expect(new URL(linkByText(html, "Search all spellings")!).host).toBe("www.google.ae");
     expect(await page(q("1u3352", "&country=AE"))).toContain('<option value="AE" selected>');
   });
 
   it("falls back to India for an unknown code", async () => {
-    const links = searchLinks(await page(q("1u3352", "&country=ZZ")));
-    expect(new URL(links[0]!).host).toBe("www.google.co.in");
+    const html = await page(q("1u3352", "&country=ZZ"));
+    expect(new URL(linkByText(html, "Search all spellings")!).host).toBe("www.google.co.in");
   });
 });
 
