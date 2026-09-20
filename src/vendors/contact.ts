@@ -16,7 +16,7 @@ import {
 } from "../page";
 import type { ParseResult } from "../parse";
 import { PlacesError, placeDetails, type PlaceContact, type PlacesFailure } from "./places";
-import { ATTRIBUTION, hidden, renderVendorDocument, vendorLink } from "./page";
+import { googleMapsBox, hidden, renderVendorDocument, vendorLink } from "./page";
 import { MAX_PICKS, SCOPE_ALL, scopedParts } from "./search";
 
 /** An Indian mobile: country code 91, then ten digits starting 6 to 9. */
@@ -125,6 +125,8 @@ function renderVendorContact(vendor: PickedVendor, parts: readonly ParseResult[]
           <p class="note">${DETAILS_FAILED}</p>
         </section>`;
   }
+  // Everything below comes from, or is written from, one Google Maps listing, so the whole block
+  // is boxed and labelled rather than only the four lines Google itself wrote.
   const contact = vendor.contact;
   const name = contact.name === "" ? "this shop" : contact.name;
   const scoped = scopedParts(vendor.scope, parts);
@@ -155,9 +157,9 @@ function renderVendorContact(vendor: PickedVendor, parts: readonly ParseResult[]
     lines.push(vendorLink(`tel:${phone.tel}`, "Call"));
   }
   lines.push(vendorLink(mailtoUrl(emailSubject(scoped), message), "Send by email"));
-  return `<section class="vendor">
+  return googleMapsBox(`<div class="vendor">
           ${lines.join("\n          ")}
-        </section>`;
+          </div>`);
 }
 
 export interface ContactInput {
@@ -181,10 +183,7 @@ export function renderContact(input: ContactInput): string {
   if (input.body) {
     sections.push(input.body);
   } else {
-    sections.push(
-      ...vendors.map((vendor) => renderVendorContact(vendor, parts)),
-      `<p class="attribution">${escapeHtml(ATTRIBUTION)}</p>`,
-    );
+    sections.push(...vendors.map((vendor) => renderVendorContact(vendor, parts)));
   }
   const back = `/parts/vendors/?q=${encodeURIComponent(q)}&city=${encodeURIComponent(city)}` +
     `&country=${encodeURIComponent(country.code)}`;

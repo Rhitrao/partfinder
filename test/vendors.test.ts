@@ -240,14 +240,13 @@ describe("the vendor search", () => {
     expect(html).toContain('<input type="radio" name="scope_cat-only" value="all">');
   });
 
-  it("says what the listing is and is not, and credits Google", async () => {
+  it("says what the listing is and is not", async () => {
     stubFetch(searchReply);
     const html = unescapeHtml(await (await signedIn(`/parts/vendors/${SEARCH}`)).text());
     expect(html).toContain(
       "These are shops Google lists for these brands in Bengaluru. " +
         "Being listed doesn't mean they have your part in stock. Ask them.",
     );
-    expect(html).toContain("Listings from Google Maps");
   });
 
   it("asks for a city before it asks Google anything", async () => {
@@ -256,6 +255,50 @@ describe("the vendor search", () => {
     expect(calls).toHaveLength(0);
     expect(html).toContain('name="city"');
     expect(unescapeHtml(html)).toContain("Enter a city");
+  });
+});
+
+describe("Google Maps attribution", () => {
+  /** The contents of every <section class="gmaps" aria-label="Google Maps"> on the page. */
+  function boxes(html: string): string[] {
+    return [...html.matchAll(/<section class="gmaps" aria-label="Google Maps">([\s\S]*?)<\/section>/g)]
+      .map((m) => m[1]!);
+  }
+
+  it("boxes the vendor list and labels it, with the words beside the listings", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/vendors/${SEARCH}`)).text();
+    const found = boxes(html);
+    expect(found).toHaveLength(1);
+    // Every listing is inside the box, and so is the attribution.
+    expect(found[0]).toContain('<ol class="vendors">');
+    expect(found[0]).toContain("Shared Spares");
+    expect(found[0]).toContain('<p class="attribution">Google Maps</p>');
+    // The border is what tells Google's content apart from the rest of the page.
+    expect(html).toContain(".gmaps {");
+    expect(html).toMatch(/\.gmaps \{[^}]*border: 2px solid/);
+  });
+
+  it("boxes and labels each vendor block on the contact page", async () => {
+    stubFetch(detailsReply);
+    const html = await (
+      await signedIn(
+        `/parts/vendors/contact?q=${encodeURIComponent(Q)}&city=Bengaluru&country=IN` +
+          "&v=mobile&v=landline",
+      )
+    ).text();
+    const found = boxes(html);
+    expect(found).toHaveLength(2);
+    expect(found[0]).toContain("Cat Corner");
+    expect(found[0]).toContain('<p class="attribution">Google Maps</p>');
+    expect(found[1]).toContain("JCB Spares Co");
+    expect(found[1]).toContain('<p class="attribution">Google Maps</p>');
+  });
+
+  it("boxes the answer even when Google listed nothing", async () => {
+    stubFetch(() => new Response(JSON.stringify({}), { status: 200 }));
+    const html = await (await signedIn(`/parts/vendors/${SEARCH}`)).text();
+    expect(boxes(html)[0]).toContain('<p class="attribution">Google Maps</p>');
   });
 });
 

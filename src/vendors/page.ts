@@ -37,7 +37,17 @@ export const VENDOR_STYLE = `
 .scope { border: 0; padding: .4rem 0 0; margin: 0; }
 .scope legend { font-size: .85rem; opacity: .85; padding: 0; }
 .scope label { display: block; font-weight: 400; font-size: .95rem; }
-.attribution { font-size: .9rem; margin-top: 1rem; opacity: .85; }
+.gmaps {
+  border: 2px solid currentColor;
+  border-radius: .5rem;
+  padding: .75rem;
+  margin: 1.25rem 0;
+}
+.gmaps > :first-child { margin-top: 0; }
+/* On the contact page the box is the block's only border. The list rows on the search page are
+   grandchildren, not direct children, so they keep their own. */
+.gmaps > .vendor { border: 0; border-radius: 0; padding: 0; margin: 0; }
+.attribution { font-size: .9rem; font-weight: 600; margin: 1rem 0 0; }
 .pickhint { font-size: .9rem; opacity: .85; }
 .vendor h2 { margin-top: 0; }
 .vphone { font-family: ui-monospace, monospace; margin: .15rem 0; }
@@ -179,16 +189,28 @@ export function listingCaveat(city: string): string {
 }
 
 /**
- * Google's attribution for Places results.
+ * Google's attribution for Places results shown without a Google map.
  *
- * The Maps Platform terms require the attribution Google specifies in its documentation to be
- * shown, unmodified, wherever its content appears. The Places API policies page, which is where
- * the exact wording lives, could not be opened from the machine this was written on
- * (developers.google.com is refused by the egress proxy), so this is the fallback the step prompt
- * asked for. It is flagged in the step report and must be checked against the policies page
- * before this reaches anyone but its author.
+ * The policies page allows the words "Google Maps" in place of the logo where space is limited,
+ * which is the case on a phone-width page, and there is no logo image here because the CSP allows
+ * no third-party images. It also requires Google Maps content to be told apart from everything
+ * else on the page, and the attribution to carry an accessibility label reading "Google Maps".
+ * googleMapsBox() is the only way this attribution is rendered, so the border, the label and the
+ * words cannot drift apart.
  */
-export const ATTRIBUTION = "Listings from Google Maps";
+export const ATTRIBUTION = "Google Maps";
+
+/**
+ * Google Maps content, boxed and labelled. The border and the surrounding whitespace are what
+ * distinguish it visually; the label is what names it to a screen reader, which reads the box as
+ * a region called "Google Maps". The attribution sits with the listings, never in a page footer.
+ */
+export function googleMapsBox(inner: string): string {
+  return `<section class="gmaps" aria-label="${ATTRIBUTION}">
+          ${inner}
+          <p class="attribution">${ATTRIBUTION}</p>
+        </section>`;
+}
 
 /** "Caterpillar", "Caterpillar and JCB", "Caterpillar, JCB and Komatsu". */
 function nameList(names: readonly string[]): string {
@@ -271,8 +293,7 @@ export function renderVendorList(input: VendorListInput): string {
     );
   }
   if (vendors.length === 0) {
-    parts.push(`<p class="nothing">${NO_VENDORS}</p>`);
-    parts.push(`<p class="attribution">${escapeHtml(ATTRIBUTION)}</p>`);
+    parts.push(googleMapsBox(`<p class="nothing">${NO_VENDORS}</p>`));
     return parts.join("\n      ");
   }
   const rows = vendors.map((vendor) => renderVendor(vendor, groups.length)).join("\n        ");
@@ -281,16 +302,17 @@ export function renderVendorList(input: VendorListInput): string {
       `<p class="note">Showing the first ${vendors.length}. ${omitted} more were left out.</p>`,
     );
   }
+  // The box sits inside the form, not around it: the tick boxes have to submit with the page,
+  // and the pick count and the button are Partfinder's own, not Google's content.
   parts.push(`<form method="GET" action="/parts/vendors/contact">
         ${hidden("q", q)}
         ${hidden("city", city)}
         ${hidden("country", country.code)}
-        <ol class="vendors">
-        ${rows}
-        </ol>
+        ${googleMapsBox(`<ol class="vendors">
+          ${rows}
+          </ol>`)}
         <p class="pickhint">Pick up to ${MAX_PICKS}.</p>
         <button type="submit">Get contact details</button>
       </form>`);
-  parts.push(`<p class="attribution">${escapeHtml(ATTRIBUTION)}</p>`);
   return parts.join("\n      ");
 }
