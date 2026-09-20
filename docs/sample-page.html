@@ -147,80 +147,70 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
         <label for="note">Note for suppliers</label>
         <input id="note" name="note" type="text" value="Qty 4" placeholder="e.g. urgent, need by Friday">
       </details>
-      <section class="card">
-        <h2>1U3352</h2>
-        <div class="candidate">
-          <p class="oem">Caterpillar</p>
-          <p class="canonical">1U-3352</p>
-          <p class="basis">Guess from number format only. Not confirmed.</p>
-          <p class="strength">Format: usually unique to this manufacturer.</p>
-        </div>
-        <div class="group">
-          <h3>Check</h3>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search all spellings</a>
+      <section class="parts">
+        <h2>Parts</h2>
+        <section class="card">
+          <p class="number">1U-3352</p>
+          <p class="astyped">as typed: 1U3352</p>
+          <p class="maker">Caterpillar <span class="badge">format match</span></p>
+          <p class="qty">
+            <label for="qty-0">Qty not given</label>
+            <input id="qty-0" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
+              name="qty_1U-3352" value=""
+              aria-label="Quantity for 1U-3352">
+          </p>
+          <details class="check">
+          <summary>Check this part</summary>
           <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch">See images</a>
-          <p class="grouphint">Compare the shape before ordering.</p>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models">Check which machines it fits</a>
-        </div>
-        <div class="group">
-          <h3>Where to buy</h3>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Find suppliers in India</a>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
-          <p class="grouphint">These links open other sites. Partfinder doesn't store or vet
-          suppliers.</p>
-        </div>
-      </section>
-      <section class="card">
-        <h2>40/300893</h2>
-        <div class="candidate">
-          <p class="oem">JCB</p>
-          <p class="canonical">40/300893</p>
-          <p class="basis">Guess from number format only. Not confirmed.</p>
-          <p class="strength">Format: usually unique to this manufacturer.</p>
-        </div>
-        <div class="group">
-          <h3>Check</h3>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search all spellings</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models">Which machines it fits</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search Google</a>
+        </details>
+        </section>
+        <section class="card">
+          <p class="number">40/300893</p>
+          <p class="maker">JCB <span class="badge">format match</span></p>
+          <p class="qty">
+            <label for="qty-1">Qty not given</label>
+            <input id="qty-1" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
+              name="qty_40/300893" value=""
+              aria-label="Quantity for 40/300893">
+          </p>
+          <details class="check">
+          <summary>Check this part</summary>
           <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch">See images</a>
-          <p class="grouphint">Compare the shape before ordering.</p>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models">Check which machines it fits</a>
-        </div>
-        <div class="group">
-          <h3>Where to buy</h3>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Find suppliers in India</a>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
-          <p class="grouphint">These links open other sites. Partfinder doesn't store or vet
-          suppliers.</p>
-        </div>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models">Which machines it fits</a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search Google</a>
+        </details>
+        </section>
+        <p class="caveat">Manufacturer matched from the number's format, not confirmed. Suppliers confirm fitment.</p>
+        <button type="submit" class="update">Update quantities</button>
       </section>
       </form>
-      <section class="send">
-        <h2>Send the requirement</h2>
-        <form method="GET" action="/parts/">
+      <details class="send">
+        <summary>Other ways to send</summary>
+        <label for="message">The message</label>
+        <textarea id="message" rows="8" readonly>Hi,
+We have a requirement for:
+1. 1U-3352 (likely Caterpillar)
+2. 40/300893 (likely JCB)
+Note: Qty 4
+Please share availability, price and delivery time.
+Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
+        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Open WhatsApp chat with +91 9876543210</a>
+        <a class="link" href="https://wa.me/?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Pick a contact in WhatsApp</a>
+        <a class="link" href="mailto:?subject=Requirement%3A%201U3352%2C%2040%2F300893&amp;body=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send by email</a>
+        <form method="GET" action="/parts/" class="toform">
           <input type="hidden" name="q" value="need 1u3352 and 40/300893 for JCB 3CX">
           <input type="hidden" name="hint" value="">
           <input type="hidden" name="country" value="IN">
           <input type="hidden" name="city" value="Bengaluru">
-          <label for="to">Supplier's WhatsApp number (optional)</label>
-          <input id="to" name="to" type="text" value="98765 43210" placeholder="Supplier's WhatsApp number (optional)">
-          <label for="note">Note to supplier, e.g. quantity (optional)</label>
-          <input id="note" name="note" type="text" value="Qty 4" placeholder="Note to supplier, e.g. quantity (optional)">
+          <input type="hidden" name="note" value="Qty 4">
+          <label for="to">Supplier's WhatsApp number</label>
+          <input id="to" name="to" type="text" value="98765 43210" inputmode="tel"
+            placeholder="Supplier's WhatsApp number">
           <button type="submit">Prepare message</button>
         </form>
-        <label for="message">Your message (copy it into any app)</label>
-        <textarea id="message" rows="9" readonly>Hi, we have a requirement for:
-1. 1U3352: likely Caterpillar (from number format, unconfirmed)
-   Also written: 1U-3352
-2. 40/300893: likely JCB (from number format, unconfirmed)
-   Also written: 40\300893, 40-300893, 40300893
-Note: Qty 4
-Please share availability, price and delivery time.
-Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
-        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Open WhatsApp chat with +91 9876543210</a>
-        <a class="link" href="https://wa.me/?text=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Or pick a contact in WhatsApp</a>
-        <a class="link" href="mailto:?subject=Requirement%3A%201U3352%2C%2040%2F300893&amp;body=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send by email</a>
-        <a class="link" href="/parts/vendors/?q=1U3352%2040%2F300893&amp;city=Bengaluru&amp;country=IN">Find vendors for these parts</a>
-      </section>
+      </details>
       <details class="how">
         <summary>How it works</summary>
         <p>Partfinder reads each number and matches it against manufacturers' known numbering

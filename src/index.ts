@@ -72,6 +72,15 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
 
   const parsed = readQuery(q, hint);
   const sending = outbound(parsed.results);
+  // Quantities the user typed on a card, one field per part key, capped like everything else.
+  const typedQuantities: Record<string, number> = {};
+  for (const [name, value] of url.searchParams) {
+    if (!name.startsWith("qty_") || name.length > 64) continue;
+    const amount = Number(value);
+    if (Number.isInteger(amount) && amount >= 1 && amount <= 9999) {
+      typedQuantities[name.slice("qty_".length)] = amount;
+    }
+  }
   const extra: Record<string, string> = {};
   // Only what the user actually typed or picked: a page view that merely read a cookie need not
   // rewrite it. Two Set-Cookie headers need an array, which Headers.append builds below.
@@ -82,6 +91,8 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   let suppliers: string | undefined;
   let nonce: string | undefined;
   let tail: string | undefined;
+  // "Other ways to send" is the only way out until supplier cards render, so it opens by default.
+  let sendOpen = true;
   if (sending.length > 0) {
     if (!(await isSignedIn(request, env))) {
       suppliers = renderSignIn(q, city, country);
@@ -114,6 +125,7 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
           omitted: vendors.length - listed.length,
           ...(withMap ? { map: renderMapBox() } : {}),
         });
+        sendOpen = listed.length === 0;
         // Supplier data, and who asked for it, are on this page. No cache may keep a copy.
         extra["Cache-Control"] = "no-store";
       }
@@ -128,6 +140,8 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
     note,
     country,
     parsed,
+    typedQuantities,
+    sendOpen,
     ...(suppliers === undefined ? {} : { suppliers }),
     ...(nonce === undefined ? {} : { nonce }),
     ...(tail === undefined ? {} : { tail }),

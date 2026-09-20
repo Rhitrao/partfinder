@@ -37,8 +37,8 @@ describe("signed out", () => {
     expect(hrefs(html)).toContain(
       "/parts/vendors/login?q=1u3352%2040%2F300893&city=Bengaluru&country=IN",
     );
-    // Today's page is otherwise untouched: the cards and their link-outs are still there.
-    expect(html).toContain("Find suppliers in India");
+    // The cards are still there; the signed-out link-outs arrive with the Suppliers section.
+    expect(html).toContain('class="card"');
   });
 
   it("keeps today's CSP and referrer policy", async () => {

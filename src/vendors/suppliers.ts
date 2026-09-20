@@ -292,14 +292,14 @@ function renderShop(vendor: Vendor, number: number, input: SuppliersInput): stri
     lines.push(`<p class="sphone">${escapeHtml(phone.display)}</p>`);
   }
   if (phone.whatsapp !== null) {
-    const everything = requirementMessage(parts, "", `Hi ${name}`);
+    const everything = requirementMessage(parts, { name });
     lines.push(link(whatsappUrl(everything, phone.whatsapp), WHATSAPP_LABEL, "whatsapp"));
     // Only worth a second button when it would actually ask for something narrower.
     const partial = brands.length > 0 && brands.length < groups.length;
     if (partial) {
       const scoped = scopedParts(scopeOnly(vendor), parts);
       if (scoped.length < parts.length) {
-        const narrower = requirementMessage(scoped, "", `Hi ${name}`);
+        const narrower = requirementMessage(scoped, { name });
         lines.push(
           link(
             whatsappUrl(narrower, phone.whatsapp),

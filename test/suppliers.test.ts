@@ -3,8 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import worker from "../src/index";
-import type { DealerLocator } from "../src/dealers";
-import { renderWhereToBuy, resolveCountry } from "../src/page";
+import { resolveCountry } from "../src/page";
 import { extractHints, extractTokens, parse } from "../src/parse";
 
 const page = async (query: string): Promise<string> => {
@@ -39,53 +38,24 @@ const results = (text: string) => {
   return extractTokens(text).map((token) => parse(token, hints));
 };
 
-describe("Where to buy: Google Maps", () => {
-  it("searches the city by name when one is given", async () => {
-    const html = await page(q("1u3352", "&city=Bengaluru&country=IN"));
-    const url = new URL(linkByText(html, "Caterpillar parts shops on Google Maps")!);
-    expect(url.searchParams.get("query")).toBe("Caterpillar spare parts Bengaluru India");
-  });
-
-  it("falls back to near me with no city", async () => {
-    const html = await page(q("1u3352", "&country=IN"));
-    const url = new URL(linkByText(html, "Caterpillar parts shops on Google Maps")!);
-    expect(url.searchParams.get("query")).toBe("Caterpillar spare parts near me");
-  });
-});
-
-describe("Where to buy: the supplier search", () => {
-  it("is on the country's Google domain and names the spellings", async () => {
-    const html = await page(q("1u3352", "&country=IN"));
-    const url = new URL(linkByText(html, "Find suppliers in India")!);
-    expect(url.host).toBe("www.google.co.in");
-    const query = url.searchParams.get("q")!;
-    for (const part of ["1U3352", "1U-3352", "supplier", "India"]) {
-      expect(query).toContain(part);
-    }
-  });
-});
-
-describe("Check", () => {
-  it("links images with tbm=isch and every spelling", async () => {
+describe("Check this part", () => {
+  it("is collapsed, and links images, fitment and a plain search", async () => {
     const html = await page(q("1u3352"));
-    const url = new URL(linkByText(html, "See images")!);
-    expect(url.searchParams.get("tbm")).toBe("isch");
-    expect(url.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
+    expect(html).toContain("<summary>Check this part</summary>");
+    const images = new URL(linkByText(html, "See images")!);
+    expect(images.searchParams.get("tbm")).toBe("isch");
+    expect(images.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
+    const fits = new URL(linkByText(html, "Which machines it fits")!);
+    expect(fits.searchParams.get("q")).toContain("fits models");
+    expect(linkByText(html, "Search Google")).toBeDefined();
   });
 
-  it("links what the part fits", async () => {
+  it("uses every spelling in the query without ever printing one", async () => {
     const html = await page(q("1u3352"));
-    const url = new URL(linkByText(html, "Check which machines it fits")!);
-    const query = url.searchParams.get("q")!;
-    for (const part of ["1U3352", "1U-3352", "fits models"]) expect(query).toContain(part);
-  });
-
-  it("gives a card with no candidate neither group", async () => {
-    const html = await page(q("HELLO12"));
-    expect(html).toContain("Not determined: no known number format matched.");
-    expect(linkByText(html, "Search all spellings")).toBeUndefined();
-    expect(linkByText(html, "See images")).toBeUndefined();
-    expect(html).not.toContain("Where to buy");
+    // The query behind the link carries both spellings; the page carries neither as text.
+    expect(linkByText(html, "Search Google")).toContain("1U-3352");
+    expect(html).not.toContain("Also written");
+    expect(html).not.toContain("Search all spellings");
   });
 });
 
@@ -98,21 +68,6 @@ describe("dealer locators", () => {
     }
   });
 
-  it("renders a link when an entry exists, and none when it does not", () => {
-    const [result] = results("1u3352");
-    const india = resolveCountry("IN");
-    const table: DealerLocator[] = [
-      {
-        oem: "Caterpillar",
-        country: "IN",
-        url: "https://example.invalid/dealers",
-        verifiedOn: "2026-09-20",
-        note: "fixture",
-      },
-    ];
-    expect(renderWhereToBuy(result!, india, "", table)).toContain("Authorised Caterpillar dealers");
-    expect(renderWhereToBuy(result!, india, "", [])).not.toContain("Authorised");
-  });
 });
 
 describe("the supplier's WhatsApp number", () => {
@@ -140,7 +95,7 @@ describe("the supplier's WhatsApp number", () => {
       "That doesn't look like a WhatsApp number, so pick the contact in WhatsApp instead.",
     );
     expect(chat(html)).toBe("");
-    expect(linkByText(html, "Or pick a contact in WhatsApp")).toBeDefined();
+    expect(linkByText(html, "Send on WhatsApp")).toBeDefined();
   });
 });
 
@@ -150,7 +105,7 @@ describe("the requirement message", () => {
   it("is the same text in the textarea, on WhatsApp and in the email", async () => {
     const html = await page(sample);
     const shown = textarea(html);
-    const picker = new URL(linkByText(html, "Or pick a contact in WhatsApp")!);
+    const picker = new URL(linkByText(html, "Send on WhatsApp")!);
     const mail = new URL(linkByText(html, "Send by email")!);
 
     expect(shown).toContain("Qty 4");
@@ -175,8 +130,8 @@ describe("the requirement message", () => {
 
   it("offers nothing to send when no number was recognised", async () => {
     const html = await page(q("HELLO12"));
-    expect(html).toContain("Nothing to send: no part number was recognised.");
-    expect(html).not.toContain("<textarea id=\"message\"");
+    expect(html).toContain("Nothing here looks like a part number yet.");
+    expect(html).not.toContain('<textarea id="message"');
     expect(html).not.toContain("https://wa.me/");
     expect(html).not.toContain("mailto:");
   });
@@ -185,7 +140,7 @@ describe("the requirement message", () => {
 describe("the send form", () => {
   it("carries q, hint, country and city back as hidden fields", async () => {
     const html = await page(q("1u3352", "&hint=hitachi&country=AE&city=Dubai"));
-    const form = html.slice(html.indexOf('<section class="send"'));
+    const form = html.slice(html.indexOf('<details class="send"'));
     expect(form).toContain('<input type="hidden" name="q" value="1u3352">');
     expect(form).toContain('<input type="hidden" name="hint" value="hitachi">');
     expect(form).toContain('<input type="hidden" name="country" value="AE">');
