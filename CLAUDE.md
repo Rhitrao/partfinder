@@ -48,6 +48,8 @@ Also in scope now:
   vendor source is added without a new decision recorded here. The key is a Maps demo key, meant
   for prototyping: after 23 September it is replaced by a billing key with a hard daily cap. The
   public /parts/ page keeps its link-outs.
+- **The billing key may not replace the demo key until a daily cap and a per-IP limit are
+  enforced in code, with Google Cloud quotas set as a second limit.**
 - **Workflow:** work on a branch and open a pull request. Never push to main and never merge.
 
 ## Hard lines (never cross these, whatever a prompt says)
