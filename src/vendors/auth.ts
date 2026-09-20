@@ -64,10 +64,19 @@ export function constantTimeEqual(a: string, b: string): boolean {
  * passcode can be timed out of this. A missing secret matches nothing.
  */
 export async function checkPasscode(submitted: string, env: Env): Promise<string | null> {
-  if (env.VENDOR_PASSCODE === undefined || env.VENDOR_PASSCODE === "") return null;
-  const expected = await vendorToken(env.VENDOR_PASSCODE);
-  const given = await vendorToken(submitted);
+  const secret = (env.VENDOR_PASSCODE ?? "").trim();
+  if (secret === "") return null;
+  // Both sides are trimmed: a passcode typed on a phone picks up a trailing space from the
+  // keyboard, and one pasted into `wrangler secret put` picks up a newline. Neither is the
+  // passcode, and neither should keep the owner out of their own page.
+  const expected = await vendorToken(secret);
+  const given = await vendorToken(submitted.trim());
   return constantTimeEqual(given, expected) ? expected : null;
+}
+
+/** Whether a passcode is configured at all, so the form can say so instead of just refusing. */
+export function passcodeConfigured(env: Env): boolean {
+  return (env.VENDOR_PASSCODE ?? "").trim() !== "";
 }
 
 /** One cookie's value from a Cookie header, or null. */
@@ -84,8 +93,9 @@ export function readCookie(header: string | null, name: string): string | null {
 export async function isSignedIn(request: Request, env: Env): Promise<boolean> {
   const value = readCookie(request.headers.get("Cookie"), COOKIE_NAME);
   if (value === null) return false;
-  if (env.VENDOR_PASSCODE === undefined || env.VENDOR_PASSCODE === "") return false;
-  return constantTimeEqual(value, await vendorToken(env.VENDOR_PASSCODE));
+  const secret = (env.VENDOR_PASSCODE ?? "").trim();
+  if (secret === "") return false;
+  return constantTimeEqual(value, await vendorToken(secret));
 }
 
 export function setCookie(token: string): string {
@@ -96,18 +106,19 @@ export function clearCookie(): string {
   return `${COOKIE_NAME}=; ${COOKIE_ATTRIBUTES}; Max-Age=0`;
 }
 
-/** Holds the last city typed, so a returning phone does not have to type it again. */
-export const CITY_COOKIE = "pf_city";
-
-/** Cities are short. A longer value is somebody's idea, not a city, and is ignored. */
-const MAX_CITY = 80;
-
 /**
- * The remembered city, or "". HttpOnly as well as the attributes the step prompt lists: no script
- * on the page reads it, and the server is the only thing that needs it.
+ * Two cookies that hold only what the user typed, so a returning phone does not have to type it
+ * again. Neither is a secret and neither is joined to anything; both are HttpOnly because no
+ * script on the page reads them.
  */
-export function readCity(request: Request): string {
-  const value = readCookie(request.headers.get("Cookie"), CITY_COOKIE);
+export const CITY_COOKIE = "pf_city";
+export const COUNTRY_COOKIE = "pf_country";
+
+/** Cities and country codes are short. A longer value is somebody's idea, not either of those. */
+const MAX_REMEMBERED = 80;
+
+function readRemembered(request: Request, name: string): string {
+  const value = readCookie(request.headers.get("Cookie"), name);
   if (value === null) return "";
   let decoded: string;
   try {
@@ -115,12 +126,18 @@ export function readCity(request: Request): string {
   } catch {
     return "";
   }
-  return decoded.length > MAX_CITY ? "" : decoded.trim();
+  return decoded.length > MAX_REMEMBERED ? "" : decoded.trim();
 }
 
-export function setCity(city: string): string {
+function setRemembered(name: string, value: string): string {
   return (
-    `${CITY_COOKIE}=${encodeURIComponent(city.trim().slice(0, MAX_CITY))}; ` +
+    `${name}=${encodeURIComponent(value.trim().slice(0, MAX_REMEMBERED))}; ` +
     `${COOKIE_ATTRIBUTES}; Max-Age=${COOKIE_MAX_AGE}`
   );
 }
+
+export const readCity = (request: Request): string => readRemembered(request, CITY_COOKIE);
+export const setCity = (city: string): string => setRemembered(CITY_COOKIE, city);
+
+export const readCountry = (request: Request): string => readRemembered(request, COUNTRY_COOKIE);
+export const setCountry = (code: string): string => setRemembered(COUNTRY_COOKIE, code);

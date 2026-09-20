@@ -5,16 +5,24 @@
 // search once per group, add one search that names no brand at all, then merge by place id so a
 // shop that came back for two brands is one row, not two.
 
-import type { Country } from "../page";
+import { partKey, type Country } from "../page";
 import type { ParseResult } from "../parse";
 import { genericVendorQueryFor } from "../rules";
-import { PlacesError, searchText, type Place, type PlacesFailure } from "./places";
+import {
+  BIAS_RADIUS_M,
+  PlacesError,
+  searchOrigin,
+  searchText,
+  type Place,
+  type PlacesFailure,
+  type Point,
+} from "./places";
 
 /** Brand groups searched per page view. */
 export const MAX_GROUPS = 3;
 
 /** Text Search calls per page view: one per brand group, plus the multi-brand one. */
-export const MAX_SEARCHES = MAX_GROUPS + 1;
+const MAX_SEARCHES = MAX_GROUPS + 1;
 
 /** Suppliers listed on the page. Four searches can return forty; nobody reads forty, and every
  * one of them is a map pin. */
@@ -26,14 +34,27 @@ export interface BrandGroup {
   results: ParseResult[];
 }
 
-/** A shop Google listed, and which of our searches it came back for. */
-export interface Vendor {
+/** A shop Google listed, and what our searches found out about it. */
+export interface Supplier {
   place: Place;
-  /** The brand groups it was listed for, in group order. Empty means the multi-brand search only. */
-  brands: string[];
-  /** It came back for the multi-brand search too. */
-  generic: boolean;
+  /** The brand groups it was listed under, in group order. */
+  matchedGroups: string[];
+  /** The part keys in those groups: what its message asks about. */
+  matchedParts: string[];
+  /** It came back only for the search that named no brand. */
+  multiBrandOnly: boolean;
+  /** Straight-line kilometres from the origin, or null when either end has no coordinates. */
+  distanceKm: number | null;
 }
+
+/** Where distances are measured from, and what to call that place on the card. */
+export interface Origin extends Point {
+  /** "you" when the browser shared a location, otherwise the city whose centre this is. */
+  label: string;
+}
+
+/** Google would not answer, or would not place the city. */
+export type SupplierFailure = PlacesFailure | "city";
 
 /**
  * The numbers grouped by their first-ranked candidate's manufacturer, in the order the
@@ -79,39 +100,77 @@ export function genericQuery(oem: string, city: string, country: Country): strin
   return `${trade} in ${city}, ${country.name}`;
 }
 
-export interface VendorSearch {
-  vendors: Vendor[];
-  /** Null when the search ran. Otherwise why the page shows link-outs instead. */
-  failure: PlacesFailure | null;
+/** Kilometres between two points on a sphere. Straight-line, not driving distance, and said so. */
+function haversineKm(a: Point, b: Point): number {
+  const radius = 6371;
+  const rad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * radius * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+export interface SupplierSearch {
+  suppliers: Supplier[];
+  /** Null when the search ran. Otherwise why the section shows link-outs instead. */
+  failure: SupplierFailure | null;
+  /** Where distances were measured from, when they were.  */
+  origin: Origin | null;
 }
 
 /**
- * At most MAX_SEARCHES Text Search calls, run together, merged by place id and sorted by how many
- * of the user's brands each shop came back for. Array sort is stable, so shops tied on that stay
- * in the order Google returned them.
+ * The whole supplier round: at most five calls, one to place the city and up to four searches.
  *
- * A quota error on any call means today's limit is gone, so the whole page falls back. Otherwise
- * the page is built from whatever calls did answer; it falls back only when none of them did.
+ * The origin call is first and alone, because the searches are biased towards it. When the browser
+ * shared a location there is no origin call at all. The searches then run together, are merged by
+ * place id, and are sorted by how many of the user's parts each shop can be asked about, then by
+ * how near it is, then by its rating.
+ *
+ * A quota error on any call means today's limit is gone, so the whole section falls back.
+ * Otherwise the section is built from whatever calls did answer.
  */
-export async function findVendors(
+export async function findSuppliers(
   key: string | undefined,
   groups: readonly BrandGroup[],
   country: Country,
   city: string,
-): Promise<VendorSearch> {
-  if (groups.length === 0) return { vendors: [], failure: null };
-  if (key === undefined || key === "") return { vendors: [], failure: "unavailable" };
+  shared: Point | null,
+): Promise<SupplierSearch> {
+  if (groups.length === 0) return { suppliers: [], failure: null, origin: null };
+  if (key === undefined || key === "") {
+    return { suppliers: [], failure: "unavailable", origin: null };
+  }
+  const region = regionCodeFor(country);
+
+  let origin: Origin | null = shared === null ? null : { ...shared, label: "you" };
+  if (origin === null) {
+    try {
+      const point = await searchOrigin(key, `${city.trim()}, ${country.name}`, region);
+      if (point === null) return { suppliers: [], failure: "city", origin: null };
+      origin = { ...point, label: `${city.trim()} centre` };
+    } catch (error) {
+      const kind: PlacesFailure = error instanceof PlacesError ? error.kind : "unavailable";
+      return { suppliers: [], failure: kind, origin: null };
+    }
+  }
 
   const calls: { oem: string | null; query: string }[] = groups
     .slice(0, MAX_GROUPS)
     .map((group) => ({ oem: group.oem, query: brandQuery(group.oem, city, country) }));
   calls.push({ oem: null, query: genericQuery(groups[0]!.oem, city, country) });
 
-  const region = regionCodeFor(country);
+  const bias: Point = { lat: origin.lat, lng: origin.lng };
   const answers = await Promise.all(
     calls.slice(0, MAX_SEARCHES).map(async (call) => {
       try {
-        return { call, places: await searchText(key, call.query, region), failure: null };
+        const places = await searchText(key, call.query, {
+          ...(region === undefined ? {} : { regionCode: region }),
+          bias,
+          biasRadiusM: BIAS_RADIUS_M,
+        });
+        return { call, places, failure: null };
       } catch (error) {
         const kind: PlacesFailure = error instanceof PlacesError ? error.kind : "unavailable";
         return { call, places: [] as Place[], failure: kind };
@@ -120,41 +179,52 @@ export async function findVendors(
   );
 
   const failures = answers.map((a) => a.failure).filter((f): f is PlacesFailure => f !== null);
-  if (failures.includes("quota")) return { vendors: [], failure: "quota" };
-  if (failures.length === answers.length) return { vendors: [], failure: "unavailable" };
+  if (failures.includes("quota")) return { suppliers: [], failure: "quota", origin };
+  if (failures.length === answers.length) {
+    return { suppliers: [], failure: "unavailable", origin };
+  }
 
-  const byId = new Map<string, Vendor>();
+  const byId = new Map<string, Supplier>();
   const order: string[] = [];
+  const partsOf = (oem: string): string[] =>
+    (groups.find((g) => g.oem === oem)?.results ?? []).map(partKey);
+
   for (const { call, places } of answers) {
     for (const place of places) {
-      let vendor = byId.get(place.id);
-      if (vendor === undefined) {
-        vendor = { place, brands: [], generic: false };
-        byId.set(place.id, vendor);
+      let supplier = byId.get(place.id);
+      if (supplier === undefined) {
+        supplier = {
+          place,
+          matchedGroups: [],
+          matchedParts: [],
+          multiBrandOnly: true,
+          distanceKm: place.location === null ? null : haversineKm(origin, place.location),
+        };
+        byId.set(place.id, supplier);
         order.push(place.id);
       }
-      if (call.oem === null) vendor.generic = true;
-      else if (!vendor.brands.includes(call.oem)) vendor.brands.push(call.oem);
+      if (call.oem === null) continue;
+      if (supplier.matchedGroups.includes(call.oem)) continue;
+      supplier.matchedGroups.push(call.oem);
+      supplier.multiBrandOnly = false;
+      for (const key of partsOf(call.oem)) {
+        if (!supplier.matchedParts.includes(key)) supplier.matchedParts.push(key);
+      }
     }
   }
-  const vendors = order.map((id) => byId.get(id)!);
-  vendors.sort((a, b) => b.brands.length - a.brands.length);
-  return { vendors, failure: null };
+
+  const suppliers = order.map((id) => byId.get(id)!);
+  const far = Number.POSITIVE_INFINITY;
+  suppliers.sort(
+    (a, b) =>
+      b.matchedParts.length - a.matchedParts.length ||
+      (a.distanceKm ?? far) - (b.distanceKm ?? far) ||
+      (b.place.rating ?? 0) - (a.place.rating ?? 0),
+  );
+  return { suppliers, failure: null, origin };
 }
 
-/** Names the brands a shop was listed for, in the form scopedParts() reads back. */
-export function scopeOnly(vendor: Vendor): string {
-  return `only:${vendor.brands.join("|")}`;
-}
-
-/**
- * The parts one shop's narrower message carries: the ones whose first-ranked manufacturer is a
- * brand that shop was listed for. A scope that matches nothing falls back to every part, because
- * an empty requirement is not a message anybody can answer.
- */
-export function scopedParts(scope: string, all: readonly ParseResult[]): ParseResult[] {
-  if (!scope.startsWith("only:")) return [...all];
-  const wanted = new Set(scope.slice("only:".length).split("|").filter((name) => name !== ""));
-  const picked = all.filter((result) => wanted.has(result.candidates[0]?.oem ?? ""));
-  return picked.length > 0 ? picked : [...all];
+/** Rounded the way a card reads it: one decimal under 10 km, whole kilometres above. */
+export function formatDistance(km: number): string {
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
 }

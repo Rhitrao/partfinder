@@ -6,7 +6,7 @@
 import type { Env } from "../env";
 import { VENDOR_PAGE_HEADERS, VENDOR_REDIRECT_HEADERS } from "../headers";
 import { MAX_QUERY_LENGTH } from "../page";
-import { checkPasscode, clearCookie, isSignedIn, setCookie } from "./auth";
+import { checkPasscode, clearCookie, passcodeConfigured, setCookie } from "./auth";
 import { WRONG_PASSCODE, renderGate } from "./page";
 
 /** Where the suppliers live since step 6. */
@@ -100,8 +100,12 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const passcode = String(form.get("passcode") ?? "");
   const next = safeNext(String(form.get("next") ?? ""));
   const token = await checkPasscode(passcode, env);
-  // No detail: a wrong passcode and a Worker with no passcode set look exactly the same.
-  if (token === null) return html(renderGate(next, WRONG_PASSCODE), 401);
+  if (token === null) {
+    // A wrong passcode says so. A Worker with no passcode set says that instead, because the
+    // owner can do something about it and no attacker learns anything they could not guess.
+    const configured = passcodeConfigured(env);
+    return html(renderGate(next, configured ? WRONG_PASSCODE : "", configured), 401);
+  }
   return redirect(next, { "Set-Cookie": setCookie(token) });
 }
 
@@ -124,8 +128,9 @@ export async function handleVendors(
     // GET is the passcode form itself, reached from the "Sign in to see suppliers here" line. It
     // carries q, city and country so that signing in lands back on the page that offered it.
     if (request.method === "GET") {
-      const search = vendorQuery(url.searchParams);
-      return html(renderGate(safeNext(search === "" ? "/parts/" : `/parts/?${search}`)));
+      // next carries the page the footer link was on, so signing in returns to it.
+      const next = safeNext(url.searchParams.get("next") ?? "");
+      return html(renderGate(next, "", passcodeConfigured(env)));
     }
     return notAllowed("POST");
   }

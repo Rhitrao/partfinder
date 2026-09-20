@@ -33,26 +33,42 @@ const whatsappLink = (html: string) => hrefs(html).find((h) => h.startsWith("htt
  * end of the document would find the pasted text again and prove nothing about the cards.
  */
 const cards = (html: string) =>
-  html.slice(html.indexOf('<section class="card"'), html.indexOf('<section class="send"'));
+  html.slice(html.indexOf('<section class="parts">'), html.indexOf("</section>", html.indexOf('<p class="caveat"')));
 
-/** The text of every candidate's manufacturer line, in rendered order. */
-const oems = (html: string) => [...html.matchAll(/<p class="oem">([^<]*)<\/p>/g)].map((m) => m[1]);
+/** The manufacturer line of every card, in rendered order. */
+const oems = (html: string) =>
+  [...html.matchAll(/<p class="maker">([^<]*?)\??(?: <span)/g)].map((m) => m[1]);
+
+/** The large number on every card, in rendered order. */
+const numbers = (html: string) =>
+  [...html.matchAll(/<p class="number">([^<]*)<\/p>/g)].map((m) => m[1]);
 
 describe("GET /parts/ with no q", () => {
-  it("renders the form", async () => {
+  it("asks for a paste and a city, and nothing else in front", async () => {
     const html = await page();
-    expect(html).toContain('<form method="GET" action="/parts/">');
+    expect(html).toContain('<form method="GET" action="/parts/" class="ask">');
     expect(html).toContain('name="q"');
-    expect(html).toContain("Paste part numbers or a WhatsApp message");
-    expect(html).toContain('name="hint"');
-    expect(html).toContain("Brand or machine (optional)");
-    expect(html).toContain("Identify");
+    expect(html).toContain("Paste a WhatsApp message or part numbers");
+    expect(html).toContain("autofocus");
+    expect(html).toContain('name="city"');
+    expect(html).toContain("e.g. Bengaluru");
+    expect(html).toContain("Find parts &amp; suppliers");
   });
 
-  it("defaults the country to India", async () => {
+  it("keeps country, hint and note behind More options", async () => {
     const html = await page();
-    expect(html).toContain('<option value="IN" selected>India (google.co.in)</option>');
+    const more = html.slice(html.indexOf("<details class=\"more\">"), html.indexOf("</details>"));
+    for (const field of ['name="country"', 'name="hint"', 'name="note"']) {
+      expect(more, field).toContain(field);
+    }
+  });
+
+  it("defaults the country to India, by name and not by Google domain", async () => {
+    const html = await page();
+    expect(html).toContain('<option value="IN" selected>India</option>');
     expect(html).not.toContain('value="AE" selected');
+    // The search domain is plumbing: it belongs in a link, never on the page.
+    expect(html).not.toContain("google.co.in");
   });
 
   it("shows no results and no WhatsApp button", async () => {
@@ -63,9 +79,11 @@ describe("GET /parts/ with no q", () => {
 
   it("carries the fixed text", async () => {
     const html = await page();
-    expect(html).toContain("quoted per account");
-    expect(html).toContain("Identification aid only. Confirm fitment with your supplier.");
-    expect(html).toContain("Not affiliated with any manufacturer.");
+    // All of it now lives behind "How it works", out of the way of the job.
+    const how = html.slice(html.indexOf('<details class="how">'));
+    expect(how).toContain("quoted per account");
+    expect(how).toContain("Suppliers confirm fitment.");
+    expect(how).toContain("Not affiliated with any manufacturer");
   });
 
   it("has no client-side JavaScript", async () => {
@@ -75,49 +93,90 @@ describe("GET /parts/ with no q", () => {
   });
 });
 
-describe("a candidate card", () => {
-  it("renders Caterpillar for 1u3352 with the unconfirmed basis", async () => {
+describe("a product card", () => {
+  it("leads with the canonical number and says how it was typed", async () => {
     const html = await page(q("1u3352"));
-    expect(html).toContain("1U3352");
+    expect(numbers(html)).toEqual(["1U-3352"]);
+    expect(html).toContain("as typed: 1U3352");
     expect(oems(html)).toContain("Caterpillar");
-    expect(html).toContain("1U-3352");
-    expect(html).toContain("Guess from number format only. Not confirmed.");
-    expect(html).toContain("Format: usually unique to this manufacturer.");
+    expect(html).toContain('<span class="badge">format match</span>');
+    // The format essays are gone: one caveat serves the whole section.
+    expect(html).not.toContain("Guess from number format only");
+    expect(html).not.toContain("Format: usually unique");
+    expect(html).toContain(
+      "Manufacturer matched from the number's format, not confirmed. Suppliers confirm fitment.",
+    );
   });
 
-  it("links the search to google.co.in with every spelling", async () => {
+  it("says nothing about how it was typed when it was typed canonically", async () => {
+    const html = await page(q("1U-3352"));
+    expect(numbers(html)).toEqual(["1U-3352"]);
+    expect(html).not.toContain("as typed:");
+  });
+
+  it("offers a chip per manufacturer when the number fits more than one", async () => {
+    const html = await page(q("3200677", "&city=Bengaluru"));
+    expect(html).toContain("Caterpillar or Hitachi?");
+    const chips = [...html.matchAll(/<a class="chip" href="([^"]*)">([^<]*)<\/a>/g)];
+    expect(chips.map((m) => m[2])).toEqual(["Caterpillar", "Hitachi"]);
+    for (const [, href] of chips) {
+      const url = new URL(href!.replaceAll("&amp;", "&"), "https://rohitrao.in");
+      expect(url.pathname).toBe("/parts/");
+      expect(url.searchParams.get("q")).toBe("3200677");
+      expect(url.searchParams.get("city")).toBe("Bengaluru");
+    }
+    expect(chips.map((m) => new URL(m[1]!.replaceAll("&amp;", "&"), "https://rohitrao.in")
+      .searchParams.get("hint"))).toEqual(["Caterpillar", "Hitachi"]);
+    // The old nudge is gone; the chips are the nudge.
+    expect(html).not.toContain("Add the brand or machine to narrow this.");
+  });
+
+  it("shows a single manufacturer without chips", async () => {
     const html = await page(q("1u3352"));
-    const url = new URL(linkByText(html, "Search all spellings")!);
-    expect(url.host).toBe("www.google.co.in");
-    expect(url.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
+    expect(html).not.toContain('class="chip"');
   });
 
-  it("says a shared format is shared", async () => {
-    const html = await page(q("3200677"));
-    expect(html).toContain("Format: shared with other manufacturers.");
+  it("shows a suffix as a tag", async () => {
+    const html = await page(q("1u3352RC"));
+    expect(html).toContain('<p class="tag">RC</p>');
+    expect(numbers(html)).toEqual(["1U-3352"]);
+  });
+});
+
+describe("quantities on a card", () => {
+  it("reads them from the message and prefills the field", async () => {
+    const html = await page(q("need 2 nos 1u3352 and 40/300893 x1"));
+    expect(numbers(html)).toEqual(["1U-3352", "40/300893"]);
+    expect(html).toContain("Qty 2 (from message)");
+    expect(html).toContain("Qty 1 (from message)");
+    expect(html).toContain('name="qty_1U-3352" value="2"');
+    expect(html).toContain('name="qty_40/300893" value="1"');
   });
 
-  it("nudges for a hint only when more than one manufacturer fits", async () => {
-    const ambiguous = await page(q("3200677"));
-    expect(new Set(oems(ambiguous)).size).toBeGreaterThan(1);
-    expect(ambiguous).toContain("Add the brand or machine to narrow this.");
+  it("says so when the message gives none", async () => {
+    const html = await page(q("1u3352 2023"));
+    expect(html).toContain("Qty not given");
+    expect(html).toContain('name="qty_1U-3352" value=""');
+  });
 
-    const single = await page(q("1u3352"));
-    expect(new Set(oems(single)).size).toBe(1);
-    expect(single).not.toContain("Add the brand or machine to narrow this.");
+  it("prefers a typed quantity and stops crediting the message", async () => {
+    const html = await page(q("need 2 nos 1u3352", "&qty_1U-3352=7"));
+    expect(html).toContain("Qty 7");
+    expect(html).not.toContain("(from message)");
+    expect(html).toContain('name="qty_1U-3352" value="7"');
   });
 });
 
 describe("country", () => {
   it("puts the search link on google.ae for AE", async () => {
     const html = await page(q("1u3352", "&country=AE"));
-    expect(new URL(linkByText(html, "Search all spellings")!).host).toBe("www.google.ae");
+    expect(new URL(linkByText(html, "Search Google")!).host).toBe("www.google.ae");
     expect(await page(q("1u3352", "&country=AE"))).toContain('<option value="AE" selected>');
   });
 
   it("falls back to India for an unknown code", async () => {
     const html = await page(q("1u3352", "&country=ZZ"));
-    expect(new URL(linkByText(html, "Search all spellings")!).host).toBe("www.google.co.in");
+    expect(new URL(linkByText(html, "Search Google")!).host).toBe("www.google.co.in");
   });
 });
 
@@ -142,15 +201,16 @@ describe("not determined", () => {
     const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${q("HELLO12")}`), {});
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Not determined: no known number format matched.");
-    expect(html).toContain("No format matched, so it's left out of the WhatsApp message.");
-    expect(html).toContain("Add it yourself if it's a part number.");
+    expect(html).toContain("Not recognised: HELLO12");
+    // One line naming it, not a card explaining itself.
+    expect(html).not.toContain('class="card"');
+    expect(html).not.toContain("left out of the WhatsApp message");
   });
 
   it("offers nothing to send when no number was recognised", async () => {
     const html = await page(q("HELLO12"));
     expect(whatsappLink(html)).toBeUndefined();
-    expect(html).toContain("Nothing to send: no part number was recognised.");
+    expect(html).toContain("Nothing here looks like a part number yet.");
   });
 });
 
@@ -163,7 +223,7 @@ describe("the WhatsApp link", () => {
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_LIMIT);
     expect(message).toContain("https://rohitrao.in/parts/?q=1U3352%2040%2F300893");
     expect(message).toContain("1U3352");
-    expect(message).toContain("Caterpillar (from number format, unconfirmed)");
+    expect(message).toContain("1. 1U-3352 (likely Caterpillar)");
     expect(message).toContain("40/300893");
   });
 
@@ -179,12 +239,13 @@ describe("the WhatsApp link", () => {
     }
   });
 
-  it("shows a phone-shaped number on the page, with the reason it is not sent", async () => {
+  it("keeps a phone-shaped number off the page entirely", async () => {
     const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
-    const shown = cards(html);
-    expect(shown).toContain("9876543210");
-    expect(shown).toContain("Looks like a phone number, so it's left out of the WhatsApp message.");
-    expect(shown).toContain("Type it with dashes if it's a part number.");
+    // Echoing a customer's phone number back under "Not recognised" is noise and a small leak.
+    // The paste box still shows what the user typed; the Parts section does not repeat it.
+    expect(cards(html)).not.toContain("9876543210");
+    expect(html).not.toContain("Not recognised");
+    expect(numbers(html)).toEqual(["1U-3352"]);
   });
 
   it("drops a number with a country code from the message", async () => {
@@ -198,9 +259,9 @@ describe("the WhatsApp link", () => {
 
   it("sends a phone-shaped number once the user types it with dashes", async () => {
     const bare = await page(q("6754611102"));
-    expect(bare).toContain("Looks like a phone number");
     expect(whatsappLink(bare)).toBeUndefined();
-    expect(bare).toContain("Nothing to send: no part number was recognised.");
+    expect(bare).toContain("Nothing here looks like a part number yet.");
+    expect(cards(bare)).not.toContain("6754611102");
 
     const dashed = await page(q("6754-61-1102"));
     expect(oems(dashed)).toContain("Komatsu");
@@ -254,10 +315,38 @@ describe("headers", () => {
 describe("the hint field", () => {
   it("ranks Hitachi first for 3200677 with hint hitachi", async () => {
     const withHint = await page(`?q=3200677&hint=hitachi`);
-    expect(oems(withHint)[0]).toBe("Hitachi");
-    expect(withHint).toContain("Hints used: Hitachi");
+    expect(oems(withHint)[0]).toBe("Hitachi or Caterpillar");
+    // The hint changed the ranking; the page no longer narrates that it used one.
+    expect(withHint).not.toContain("Hints used");
 
     const without = await page(q("3200677"));
-    expect(oems(without)[0]).toBe("Caterpillar");
+    expect(oems(without)[0]).toBe("Caterpillar or Hitachi");
+  });
+});
+
+describe("what the page never shows", () => {
+  it("prints no spelling list and no Google domain, while the links still use both", async () => {
+    for (const query of [q("need 2 nos 1u3352 and 40/300893 x1"), q("3200677"), ""]) {
+      const html = await page(query);
+      expect(html, query).not.toContain("Also written");
+      expect(html, query).not.toContain("Search all spellings");
+      expect(html, query).not.toContain("Hints used");
+      // A search domain may sit inside an href; it may not be words the user reads.
+      const visible = html.replace(/<[^>]*>/g, " ");
+      expect(visible, query).not.toContain("google.co.in");
+    }
+    // The query behind the link is unchanged: every spelling, on the country's own domain.
+    const html = await page(q("1u3352", "&country=AE"));
+    const url = new URL(linkByText(html, "Search Google")!);
+    expect(url.host).toBe("www.google.ae");
+    expect(url.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
+  });
+
+  it("reads two parts and their quantities out of one pasted line", async () => {
+    const html = await page(q("need 2 nos 1u3352 and 40/300893 x1"));
+    expect(numbers(html)).toEqual(["1U-3352", "40/300893"]);
+    expect(html).toContain("Qty 2 (from message)");
+    expect(html).toContain("Qty 1 (from message)");
+    expect(html).toContain("as typed: 1U3352");
   });
 });

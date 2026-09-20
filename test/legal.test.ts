@@ -129,12 +129,14 @@ describe("the footer", () => {
   });
 });
 
-describe("what the privacy page has to say since step 6", () => {
-  it("names both cookies and what the map sends to Google", async () => {
+describe("what the privacy page has to say since the cards", () => {
+  it("names both cookies, the rounded location and what the map sends", async () => {
     const html = await (await get("/parts/privacy")).text();
-    expect(html).toContain("pf_vendor");
     expect(html).toContain("pf_city");
-    expect(html).toContain("the last city you typed");
+    expect(html).toContain("pf_country");
+    expect(html).toContain("only what you typed or picked");
+    expect(html).toContain("rounded to about a hundred metres");
+    expect(html).toContain("It is not stored");
     expect(html).toContain("the map is loaded from Google");
     expect(html).toContain("never the page's query string");
   });

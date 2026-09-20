@@ -10,6 +10,8 @@ export const PAGE_HEADERS: Record<string, string> = {
     "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
     "form-action 'self'; base-uri 'none'",
   "Referrer-Policy": "no-referrer",
+  // The only powerful feature this page ever asks for, and only from its own code.
+  "Permissions-Policy": "geolocation=(self)",
 };
 
 /**
@@ -66,6 +68,7 @@ export function mapPageHeaders(nonce: string): Record<string, string> {
       "base-uri 'none'",
     ].join("; "),
     "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(self)",
     "Cache-Control": "no-store",
   };
 }

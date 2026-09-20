@@ -10,17 +10,16 @@
 // and no Google error text ever reaches a page.
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
-const DETAILS_URL = "https://places.googleapis.com/v1/places/";
 
-/** Exactly the fields a supplier row and its map pin need, and not one more. */
+/** Exactly the fields a supplier card and its map pin need, and not one more. */
 export const TEXT_SEARCH_FIELD_MASK =
-  "places.id,places.displayName,places.formattedAddress,places.location," +
-  "places.googleMapsUri,places.internationalPhoneNumber,places.nationalPhoneNumber," +
-  "places.websiteUri,places.rating,places.userRatingCount";
+  "places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress," +
+  "places.location,places.googleMapsUri,places.internationalPhoneNumber," +
+  "places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount," +
+  "places.currentOpeningHours.openNow";
 
-/** Asked for once per vendor the user picked, never for the whole list. */
-export const DETAILS_FIELD_MASK =
-  "id,displayName,internationalPhoneNumber,nationalPhoneNumber,websiteUri,googleMapsUri";
+/** The city-centre lookup needs one coordinate and nothing else, so it asks for one field. */
+export const ORIGIN_FIELD_MASK = "places.location";
 
 /** Results per Text Search call. */
 export const PAGE_SIZE = 10;
@@ -41,21 +40,13 @@ export interface Place {
   /** As written locally, e.g. "098765 43210". Empty when Google has none. */
   nationalPhone: string;
   website: string;
-  /** Null when the key's tier does not return ratings. The row renders without them. */
+  /** Null when the key's tier does not return ratings. The card renders without them. */
   rating: number | null;
   ratingCount: number | null;
-}
-
-/** What the contact page needs, once the user has picked a shop. */
-export interface PlaceContact {
-  id: string;
-  name: string;
-  /** In E.164-ish form, e.g. "+91 98765 43210". Empty when Google has none. */
-  internationalPhone: string;
-  /** As written locally, e.g. "098765 43210". Empty when Google has none. */
-  nationalPhone: string;
-  website: string;
-  mapsUri: string;
+  /** The address without the city and country, when Google gives one. */
+  shortAddress: string;
+  /** Null when Google does not say, which the demo key often does not. */
+  openNow: boolean | null;
 }
 
 /**
@@ -113,6 +104,16 @@ function displayName(value: unknown): string {
   return text((value as { text?: unknown }).text);
 }
 
+function flag(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+/** Google nests it: currentOpeningHours.openNow, and either half may be missing. */
+function openNow(value: unknown): boolean | null {
+  if (typeof value !== "object" || value === null) return null;
+  return flag((value as { openNow?: unknown }).openNow);
+}
+
 function count(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -126,30 +127,82 @@ function location(value: unknown): { lat: number; lng: number } | null {
   return lat === null || lng === null ? null : { lat, lng };
 }
 
-/**
- * Text Search. `regionCode` is a two-letter CLDR code, left out when the user's country setting is
- * "Other", which names no region. A 200 with no places is an empty list, not an error.
- */
-export async function searchText(
+/** A point on the earth, used to bias a search and to measure a distance from. */
+export interface Point {
+  lat: number;
+  lng: number;
+}
+
+export interface SearchOptions {
+  /** A two-letter CLDR region, left out when the country setting is "Other", which names none. */
+  regionCode?: string;
+  /** Pulls results towards the user. Left out when nothing says where the user is. */
+  bias?: Point;
+  /** How far the bias reaches, in metres. */
+  biasRadiusM?: number;
+  pageSize?: number;
+  fieldMask?: string;
+}
+
+/** How far a location bias reaches: a city-sized circle, not a country-sized one. */
+export const BIAS_RADIUS_M = 30000;
+
+async function callTextSearch(
   key: string,
   textQuery: string,
-  regionCode: string | undefined,
-): Promise<Place[]> {
+  options: SearchOptions,
+): Promise<unknown> {
   const body: Record<string, unknown> = { textQuery };
-  if (regionCode !== undefined) body.regionCode = regionCode;
+  if (options.regionCode !== undefined) body.regionCode = options.regionCode;
   body.languageCode = "en";
-  body.pageSize = PAGE_SIZE;
-
-  const payload = await callGoogle(TEXT_SEARCH_URL, {
+  body.pageSize = options.pageSize ?? PAGE_SIZE;
+  if (options.bias !== undefined) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: options.bias.lat, longitude: options.bias.lng },
+        radius: options.biasRadiusM ?? BIAS_RADIUS_M,
+      },
+    };
+  }
+  return callGoogle(TEXT_SEARCH_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": TEXT_SEARCH_FIELD_MASK,
+      "X-Goog-FieldMask": options.fieldMask ?? TEXT_SEARCH_FIELD_MASK,
     },
     body: JSON.stringify(body),
   });
+}
 
+/**
+ * Where a city is, for measuring distances from and biasing the searches towards. One field, one
+ * result. Null means Google knows no such place, which the page says rather than guessing.
+ */
+export async function searchOrigin(
+  key: string,
+  textQuery: string,
+  regionCode: string | undefined,
+): Promise<Point | null> {
+  const payload = await callTextSearch(key, textQuery, {
+    ...(regionCode === undefined ? {} : { regionCode }),
+    pageSize: 1,
+    fieldMask: ORIGIN_FIELD_MASK,
+  });
+  const places = (payload as { places?: unknown }).places;
+  if (!Array.isArray(places) || places.length === 0) return null;
+  const first = places[0];
+  if (typeof first !== "object" || first === null) return null;
+  return location((first as Record<string, unknown>).location);
+}
+
+/** Text Search. A 200 with no places is an empty list, not an error. */
+export async function searchText(
+  key: string,
+  textQuery: string,
+  options: SearchOptions = {},
+): Promise<Place[]> {
+  const payload = await callTextSearch(key, textQuery, options);
   const places = (payload as { places?: unknown }).places;
   if (!Array.isArray(places)) return [];
   const out: Place[] = [];
@@ -169,27 +222,9 @@ export async function searchText(
       website: text(place.websiteUri),
       rating: count(place.rating),
       ratingCount: count(place.userRatingCount),
+      shortAddress: text(place.shortFormattedAddress),
+      openNow: openNow(place.currentOpeningHours),
     });
   }
   return out;
-}
-
-/** Place Details for one place id. */
-export async function placeDetails(key: string, id: string): Promise<PlaceContact> {
-  const payload = await callGoogle(DETAILS_URL + encodeURIComponent(id), {
-    method: "GET",
-    headers: {
-      "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": DETAILS_FIELD_MASK,
-    },
-  });
-  const place = (payload ?? {}) as Record<string, unknown>;
-  return {
-    id: text(place.id) === "" ? id : text(place.id),
-    name: displayName(place.displayName),
-    internationalPhone: text(place.internationalPhoneNumber),
-    nationalPhone: text(place.nationalPhoneNumber),
-    website: text(place.websiteUri),
-    mapsUri: text(place.googleMapsUri),
-  };
 }

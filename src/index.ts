@@ -12,17 +12,22 @@ import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
-import { handleVendors } from "./vendors";
-import { isSignedIn, readCity, setCity } from "./vendors/auth";
-import { MAX_LISTED, findVendors, groupByOem } from "./vendors/search";
 import {
-  pinsFor,
-  renderMapBox,
-  renderMapScripts,
-  renderSignIn,
-  renderSuppliers,
-} from "./vendors/suppliers";
+  MAX_QUERY_LENGTH,
+  outbound,
+  readQuery,
+  renderPage,
+  requirementMessage,
+  resolveCountry,
+  whatsappUrl,
+} from "./page";
+import { handleVendors } from "./vendors";
+import { isSignedIn, readCity, readCountry, setCity, setCountry } from "./vendors/auth";
+import { MAX_LISTED, findSuppliers, groupByOem } from "./vendors/search";
+import { renderScripts, type ShopData } from "./vendors/script";
+import { renderLinkOuts, renderMapBox, renderSuppliers } from "./vendors/suppliers";
+import { phoneFor } from "./vendors/phone";
+import { partKey } from "./page";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -33,6 +38,25 @@ function respond(status: number, body: unknown, extra: Record<string, string> = 
       ...extra,
     },
   });
+}
+
+/**
+ * A location the browser shared, as "lat,lng", or null.
+ *
+ * Rounded to three decimals - about a hundred metres - because a supplier search does not need to
+ * know which building the user is in. It is read from the query on each request and goes no
+ * further: never into a cookie, never into the back-link, never into a log.
+ */
+export function sharedLocation(raw: string | null): { lat: number; lng: number } | null {
+  if (raw === null) return null;
+  const parts = raw.split(",");
+  if (parts.length !== 2) return null;
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return { lat: round(lat), lng: round(lng) };
 }
 
 /**
@@ -49,9 +73,10 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   const typedCity = url.searchParams.get("city");
   const to = url.searchParams.get("to") ?? "";
   const note = url.searchParams.get("note") ?? "";
-  const country = resolveCountry(url.searchParams.get("country"));
-  // A city the user typed wins; otherwise the one this browser last typed, so a phone that has
-  // been here before does not have to type it again.
+  const typedCountry = url.searchParams.get("country");
+  // What the user chose wins; otherwise what this browser last chose, so a phone that has been
+  // here before does not have to type or pick either again.
+  const country = resolveCountry(typedCountry ?? readCountry(request));
   const city = typedCity ?? readCity(request);
   // Every text field is capped, not just q: each one is rendered, and the budget is the request's.
   const fields = [q, hint, city, to, note];
@@ -71,45 +96,108 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
 
   const parsed = readQuery(q, hint);
   const sending = outbound(parsed.results);
+  // Quantities the user typed on a card, one field per part key, capped like everything else.
+  const typedQuantities: Record<string, number> = {};
+  for (const [name, value] of url.searchParams) {
+    if (!name.startsWith("qty_") || name.length > 64) continue;
+    const amount = Number(value);
+    if (Number.isInteger(amount) && amount >= 1 && amount <= 9999) {
+      typedQuantities[name.slice("qty_".length)] = amount;
+    }
+  }
   const extra: Record<string, string> = {};
-  // Only when the user typed one: a page view that merely read the cookie need not rewrite it.
-  if (typedCity !== null && typedCity.trim() !== "") extra["Set-Cookie"] = setCity(typedCity);
+  // Only what the user actually typed or picked: a page view that merely read a cookie need not
+  // rewrite it. Two Set-Cookie headers need an array, which Headers.append builds below.
+  const cookies: string[] = [];
+  if (typedCity !== null && typedCity.trim() !== "") cookies.push(setCity(typedCity));
+  if (typedCountry !== null && typedCountry.trim() !== "") cookies.push(setCountry(country.code));
 
   let suppliers: string | undefined;
   let nonce: string | undefined;
   let tail: string | undefined;
+  // "Other ways to send" is the only way out until supplier cards render, so it opens by default.
+  let sendOpen = true;
+  const supplierCounts: Record<string, number> = {};
+  const shared = sharedLocation(url.searchParams.get("near"));
+  const signedIn = await isSignedIn(request, env);
   if (sending.length > 0) {
-    if (!(await isSignedIn(request, env))) {
-      suppliers = renderSignIn(q, city, country);
-    } else if (city.trim() !== "") {
-      const { groups } = groupByOem(sending);
-      if (groups.length > 0) {
-        const { vendors, failure } = await findVendors(
-          env.GOOGLE_PLACES_KEY,
-          groups,
-          country,
-          city,
-        );
-        const listed = vendors.slice(0, MAX_LISTED);
-        // The map is drawn only when there is a key to draw it with and a shop to pin. Without
-        // either, the section is the list, which is the part that carries the phone numbers.
-        const pins = pinsFor(listed);
+    const { groups } = groupByOem(sending);
+    if (!signedIn || city.trim() === "") {
+      // Signed out, or with no city: the link-outs, and nothing about signing in. The only way
+      // in is the footer link, which is where section 9 of the step prompt puts it.
+      if (groups.length > 0) suppliers = renderLinkOuts(groups, country, city);
+    } else {
+      {
+        const answer = await findSuppliers(env.GOOGLE_PLACES_KEY, groups, country, city, shared);
+        const listed = answer.suppliers.slice(0, MAX_LISTED);
+        const quantities = { ...parsed.quantities, ...typedQuantities };
+        const origin = answer.origin;
+        const originLabel = origin?.label ?? `${city.trim()} centre`;
+        const pinned = listed.some((s) => s.place.location !== null);
         const mapsKey = env.GOOGLE_MAPS_BROWSER_KEY;
-        const withMap = failure === null && pins.length > 0 && mapsKey !== undefined && mapsKey !== "";
-        if (withMap) {
+        // The one page that runs a script: signed in, with the Suppliers section on it. The map
+        // needs a key and a shop to pin as well; the rest of the script works without either.
+        if (answer.failure === null) {
           nonce = newNonce();
-          tail = renderMapScripts(pins, mapsKey, nonce);
+          const shops: ShopData[] = listed.map((supplier, index) => {
+            const phone = phoneFor(supplier.place);
+            const matched = sending.filter((p) => supplier.matchedParts.includes(partKey(p)));
+            const asking = matched.length > 0 ? matched : sending;
+            const wa = (parts: typeof sending) =>
+              phone.whatsapp === null
+                ? ""
+                : whatsappUrl(
+                    requirementMessage(parts, {
+                      name: supplier.place.name === "" ? "there" : supplier.place.name,
+                      note,
+                      quantities,
+                    }),
+                    phone.whatsapp,
+                  );
+            return {
+              n: index + 1,
+              name: supplier.place.name === "" ? "Unnamed listing" : supplier.place.name,
+              lat: supplier.place.location?.lat ?? null,
+              lng: supplier.place.location?.lng ?? null,
+              matchedParts: supplier.matchedParts,
+              waMatched: wa(asking),
+              waAll: wa(sending),
+              tel: phone.tel ?? "",
+            };
+          });
+          tail = renderScripts(
+            {
+              origin:
+                origin === null
+                  ? null
+                  : { lat: origin.lat, lng: origin.lng, you: origin.label === "you" },
+              parts: sending.map(partKey),
+              shops,
+            },
+            pinned ? mapsKey : undefined,
+            nonce,
+            originLabel,
+          );
         }
         suppliers = renderSuppliers({
-          vendors: listed,
+          ...(pinned && mapsKey !== undefined && mapsKey !== "" ? { map: renderMapBox() } : {}),
+          suppliers: listed,
           groups,
           parts: sending,
+          quantities,
+          note,
           city,
           country,
-          failure,
-          omitted: vendors.length - listed.length,
-          ...(withMap ? { map: renderMapBox() } : {}),
+          originLabel,
+          failure: answer.failure,
+          omitted: answer.suppliers.length - listed.length,
         });
+        for (const supplier of listed) {
+          for (const key of supplier.matchedParts) {
+            supplierCounts[key] = (supplierCounts[key] ?? 0) + 1;
+          }
+        }
+        sendOpen = listed.length === 0;
         // Supplier data, and who asked for it, are on this page. No cache may keep a copy.
         extra["Cache-Control"] = "no-store";
       }
@@ -124,6 +212,10 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
     note,
     country,
     parsed,
+    typedQuantities,
+    sendOpen,
+    signedIn,
+    supplierCounts,
     ...(suppliers === undefined ? {} : { suppliers }),
     ...(nonce === undefined ? {} : { nonce }),
     ...(tail === undefined ? {} : { tail }),
@@ -131,7 +223,9 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   // Only a page that actually runs the Maps script relaxes the CSP for it. Every other page,
   // including a signed-in page whose search found nothing to pin, keeps today's headers.
   const base = nonce === undefined ? PAGE_HEADERS : mapPageHeaders(nonce);
-  return new Response(html, { status: 200, headers: { ...base, ...extra } });
+  const headers = new Headers({ ...base, ...extra });
+  for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+  return new Response(html, { status: 200, headers });
 }
 
 function handleParse(url: URL): Response {

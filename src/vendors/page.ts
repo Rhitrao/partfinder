@@ -25,6 +25,8 @@ function hidden(name: string, value: string): string {
 
 export const WRONG_PASSCODE = "That passcode didn't match.";
 
+export const NO_PASSCODE_SET = "Sign-in isn't set up yet.";
+
 /**
  * The passcode form.
  *
@@ -33,17 +35,21 @@ export const WRONG_PASSCODE = "That passcode didn't match.";
  * is copied into the login URL, and the login handler re-reads it from a fixed list of paths and
  * parameters, so it can never become an open redirect.
  */
-export function renderGate(next: string, message = ""): string {
+export function renderGate(next: string, message = "", configured = true): string {
   const notice = message === "" ? "" : `\n      <p class="warn">${escapeHtml(message)}</p>`;
-  return renderVendorDocument(`<main class="gate">
-      <h1>Find vendors</h1>
-      <p>Vendor search is not public. Enter the passcode to continue.</p>${notice}
-      <form method="POST" action="/parts/vendors/login">
+  const form = configured
+    ? `<form method="POST" action="/parts/vendors/login">
         ${hidden("next", next)}
         <label for="passcode">Passcode</label>
-        <input id="passcode" name="passcode" type="password" autocomplete="current-password">
-        <button type="submit">Continue</button>
-      </form>
+        <input id="passcode" name="passcode" type="password" autocomplete="current-password"
+          autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
+        <button type="submit" class="primary">Continue</button>
+      </form>`
+    : `<p class="warn">${escapeHtml(NO_PASSCODE_SET)}</p>`;
+  return renderVendorDocument(`<main class="gate">
+      <h1>Owner sign-in</h1>
+      <p>Supplier search costs money per view, so it is not public.</p>${notice}
+      ${form}
       <p class="back"><a href="/parts/">Back to Partfinder</a></p>
     </main>`);
 }

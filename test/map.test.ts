@@ -5,7 +5,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { jsonForScript, pinsFor } from "../src/vendors/suppliers";
-import { Q, SEARCH, cookie, place, searchReply, signedIn, stubFetch } from "./helpers";
+import {
+  CITY_CENTRE,
+  Q,
+  get,
+  SEARCH,
+  cookie,
+  isOriginCall,
+  place,
+  searchReply,
+  signedIn,
+  stubFetch,
+} from "./helpers";
 
 const PLACES_KEY = "places-key-must-never-be-rendered";
 const BROWSER_KEY = "browser-key-meant-to-be-rendered";
@@ -40,49 +51,94 @@ describe("the map", () => {
     expect(html).toContain('id="pf-shop-1"');
   });
 
-  it("puts only the number, name and position in the pin data", async () => {
+  it("tells the script only what the page already shows", async () => {
     stubFetch(searchReply);
     const html = await (await signedIn(`/parts/${SEARCH}`)).text();
-    const json = html.match(/<script type="application\/json" id="pf-pins"[^>]*>([\s\S]*?)<\/script>/)?.[1];
-    const pins = JSON.parse(json!) as Record<string, unknown>[];
-    expect(pins).toHaveLength(3);
-    expect(pins[0]).toEqual({ n: 1, name: "Shared Spares", lat: 12.97, lng: 77.59 });
-    for (const pin of pins) {
-      expect(Object.keys(pin).sort()).toEqual(["lat", "lng", "n", "name"]);
+    const json = html.match(/<script type="application\/json" id="pf-data"[^>]*>([\s\S]*?)<\/script>/)?.[1];
+    const data = JSON.parse(json!) as {
+      origin: { lat: number; lng: number; you: boolean };
+      parts: string[];
+      shops: Record<string, unknown>[];
+    };
+    expect(data.parts).toEqual(["1U-3352", "40/300893"]);
+    expect(data.origin).toEqual({ lat: CITY_CENTRE.latitude, lng: CITY_CENTRE.longitude, you: false });
+    expect(data.shops).toHaveLength(3);
+    for (const shop of data.shops) {
+      expect(Object.keys(shop).sort()).toEqual([
+        "lat",
+        "lng",
+        "matchedParts",
+        "n",
+        "name",
+        "tel",
+        "waAll",
+        "waMatched",
+      ]);
     }
+    expect(data.shops[0]).toMatchObject({
+      n: 1,
+      name: "Shared Spares",
+      lat: 12.978,
+      lng: 77.64,
+      matchedParts: ["1U-3352", "40/300893"],
+      tel: "+919876543210",
+    });
+    // The messages were built on the server; the script never writes one.
+    expect(String(data.shops[1]!.waMatched)).toContain("https://wa.me/919876543210?text=");
+    expect(decodeURIComponent(String(data.shops[1]!.waMatched))).toContain("Hi Cat Corner,");
+    expect(decodeURIComponent(String(data.shops[1]!.waMatched))).not.toContain("40/300893");
+    expect(decodeURIComponent(String(data.shops[1]!.waAll))).toContain("40/300893");
     // Nothing that identifies the place to a third party rides along.
     expect(json).not.toContain("shared");
-    expect(json).not.toContain("98765");
-    expect(json).not.toContain("560001");
+    expect(json).not.toContain("560038");
+  });
+
+  it("marks the user's own location only when they shared one", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}&near=12.9352,77.5467`)).text();
+    const json = html.match(/id="pf-data"[^>]*>([\s\S]*?)<\/script>/)?.[1]!;
+    expect(JSON.parse(json).origin).toEqual({ lat: 12.935, lng: 77.547, you: true });
+  });
+
+  it("never writes a message in the browser", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const script = html.slice(html.indexOf("(function () {"), html.indexOf("</script>", html.indexOf("(function () {")));
+    expect(script).not.toContain("innerHTML");
+    expect(script).not.toContain("We have a requirement");
+    expect(script).toContain("textContent");
   });
 
   it("escapes a name that would otherwise close the script block", async () => {
     const nasty = 'Bad </script><script>alert(1)</script> Spares';
-    stubFetch(
-      () => new Response(JSON.stringify({ places: [place("x", nasty)] }), { status: 200 }),
+    stubFetch((call) =>
+      isOriginCall(call)
+        ? new Response(JSON.stringify({ places: [{ location: CITY_CENTRE }] }), { status: 200 })
+        : new Response(JSON.stringify({ places: [place("x", nasty)] }), { status: 200 }),
     );
     const html = await (await signedIn(`/parts/${SEARCH}`)).text();
-    const json = html.match(/id="pf-pins"[^>]*>([\s\S]*?)<\/script>/)?.[1]!;
+    const json = html.match(/id="pf-data"[^>]*>([\s\S]*?)<\/script>/)?.[1]!;
     expect(json).not.toContain("</script>");
     expect(json).toContain("\\u003c/script\\u003e");
-    // It survives a round trip: escaped for HTML, still the same name to the map.
-    expect((JSON.parse(json) as { name: string }[])[0]!.name).toBe(nasty);
+    expect((JSON.parse(json) as { shops: { name: string }[] }).shops[0]!.name).toBe(nasty);
   });
 
-  it("draws nothing when Google gave no coordinates", async () => {
-    stubFetch(
-      () =>
-        new Response(
-          JSON.stringify({ places: [place("nowhere", "No Pin Shop", { location: undefined })] }),
-          { status: 200 },
-        ),
+  it("draws no map when Google gave no coordinates, but still runs the script", async () => {
+    stubFetch((call) =>
+      isOriginCall(call)
+        ? new Response(JSON.stringify({ places: [{ location: CITY_CENTRE }] }), { status: 200 })
+        : new Response(
+            JSON.stringify({ places: [place("nowhere", "No Pin Shop", { location: undefined })] }),
+            { status: 200 },
+          ),
     );
     const res = await signedIn(`/parts/${SEARCH}`);
     const html = await res.text();
-    expect(html).toContain("1. No Pin Shop");
+    expect(html).toContain("No Pin Shop");
     expect(html).not.toContain("maps.googleapis.com");
-    expect(html).not.toContain("pf-pins");
-    expect(res.headers.get("Content-Security-Policy")).not.toContain("nonce-");
+    expect(html).toContain('id="pf-data"');
+    // The script is still there, so the CSP still carries its nonce.
+    expect(res.headers.get("Content-Security-Policy")).toContain("nonce-");
   });
 
   it("draws nothing without a browser key, and the list still works", async () => {
@@ -93,8 +149,9 @@ describe("the map", () => {
     );
     const html = await res.text();
     expect(html).not.toContain("maps.googleapis.com");
-    expect(html).toContain("1. Shared Spares");
-    expect(html).toContain('href="tel:+919876543210"');
+    expect(html).toContain("Shared Spares");
+    expect(html).toContain("Indiranagar");
+    expect(html).toContain('id="pf-data"');
   });
 });
 
@@ -178,11 +235,12 @@ describe("the two keys", () => {
 
 describe("pin helpers", () => {
   it("numbers pins as the list numbers rows, skipping shops with no location", async () => {
-    const vendor = (id: string, located: boolean) => ({
+    const supplier = (id: string, located: boolean) => ({
       place: {
         id,
         name: id,
         address: "",
+        shortAddress: "",
         mapsUri: "",
         location: located ? { lat: 1, lng: 2 } : null,
         internationalPhone: "",
@@ -190,13 +248,16 @@ describe("pin helpers", () => {
         website: "",
         rating: null,
         ratingCount: null,
+        openNow: null,
       },
-      brands: [],
-      generic: false,
+      matchedGroups: [],
+      matchedParts: [],
+      multiBrandOnly: true,
+      distanceKm: null,
     });
     // The second shop has no coordinates, so it has a row but no pin - and the third keeps the
     // number its row shows.
-    expect(pinsFor([vendor("a", true), vendor("b", false), vendor("c", true)])).toEqual([
+    expect(pinsFor([supplier("a", true), supplier("b", false), supplier("c", true)])).toEqual([
       { n: 1, name: "a", lat: 1, lng: 2 },
       { n: 3, name: "c", lat: 1, lng: 2 },
     ]);
@@ -205,5 +266,52 @@ describe("pin helpers", () => {
   it("escapes the characters that could end a script block", async () => {
     expect(jsonForScript({ a: "<>&" })).toBe('{"a":"\\u003c\\u003e\\u0026"}');
     expect(jsonForScript("\u2028\u2029")).toBe('"\\u2028\\u2029"');
+  });
+});
+
+describe("the send queue and the filters", () => {
+  it("gives every card a checkbox and the section a filter slot", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    expect(html).toContain('<div class="filters" id="pf-filters"></div>');
+    expect([...html.matchAll(/class="pick" data-n="(\d)"/g)].map((m) => m[1])).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+  });
+
+  it("builds the queue in the browser and stores nothing", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const script = html.slice(html.indexOf("(function () {"));
+    for (const forbidden of ["localStorage", "sessionStorage", "document.cookie", "indexedDB"]) {
+      expect(script, forbidden).not.toContain(forbidden);
+    }
+    expect(script).toContain("selected · Message selected");
+    expect(script).toContain("Opened");
+    expect(html).toContain("WhatsApp opens one chat at a time. Tap each supplier in turn.");
+  });
+
+  it("offers Use my location wherever the script runs, and asks for nothing else", async () => {
+    stubFetch(searchReply);
+    const res = await signedIn(`/parts/${SEARCH}`);
+    const html = await res.text();
+    expect(html).toContain('<div id="pf-locate"></div>');
+    expect(html).toContain("Use my location");
+    expect(html).toContain("navigator.geolocation");
+    expect(res.headers.get("Permissions-Policy")).toBe("geolocation=(self)");
+    expect(html).toContain("Location off. Distances are from Bengaluru centre.");
+  });
+
+  it("runs no script at all when the user is signed out", async () => {
+    const calls = stubFetch(searchReply);
+    const res = await get(`/parts/${SEARCH}`);
+    const html = await res.text();
+    expect(calls).toHaveLength(0);
+    expect(html.toLowerCase()).not.toContain("<script");
+    expect(res.headers.get("Content-Security-Policy")).not.toContain("nonce-");
+    // The header is set either way: it is a restriction, not a permission.
+    expect(res.headers.get("Permissions-Policy")).toBe("geolocation=(self)");
   });
 });
