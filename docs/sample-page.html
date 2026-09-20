@@ -23,6 +23,14 @@ p { margin: .5rem 0; }
 .lede { margin-bottom: 1.25rem; }
 form { display: flex; flex-direction: column; gap: .35rem; }
 label { font-weight: 600; }
+.ask textarea { min-height: 7rem; }
+.primary { font-size: 1.05rem; padding: .85rem; min-height: 44px; }
+.more { margin-top: .75rem; }
+.more summary { cursor: pointer; font-weight: 600; padding: .4rem 0; min-height: 44px; }
+.more > * { margin-top: .5rem; }
+.how { margin-top: 2.5rem; font-size: .9rem; opacity: .85; }
+.how summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
+:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
 textarea, input, select, button {
   font: inherit;
   width: 100%;
@@ -111,29 +119,34 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
   <body>
     <main>
       <h1>Partfinder</h1>
-      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
-      likely manufacturer, helps you check the part and find where to buy it, and drafts the
-      requirement for WhatsApp or email.</p>
-      <form method="GET" action="/parts/">
-      <label for="q">Paste part numbers or a WhatsApp message</label>
-      <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">need 1u3352 and 40/300893 for JCB 3CX</textarea>
-      <label for="hint">Brand or machine (optional)</label>
-      <input id="hint" name="hint" type="text" value="" placeholder="Brand or machine (optional)">
-      <label for="city">City (optional)</label>
-      <input id="city" name="city" type="text" value="Bengaluru" placeholder="City (optional)">
-      <label for="country">Country</label>
-      <select id="country" name="country">
-        <option value="IN" selected>India (google.co.in)</option>
-        <option value="AE">UAE (google.ae)</option>
-        <option value="SA">Saudi Arabia (google.com.sa)</option>
-        <option value="ZA">South Africa (google.co.za)</option>
-        <option value="KE">Kenya (google.co.ke)</option>
-        <option value="NG">Nigeria (google.com.ng)</option>
-        <option value="OTHER">Other (google.com)</option>
-      </select>
-      <button type="submit">Identify</button>
-    </form>
-      <p class="hints">Hints used: JCB</p>
+      <p class="lede">Paste a customer's message. Get the parts, nearby suppliers, and ready
+      WhatsApp messages.</p>
+      <form method="GET" action="/parts/" class="ask">
+      <label for="q">Paste a WhatsApp message or part numbers</label>
+      <textarea id="q" name="q" rows="5" autofocus
+        placeholder="Paste a WhatsApp message or part numbers">need 1u3352 and 40/300893 for JCB 3CX</textarea>
+      <label for="city">City</label>
+      <input id="city" name="city" type="text" value="Bengaluru" placeholder="e.g. Bengaluru"
+        autocomplete="address-level2">
+      <button type="submit" class="primary">Find parts &amp; suppliers</button>
+      <div id="pf-locate"></div>
+      <details class="more">
+        <summary>More options</summary>
+        <label for="country">Country</label>
+        <select id="country" name="country">
+          <option value="IN" selected>India</option>
+          <option value="AE">UAE</option>
+          <option value="SA">Saudi Arabia</option>
+          <option value="ZA">South Africa</option>
+          <option value="KE">Kenya</option>
+          <option value="NG">Nigeria</option>
+          <option value="OTHER">Other</option>
+        </select>
+        <label for="hint">Brand or machine</label>
+        <input id="hint" name="hint" type="text" value="" placeholder="e.g. JCB 3CX">
+        <label for="note">Note for suppliers</label>
+        <input id="note" name="note" type="text" value="Qty 4" placeholder="e.g. urgent, need by Friday">
+      </details>
       <section class="card">
         <h2>1U3352</h2>
         <div class="candidate">
@@ -180,6 +193,7 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
           suppliers.</p>
         </div>
       </section>
+      </form>
       <section class="send">
         <h2>Send the requirement</h2>
         <form method="GET" action="/parts/">
@@ -207,16 +221,18 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
         <a class="link" href="mailto:?subject=Requirement%3A%201U3352%2C%2040%2F300893&amp;body=Hi%2C%20we%20have%20a%20requirement%20for%3A%0A1.%201U3352%3A%20likely%20Caterpillar%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%201U-3352%0A2.%2040%2F300893%3A%20likely%20JCB%20(from%20number%20format%2C%20unconfirmed)%0A%20%20%20Also%20written%3A%2040%5C300893%2C%2040-300893%2C%2040300893%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send by email</a>
         <a class="link" href="/parts/vendors/?q=1U3352%2040%2F300893&amp;city=Bengaluru&amp;country=IN">Find vendors for these parts</a>
       </section>
-      <section class="notes">
-        <h2>How to read this</h2>
-        <p>A format guess means the number matches a manufacturer's known numbering format, and
-        nothing more. No catalogue, document or page has been checked, so it is not a confirmed
-        identification.</p>
+      <details class="how">
+        <summary>How it works</summary>
+        <p>Partfinder reads each number and matches it against manufacturers' known numbering
+        formats. That is a match on the shape of the number, not a confirmed identification: no
+        catalogue or document has been checked. Suppliers confirm fitment.</p>
+        <p>Suppliers are shops Google lists for those brands in your city. Being listed is not a
+        claim that a shop stocks your part.</p>
         <p>No prices, stock or lead times are shown: industrial spares are quoted per account,
         never published.</p>
-        <p>Identification aid only. Confirm fitment with your supplier.</p>
-        <p>Not affiliated with any manufacturer. Brand names identify the parts they make.</p>
-      </section>
+        <p>Nothing you type is stored or logged. Not affiliated with any manufacturer; brand names
+        identify the parts they make.</p>
+      </details>
     </main>
     <footer class="footer">
       <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>

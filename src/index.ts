@@ -14,7 +14,7 @@ import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
 import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors";
-import { isSignedIn, readCity, setCity } from "./vendors/auth";
+import { isSignedIn, readCity, readCountry, setCity, setCountry } from "./vendors/auth";
 import { MAX_LISTED, findVendors, groupByOem } from "./vendors/search";
 import {
   pinsFor,
@@ -49,9 +49,10 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   const typedCity = url.searchParams.get("city");
   const to = url.searchParams.get("to") ?? "";
   const note = url.searchParams.get("note") ?? "";
-  const country = resolveCountry(url.searchParams.get("country"));
-  // A city the user typed wins; otherwise the one this browser last typed, so a phone that has
-  // been here before does not have to type it again.
+  const typedCountry = url.searchParams.get("country");
+  // What the user chose wins; otherwise what this browser last chose, so a phone that has been
+  // here before does not have to type or pick either again.
+  const country = resolveCountry(typedCountry ?? readCountry(request));
   const city = typedCity ?? readCity(request);
   // Every text field is capped, not just q: each one is rendered, and the budget is the request's.
   const fields = [q, hint, city, to, note];
@@ -72,8 +73,11 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   const parsed = readQuery(q, hint);
   const sending = outbound(parsed.results);
   const extra: Record<string, string> = {};
-  // Only when the user typed one: a page view that merely read the cookie need not rewrite it.
-  if (typedCity !== null && typedCity.trim() !== "") extra["Set-Cookie"] = setCity(typedCity);
+  // Only what the user actually typed or picked: a page view that merely read a cookie need not
+  // rewrite it. Two Set-Cookie headers need an array, which Headers.append builds below.
+  const cookies: string[] = [];
+  if (typedCity !== null && typedCity.trim() !== "") cookies.push(setCity(typedCity));
+  if (typedCountry !== null && typedCountry.trim() !== "") cookies.push(setCountry(country.code));
 
   let suppliers: string | undefined;
   let nonce: string | undefined;
@@ -131,7 +135,9 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   // Only a page that actually runs the Maps script relaxes the CSP for it. Every other page,
   // including a signed-in page whose search found nothing to pin, keeps today's headers.
   const base = nonce === undefined ? PAGE_HEADERS : mapPageHeaders(nonce);
-  return new Response(html, { status: 200, headers: { ...base, ...extra } });
+  const headers = new Headers({ ...base, ...extra });
+  for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+  return new Response(html, { status: 200, headers });
 }
 
 function handleParse(url: URL): Response {

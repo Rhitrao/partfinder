@@ -328,6 +328,14 @@ p { margin: .5rem 0; }
 .lede { margin-bottom: 1.25rem; }
 form { display: flex; flex-direction: column; gap: .35rem; }
 label { font-weight: 600; }
+.ask textarea { min-height: 7rem; }
+.primary { font-size: 1.05rem; padding: .85rem; min-height: 44px; }
+.more { margin-top: .75rem; }
+.more summary { cursor: pointer; font-weight: 600; padding: .4rem 0; min-height: 44px; }
+.more > * { margin-top: .5rem; }
+.how { margin-top: 2.5rem; font-size: .9rem; opacity: .85; }
+.how summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
+:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
 textarea, input, select, button {
   font: inherit;
   width: 100%;
@@ -414,25 +422,43 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 @media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
 `.trim();
 
-function renderForm(q: string, hint: string, country: Country, city: string): string {
+/**
+ * The ask: a paste box, a city, one button.
+ *
+ * Everything else the page can take - country, a brand hint, a note for suppliers - is behind
+ * "More options", because none of it is needed to get an answer and all of it competes with the
+ * one thing that is. The country list is plain names: which Google domain a link-out uses is
+ * plumbing, and the UX principles say plumbing is never shown.
+ *
+ * The form stays open past this point: the product cards carry a quantity input each, and they
+ * have to submit with the query. renderPage closes it after the cards.
+ */
+function renderAsk(q: string, hint: string, country: Country, city: string, note: string): string {
   const options = COUNTRIES.map(
     (c) =>
       `<option value="${escapeHtml(c.code)}"${c.code === country.code ? " selected" : ""}>` +
-      `${escapeHtml(c.name)} (${escapeHtml(c.domain)})</option>`,
-  ).join("\n        ");
-  return `<form method="GET" action="/parts/">
-      <label for="q">Paste part numbers or a WhatsApp message</label>
-      <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">${escapeHtml(q)}</textarea>
-      <label for="hint">Brand or machine (optional)</label>
-      <input id="hint" name="hint" type="text" value="${escapeHtml(hint)}" placeholder="Brand or machine (optional)">
-      <label for="city">City (optional)</label>
-      <input id="city" name="city" type="text" value="${escapeHtml(city)}" placeholder="City (optional)">
-      <label for="country">Country</label>
-      <select id="country" name="country">
-        ${options}
-      </select>
-      <button type="submit">Identify</button>
-    </form>`;
+      `${escapeHtml(c.name)}</option>`,
+  ).join("\n          ");
+  return `<form method="GET" action="/parts/" class="ask">
+      <label for="q">Paste a WhatsApp message or part numbers</label>
+      <textarea id="q" name="q" rows="5" autofocus
+        placeholder="Paste a WhatsApp message or part numbers">${escapeHtml(q)}</textarea>
+      <label for="city">City</label>
+      <input id="city" name="city" type="text" value="${escapeHtml(city)}" placeholder="e.g. Bengaluru"
+        autocomplete="address-level2">
+      <button type="submit" class="primary">Find parts &amp; suppliers</button>
+      <div id="pf-locate"></div>
+      <details class="more">
+        <summary>More options</summary>
+        <label for="country">Country</label>
+        <select id="country" name="country">
+          ${options}
+        </select>
+        <label for="hint">Brand or machine</label>
+        <input id="hint" name="hint" type="text" value="${escapeHtml(hint)}" placeholder="e.g. JCB 3CX">
+        <label for="note">Note for suppliers</label>
+        <input id="note" name="note" type="text" value="${escapeHtml(note)}" placeholder="e.g. urgent, need by Friday">
+      </details>`;
 }
 
 function renderCandidate(candidate: ParseResult["candidates"][number]): string {
@@ -690,46 +716,57 @@ export interface PageInput {
   tail?: string;
 }
 
+/** Moved out of the main flow: true, needed once, and not what the user came for. */
+const HOW_IT_WORKS = `<details class="how">
+        <summary>How it works</summary>
+        <p>Partfinder reads each number and matches it against manufacturers' known numbering
+        formats. That is a match on the shape of the number, not a confirmed identification: no
+        catalogue or document has been checked. Suppliers confirm fitment.</p>
+        <p>Suppliers are shops Google lists for those brands in your city. Being listed is not a
+        claim that a shop stocks your part.</p>
+        <p>No prices, stock or lead times are shown: industrial spares are quoted per account,
+        never published.</p>
+        <p>Nothing you type is stored or logged. Not affiliated with any manufacturer; brand names
+        identify the parts they make.</p>
+      </details>`;
+
 /** The whole page, as one HTML document. */
 export function renderPage(input: PageInput): string {
-  const { q, hint, country, city } = input;
+  const { q, hint, country, city, note } = input;
   const trimmed = q.trim();
-  const { hints, results, truncated } = input.parsed ?? readQuery(q, hint);
+  const { results, truncated } = input.parsed ?? readQuery(q, hint);
 
-  const sections: string[] = [];
-  if (input.notice) sections.push(`<p class="note">${escapeHtml(input.notice)}</p>`);
-  sections.push(renderForm(q, hint, country, city));
+  // One form from the paste box to the last product card: the quantity inputs live on the cards
+  // and have to submit with the query. Anything with a form of its own sits after it closes.
+  const form: string[] = [renderAsk(q, hint, country, city, note)];
   if (trimmed !== "") {
-    if (hints.length > 0) {
-      sections.push(`<p class="hints">Hints used: ${escapeHtml(hints.join(", "))}</p>`);
-    }
     if (truncated > 0) {
-      sections.push(
+      form.push(
         `<p class="note">Showing the first ${MAX_CARDS} numbers. ${truncated} more were not read.</p>`,
       );
     }
-    sections.push(renderResults(results, country, city));
-    sections.push(renderSend(input, results));
-    // Below the cards, because the answer to "what is this number" comes before "who sells it".
-    if (input.suppliers) sections.push(input.suppliers);
+    form.push(renderResults(results, country, city));
   }
+  form.push("</form>");
+
+  const after: string[] = [];
+  if (trimmed !== "") {
+    if (input.suppliers) after.push(input.suppliers);
+    after.push(renderSend(input, results));
+  }
+
+  const sections = [
+    ...(input.notice ? [`<p class="note">${escapeHtml(input.notice)}</p>`] : []),
+    form.join("\n      "),
+    ...after,
+  ];
 
   return renderDocument(`<main>
       <h1>Partfinder</h1>
-      <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
-      likely manufacturer, helps you check the part and find where to buy it, and drafts the
-      requirement for WhatsApp or email.</p>
+      <p class="lede">Paste a customer's message. Get the parts, nearby suppliers, and ready
+      WhatsApp messages.</p>
       ${sections.join("\n      ")}
-      <section class="notes">
-        <h2>How to read this</h2>
-        <p>A format guess means the number matches a manufacturer's known numbering format, and
-        nothing more. No catalogue, document or page has been checked, so it is not a confirmed
-        identification.</p>
-        <p>No prices, stock or lead times are shown: industrial spares are quoted per account,
-        never published.</p>
-        <p>Identification aid only. Confirm fitment with your supplier.</p>
-        <p>Not affiliated with any manufacturer. Brand names identify the parts they make.</p>
-      </section>
+      ${HOW_IT_WORKS}
     </main>`, {
     ...(input.nonce === undefined ? {} : { nonce: input.nonce }),
     ...(input.tail === undefined ? {} : { tail: input.tail }),

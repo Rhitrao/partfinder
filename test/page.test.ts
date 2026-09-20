@@ -39,20 +39,31 @@ const cards = (html: string) =>
 const oems = (html: string) => [...html.matchAll(/<p class="oem">([^<]*)<\/p>/g)].map((m) => m[1]);
 
 describe("GET /parts/ with no q", () => {
-  it("renders the form", async () => {
+  it("asks for a paste and a city, and nothing else in front", async () => {
     const html = await page();
-    expect(html).toContain('<form method="GET" action="/parts/">');
+    expect(html).toContain('<form method="GET" action="/parts/" class="ask">');
     expect(html).toContain('name="q"');
-    expect(html).toContain("Paste part numbers or a WhatsApp message");
-    expect(html).toContain('name="hint"');
-    expect(html).toContain("Brand or machine (optional)");
-    expect(html).toContain("Identify");
+    expect(html).toContain("Paste a WhatsApp message or part numbers");
+    expect(html).toContain("autofocus");
+    expect(html).toContain('name="city"');
+    expect(html).toContain("e.g. Bengaluru");
+    expect(html).toContain("Find parts &amp; suppliers");
   });
 
-  it("defaults the country to India", async () => {
+  it("keeps country, hint and note behind More options", async () => {
     const html = await page();
-    expect(html).toContain('<option value="IN" selected>India (google.co.in)</option>');
+    const more = html.slice(html.indexOf("<details class=\"more\">"), html.indexOf("</details>"));
+    for (const field of ['name="country"', 'name="hint"', 'name="note"']) {
+      expect(more, field).toContain(field);
+    }
+  });
+
+  it("defaults the country to India, by name and not by Google domain", async () => {
+    const html = await page();
+    expect(html).toContain('<option value="IN" selected>India</option>');
     expect(html).not.toContain('value="AE" selected');
+    // The search domain is plumbing: it belongs in a link, never on the page.
+    expect(html).not.toContain("google.co.in");
   });
 
   it("shows no results and no WhatsApp button", async () => {
@@ -63,9 +74,11 @@ describe("GET /parts/ with no q", () => {
 
   it("carries the fixed text", async () => {
     const html = await page();
-    expect(html).toContain("quoted per account");
-    expect(html).toContain("Identification aid only. Confirm fitment with your supplier.");
-    expect(html).toContain("Not affiliated with any manufacturer.");
+    // All of it now lives behind "How it works", out of the way of the job.
+    const how = html.slice(html.indexOf('<details class="how">'));
+    expect(how).toContain("quoted per account");
+    expect(how).toContain("Suppliers confirm fitment.");
+    expect(how).toContain("Not affiliated with any manufacturer");
   });
 
   it("has no client-side JavaScript", async () => {
@@ -255,7 +268,8 @@ describe("the hint field", () => {
   it("ranks Hitachi first for 3200677 with hint hitachi", async () => {
     const withHint = await page(`?q=3200677&hint=hitachi`);
     expect(oems(withHint)[0]).toBe("Hitachi");
-    expect(withHint).toContain("Hints used: Hitachi");
+    // The hint changed the ranking; the page no longer narrates that it used one.
+    expect(withHint).not.toContain("Hints used");
 
     const without = await page(q("3200677"));
     expect(oems(without)[0]).toBe("Caterpillar");

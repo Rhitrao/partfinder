@@ -235,8 +235,8 @@ describe("the inline supplier search", () => {
       ),
     );
     const html = await (await signedIn(`/parts/${SEARCH}`)).text();
-    // Scoped to the section: the step 4 send box above it always offers a WhatsApp contact picker.
-    const shops = html.slice(html.indexOf('class="suppliers"'));
+    // Scoped to the section: "Other ways to send" below it always offers a WhatsApp picker.
+    const shops = html.slice(html.indexOf('class="suppliers"'), html.indexOf('class="send"'));
     expect(shops).toContain('href="tel:09876543210"');
     expect(shops).not.toContain("wa.me");
   });
@@ -267,23 +267,28 @@ describe("the inline supplier search", () => {
   });
 });
 
-describe("the remembered city", () => {
+describe("the remembered city and country", () => {
   it("is set when one is typed, and prefills the field next time", async () => {
     stubFetch(searchReply);
     const res = await signedIn(`/parts/${SEARCH}`);
-    expect(res.headers.get("Set-Cookie")).toBe(
+    // Two cookies, so they are read as a list: Headers.get() would join them with a comma.
+    expect(res.headers.getSetCookie()).toEqual([
       "pf_city=Bengaluru; HttpOnly; Secure; SameSite=Lax; Path=/parts/; Max-Age=2592000",
-    );
+      "pf_country=IN; HttpOnly; Secure; SameSite=Lax; Path=/parts/; Max-Age=2592000",
+    ]);
 
     // Same query, no city in the URL: the cookie supplies it, and the search still runs.
     const calls = stubFetch(searchReply);
-    const back = await signedIn(`/parts/?q=${encodeURIComponent(Q)}`, "pf_city=Bengaluru");
+    const back = await signedIn(
+      `/parts/?q=${encodeURIComponent(Q)}`,
+      "pf_city=Bengaluru; pf_country=IN",
+    );
     const html = await back.text();
     expect(calls).toHaveLength(3);
     expect(html).toContain('id="city" name="city" type="text" value="Bengaluru"');
     expect(html).toContain("<h2>Suppliers near Bengaluru</h2>");
     // Nothing was typed, so nothing is rewritten.
-    expect(back.headers.get("Set-Cookie")).toBe(null);
+    expect(back.headers.getSetCookie()).toEqual([]);
   });
 });
 
