@@ -19,8 +19,9 @@ export const MAX_SEARCHES = MAX_GROUPS + 1;
 /** Vendors the user may ask at once. */
 export const MAX_PICKS = 5;
 
-/** Vendors listed on the page. Four searches can return forty; nobody reads forty. */
-export const MAX_LISTED = 20;
+/** Suppliers listed on the page. Four searches can return forty; nobody reads forty, and every
+ * one of them is a map pin. */
+export const MAX_LISTED = 15;
 
 /** One manufacturer, and the numbers that were read as its parts. */
 export interface BrandGroup {

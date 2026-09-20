@@ -24,7 +24,7 @@ function page(title: string, body: string): string {
       <h1>${title}</h1>
       ${body}
     </main>`,
-    LEGAL_STYLE,
+    { extraStyle: LEGAL_STYLE },
   );
 }
 

@@ -57,7 +57,7 @@ export const VENDOR_STYLE = `
 
 /** The whole vendor document: the shared shell, plus the vendor rules. */
 export function renderVendorDocument(main: string): string {
-  return renderDocument(main, VENDOR_STYLE);
+  return renderDocument(main, { extraStyle: VENDOR_STYLE });
 }
 
 /** The same button-shaped link the public page uses. */

@@ -215,14 +215,30 @@ describe("the vendor search", () => {
       expect(call.method).toBe("POST");
       expect(call.headers["X-Goog-Api-Key"]).toBe(env.GOOGLE_PLACES_KEY);
       expect(call.headers["X-Goog-FieldMask"]).toBe(
-        "places.id,places.displayName,places.formattedAddress,places.googleMapsUri",
+        "places.id,places.displayName,places.formattedAddress,places.location," +
+          "places.googleMapsUri,places.internationalPhoneNumber,places.nationalPhoneNumber," +
+          "places.websiteUri,places.rating,places.userRatingCount",
       );
       expect(call.body).toMatchObject({ regionCode: "IN", languageCode: "en", pageSize: 10 });
     }
   });
 
-  it("asks for no field that costs more than a Pro row", async () => {
-    for (const field of ["hone", "ebsite", "ating", "eview", "pening", "rice"]) {
+  it("asks for nothing beyond what a supplier row and its pin need", async () => {
+    // Since step 6 this is the Enterprise tier, because of the phone and website fields. The list
+    // is closed: anything added here costs money on every search, so it is asserted whole.
+    expect(TEXT_SEARCH_FIELD_MASK.split(",")).toEqual([
+      "places.id",
+      "places.displayName",
+      "places.formattedAddress",
+      "places.location",
+      "places.googleMapsUri",
+      "places.internationalPhoneNumber",
+      "places.nationalPhoneNumber",
+      "places.websiteUri",
+      "places.rating",
+      "places.userRatingCount",
+    ]);
+    for (const field of ["review", "openingHours", "priceLevel", "photos", "editorialSummary"]) {
       expect(TEXT_SEARCH_FIELD_MASK).not.toContain(field);
     }
   });

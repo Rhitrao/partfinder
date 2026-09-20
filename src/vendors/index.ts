@@ -28,7 +28,7 @@ const LOGOUT_PATH = "/parts/vendors/logout";
 export const CONTACT_PATH = "/parts/vendors/contact";
 
 /** The only paths a successful login may send a browser to. */
-const RETURNABLE_PATHS: readonly string[] = [VENDORS_PATH, CONTACT_PATH];
+const RETURNABLE_PATHS: readonly string[] = ["/parts/", VENDORS_PATH, CONTACT_PATH];
 
 /**
  * Bounds the work one request can ask for. A full vendor list submits one scope field per shop
@@ -249,7 +249,12 @@ export async function handleVendors(
 
   if (path === LOGIN_PATH) {
     if (request.method === "POST") return handleLogin(request, env);
-    if (request.method === "GET") return redirect(VENDORS_PATH);
+    // GET is the passcode form itself, reached from the "Sign in to see suppliers here" line. It
+    // carries q, city and country so that signing in lands back on the page that offered it.
+    if (request.method === "GET") {
+      const search = vendorQuery(url.searchParams);
+      return html(renderGate(safeNext(search === "" ? "/parts/" : `/parts/?${search}`)));
+    }
     return notAllowed("POST");
   }
   if (request.method !== "GET") return notAllowed("GET");

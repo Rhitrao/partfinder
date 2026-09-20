@@ -95,3 +95,32 @@ export function setCookie(token: string): string {
 export function clearCookie(): string {
   return `${COOKIE_NAME}=; ${COOKIE_ATTRIBUTES}; Max-Age=0`;
 }
+
+/** Holds the last city typed, so a returning phone does not have to type it again. */
+export const CITY_COOKIE = "pf_city";
+
+/** Cities are short. A longer value is somebody's idea, not a city, and is ignored. */
+const MAX_CITY = 80;
+
+/**
+ * The remembered city, or "". HttpOnly as well as the attributes the step prompt lists: no script
+ * on the page reads it, and the server is the only thing that needs it.
+ */
+export function readCity(request: Request): string {
+  const value = readCookie(request.headers.get("Cookie"), CITY_COOKIE);
+  if (value === null) return "";
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+  return decoded.length > MAX_CITY ? "" : decoded.trim();
+}
+
+export function setCity(city: string): string {
+  return (
+    `${CITY_COOKIE}=${encodeURIComponent(city.trim().slice(0, MAX_CITY))}; ` +
+    `${COOKIE_ATTRIBUTES}; Max-Age=${COOKIE_MAX_AGE}`
+  );
+}

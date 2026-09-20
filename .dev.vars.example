@@ -1,9 +1,14 @@
 # Copy this file to .dev.vars for `npx wrangler dev`, and put the real values there.
 # .dev.vars is in .gitignore and must stay there: these are secrets, and secrets never go in the
-# repo. In Cloudflare the same two names are Worker secrets, set with `wrangler secret put`.
+# repo. In Cloudflare the same three names are Worker secrets, set with `wrangler secret put`.
 
 # A Google Maps key restricted to Places API (New).
 GOOGLE_PLACES_KEY="replace-me-places-api-new-key"
+
+# A Google Maps browser key, restricted to https://rohitrao.in/parts/* and the Maps JavaScript
+# API. This one is rendered into the page on purpose; its referrer and API restrictions, set in
+# Google Cloud, are what protect it. It is not interchangeable with the key above.
+GOOGLE_MAPS_BROWSER_KEY="replace-me-maps-javascript-browser-key"
 
 # The shared passcode for /parts/vendors. Changing it signs every browser out.
 VENDOR_PASSCODE="replace-me-passcode"

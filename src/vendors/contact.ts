@@ -15,54 +15,11 @@ import {
   type Country,
 } from "../page";
 import type { ParseResult } from "../parse";
+import { NO_PHONE, WHATSAPP_LABEL, phoneFor } from "./phone";
 import { PlacesError, placeDetails, type PlaceContact, type PlacesFailure } from "./places";
 import { googleMapsBox, hidden, renderVendorDocument, vendorLink } from "./page";
 import { MAX_PICKS, SCOPE_ALL, scopedParts } from "./search";
 
-/** A plausible international number, so a mangled one never becomes a wa.me link. */
-const DIALLABLE = /^\d{8,15}$/;
-
-export interface Phone {
-  /** What to print. Empty when Google lists no number at all. */
-  display: string;
-  /** The tel: target, or null when there is no number. */
-  tel: string | null;
-  /** Digits for wa.me, or null when the number has no country code to dial internationally. */
-  whatsapp: string | null;
-}
-
-function digitsOf(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-/**
- * What can be done with the number Google returned. Both things, whenever the number allows it.
- *
- * There is no guess here about whether a number is a mobile. India's mobile shape - +91 then ten
- * digits starting 6 to 9 - does not separate them: Bengaluru's own area code is 80, so half the
- * landlines in the city Partfinder was written for satisfy it. Guessing wrong in one direction
- * hides a working WhatsApp number, and in the other it labels a landline as a mobile, so the page
- * offers both and says which is which. The only number that gets no WhatsApp link is one with no
- * country code, which cannot be dialled internationally at all.
- */
-export function phoneFor(contact: PlaceContact): Phone {
-  const international = contact.internationalPhone.trim();
-  const national = contact.nationalPhone.trim();
-  const display = international !== "" ? international : national;
-  if (display === "") return { display: "", tel: null, whatsapp: null };
-
-  if (!international.startsWith("+")) {
-    const local = national.replace(/[^\d+]/g, "");
-    return { display, tel: local === "" ? null : local, whatsapp: null };
-  }
-  const digits = digitsOf(international);
-  const tel = `+${digits}`;
-  return { display, tel, whatsapp: DIALLABLE.test(digits) ? digits : null };
-}
-
-/** Says the uncertainty out loud instead of resolving it. A shop may be on WhatsApp or may not. */
-export const WHATSAPP_LABEL = "WhatsApp (if they use it)";
-export const NO_PHONE = "Google lists no phone number for this shop.";
 export const DETAILS_FAILED = "Contact details didn't load for this shop.";
 
 export function tooManyPicked(count: number): string {
