@@ -37,6 +37,9 @@ export function resolveCountry(code: string | null): Country {
   return COUNTRIES.find((c) => c.code === wanted) ?? DEFAULT_COUNTRY;
 }
 
+/** Caps every text field on every page under /parts, keeping one request inside the CPU budget. */
+export const MAX_QUERY_LENGTH = 5000;
+
 /** At most this many spellings per number, in the search link and in the WhatsApp message. */
 const MAX_SPELLINGS = 6;
 
@@ -201,8 +204,15 @@ function messageBlock(result: ParseResult, index: number, maxSpellings: number):
  * the reader gets back to the full page.
  *
  * Kept within WHATSAPP_LIMIT by trimming spellings first, then whole numbers off the end.
+ *
+ * `greeting` is the opening words. It is "Hi" for a message the user addresses themselves, and
+ * "Hi <shop>" on the vendor contact page, where Partfinder knows who the message is going to.
  */
-export function requirementMessage(results: readonly ParseResult[], note = ""): string {
+export function requirementMessage(
+  results: readonly ParseResult[],
+  note = "",
+  greeting = "Hi",
+): string {
   const tokens = results.map((r) => r.input).join(" ");
   const tail = [
     ...(note.trim() === "" ? [] : [`Note: ${note.trim()}`]),
@@ -213,7 +223,7 @@ export function requirementMessage(results: readonly ParseResult[], note = ""): 
     const blocks = results.slice(0, count).map((r, i) => messageBlock(r, i, maxSpellings));
     const omitted = results.length - count;
     if (omitted > 0) blocks.push(`(+${omitted} more on the page)`);
-    return ["Hi, we have a requirement for:", ...blocks, ...tail].join("\n");
+    return [`${greeting}, we have a requirement for:`, ...blocks, ...tail].join("\n");
   };
 
   for (let maxSpellings = MAX_SPELLINGS; maxSpellings >= 0; maxSpellings--) {
@@ -225,6 +235,11 @@ export function requirementMessage(results: readonly ParseResult[], note = ""): 
     if (message.length <= WHATSAPP_LIMIT) return message;
   }
   return assemble(1, 0);
+}
+
+/** Enough rows to read the whole message without scrolling, within reason. */
+export function textareaRows(message: string): number {
+  return Math.min(20, Math.max(6, message.split("\n").length + 1));
 }
 
 /** Roughly the length an email subject can be before clients start truncating it. */
@@ -281,6 +296,21 @@ export function whatsappUrl(message: string, to = ""): string {
 /** encodeURIComponent never emits "+" for a space, so a mail client cannot misread the body. */
 export function mailtoUrl(subject: string, message: string): string {
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+}
+
+export const FIND_VENDORS = "Find vendors for these parts";
+
+/**
+ * The way in to /parts/vendors. It carries only the numbers outbound() passed, exactly as the
+ * WhatsApp message and its back-link do: never the pasted text, which can hold a customer name or
+ * a price. The city and country are the user's own settings, and the vendor page needs both.
+ */
+export function vendorsUrl(sending: readonly ParseResult[], country: Country, city: string): string {
+  const tokens = sending.map((r) => r.input).join(" ");
+  return (
+    `/parts/vendors/?q=${encodeURIComponent(tokens)}` +
+    `&city=${encodeURIComponent(city.trim())}&country=${encodeURIComponent(country.code)}`
+  );
 }
 
 const STYLE = `
@@ -350,6 +380,8 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .send label { display: block; margin-top: .75rem; font-weight: 600; }
 .send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
+.footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }
+.footer a { color: inherit; }
 .note { font-size: .9rem; opacity: .85; }
 @media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
 `.trim();
@@ -497,7 +529,7 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   const { q, hint, country, city, to, note } = input;
   const message = requirementMessage(sending, note);
   const digits = to.trim() === "" ? null : normaliseWhatsapp(to, country);
-  const rows = Math.min(20, Math.max(6, message.split("\n").length + 1));
+  const rows = textareaRows(message);
 
   const parts = [
     `<form method="GET" action="/parts/">
@@ -525,11 +557,48 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   if (to.trim() !== "" && digits === null) {
     parts.push(`<p class="note">${INVALID_NUMBER}</p>`);
   }
+  parts.push(link(vendorsUrl(sending, country, city), FIND_VENDORS));
 
   return `<section class="send">
         <h2>Send the requirement</h2>
         ${parts.join("\n        ")}
       </section>`;
+}
+
+/**
+ * Terms and privacy, on every page under /parts. Google's Places API policies require both to be
+ * publicly reachable from anywhere its data is used, and the rest of the site is no worse for it.
+ */
+const FOOTER = `<footer class="footer">
+      <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
+    </footer>`;
+
+/**
+ * The shared HTML shell for every page under /parts: one head, one stylesheet, no client-side
+ * JavaScript. `main` is the whole <main> element, indented to sit at four spaces. `extraStyle` is
+ * for rules only one page needs, so the public page does not carry the vendor pages' CSS.
+ */
+export function renderDocument(main: string, extraStyle = ""): string {
+  const style = extraStyle === "" ? STYLE : `${STYLE}\n${extraStyle.trim()}`;
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="${THEME_COLOR}">
+    <meta name="apple-mobile-web-app-title" content="Partfinder">
+    <link rel="manifest" href="/parts/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/parts/icon-192.png">
+    <title>Partfinder</title>
+    <style>${style}</style>
+  </head>
+  <body>
+    ${main}
+    ${FOOTER}
+  </body>
+</html>
+`;
 }
 
 export interface PageInput {
@@ -578,21 +647,7 @@ export function renderPage(input: PageInput): string {
     sections.push(renderSend(input, results));
   }
 
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex">
-    <meta name="theme-color" content="${THEME_COLOR}">
-    <meta name="apple-mobile-web-app-title" content="Partfinder">
-    <link rel="manifest" href="/parts/manifest.webmanifest">
-    <link rel="apple-touch-icon" href="/parts/icon-192.png">
-    <title>Partfinder</title>
-    <style>${STYLE}</style>
-  </head>
-  <body>
-    <main>
+  return renderDocument(`<main>
       <h1>Partfinder</h1>
       <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
       likely manufacturer, helps you check the part and find where to buy it, and drafts the
@@ -608,8 +663,5 @@ export function renderPage(input: PageInput): string {
         <p>Identification aid only. Confirm fitment with your supplier.</p>
         <p>Not affiliated with any manufacturer. Brand names identify the parts they make.</p>
       </section>
-    </main>
-  </body>
-</html>
-`;
+    </main>`);
 }

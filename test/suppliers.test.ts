@@ -8,7 +8,7 @@ import { renderWhereToBuy, resolveCountry } from "../src/page";
 import { extractHints, extractTokens, parse } from "../src/parse";
 
 const page = async (query: string): Promise<string> => {
-  const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${query}`));
+  const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${query}`), {});
   expect(res.status).toBe(200);
   return res.text();
 };

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index";
 
 const get = (path: string, init?: RequestInit) =>
-  worker.fetch(new Request(`https://rohitrao.in${path}`, init));
+  worker.fetch(new Request(`https://rohitrao.in${path}`, init), {});
 
 describe("11. X-Robots-Tag: noindex", () => {
   it("is on the parse endpoint", async () => {
