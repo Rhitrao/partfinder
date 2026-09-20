@@ -337,3 +337,13 @@ describe("when Google will not answer", () => {
     expect(html).toContain("Caterpillar parts shops on Google Maps");
   });
 });
+
+describe("what a redirect carries", () => {
+  it("carries the three parameters the page reads, and drops the rest", async () => {
+    const res = await get(
+      "/parts/vendors/?q=1u3352&city=Bengaluru&country=IN" +
+        "&v=leftover&scope_leftover=all&utm_source=somewhere",
+    );
+    expect(res.headers.get("Location")).toBe("/parts/?q=1u3352&city=Bengaluru&country=IN");
+  });
+});

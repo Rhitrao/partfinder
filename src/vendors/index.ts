@@ -20,11 +20,7 @@ export const CONTACT_PATH = "/parts/vendors/contact";
 /** The only path a successful login may send a browser to. */
 const RETURNABLE_PATHS: readonly string[] = [PAGE_PATH];
 
-/**
- * Bounds the work one request can ask for. A full vendor list submits one scope field per shop
- * whether or not it was ticked, so a twenty-shop page can reach forty-three parameters; this sits
- * above that and well below anything a browser would send by accident.
- */
+/** Bounds the work one request can ask for; a browser never sends more than a handful. */
 const MAX_PARAMS = 64;
 
 function html(body: string, status = 200, extra: Record<string, string> = {}): Response {
@@ -58,10 +54,13 @@ function notAllowed(allow: string): Response {
   });
 }
 
+/** The only parameters /parts/ reads, and so the only ones worth carrying to it. */
+const CARRIED: readonly string[] = ["q", "city", "country"];
+
 /**
- * The query string rebuilt from the parameters these pages actually use, each within the length
- * cap. Anything else a URL is carrying is dropped rather than copied forward, so nothing unknown
- * ever reaches a Location header or a form.
+ * The query string rebuilt from those three, each within the length cap. Anything else a URL is
+ * carrying is dropped rather than copied forward, so nothing unknown ever reaches a Location
+ * header or a form.
  */
 export function vendorQuery(params: URLSearchParams): string {
   const out = new URLSearchParams();
@@ -69,9 +68,7 @@ export function vendorQuery(params: URLSearchParams): string {
   for (const [key, value] of params) {
     if (seen++ >= MAX_PARAMS) break;
     if (value.length > MAX_QUERY_LENGTH) continue;
-    const known =
-      key === "q" || key === "city" || key === "country" || key === "v" || key.startsWith("scope_");
-    if (known) out.append(key, value);
+    if (CARRIED.includes(key)) out.append(key, value);
   }
   return out.toString();
 }
