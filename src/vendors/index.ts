@@ -12,8 +12,10 @@ import {
   CITY_REQUIRED,
   NOTHING_TO_SEARCH,
   NO_VENDOR_PICKED,
+  QUOTA_REACHED,
   UNAVAILABLE,
   WRONG_PASSCODE,
+  renderFallback,
   renderGate,
   renderVendorList,
   renderVendorSearch,
@@ -140,7 +142,15 @@ async function handleSearch(url: URL, env: Env): Promise<Response> {
 
   const { vendors, failure } = await findVendors(env.GOOGLE_PLACES_KEY, groups, country, city);
   if (failure !== null) {
-    return html(renderVendorSearch({ q, city, country, notice: UNAVAILABLE }));
+    return html(
+      renderVendorSearch({
+        q,
+        city,
+        country,
+        notice: failure === "quota" ? QUOTA_REACHED : UNAVAILABLE,
+        body: renderFallback(groups, country, city),
+      }),
+    );
   }
   const listed = vendors.slice(0, MAX_LISTED);
   return html(
@@ -201,7 +211,18 @@ async function handleContact(url: URL, env: Env): Promise<Response> {
 
   const { vendors, failure } = await fetchPicked(env.GOOGLE_PLACES_KEY, picks);
   if (failure !== null) {
-    return html(renderContact({ vendors: [], parts, q, city, country, notice: UNAVAILABLE }));
+    const { groups } = groupByOem(parts);
+    return html(
+      renderContact({
+        vendors: [],
+        parts,
+        q,
+        city,
+        country,
+        notice: failure === "quota" ? QUOTA_REACHED : UNAVAILABLE,
+        body: renderFallback(groups, country, city),
+      }),
+    );
   }
   return html(
     renderContact({ vendors, parts, q, city, country, ...(tooMany ? { notice: tooMany } : {}) }),

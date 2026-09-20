@@ -3,7 +3,14 @@
 // Server-rendered HTML, no client-side JavaScript, the same shell and stylesheet as the public
 // page. Nothing the user types here is stored or logged.
 
-import { COUNTRIES, escapeHtml, renderDocument, type Country } from "../page";
+import {
+  COUNTRIES,
+  escapeHtml,
+  mapsUrl,
+  renderDocument,
+  suppliersUrl,
+  type Country,
+} from "../page";
 import {
   MAX_PICKS,
   SCOPE_ALL,
@@ -95,8 +102,34 @@ export const NOTHING_TO_SEARCH =
 
 export const NO_VENDOR_PICKED = "No shop was ticked, so there is nobody to contact yet.";
 
-/** Never Google's own words. A page says what the user can do, not what went wrong at Google. */
-export const UNAVAILABLE = "Vendor search isn't available right now.";
+/**
+ * What a failed Google call says. Two messages, because a spent daily limit is worth naming and
+ * everything else is not: a missing key, a timeout, a 500 and a body that would not parse all say
+ * the same neutral thing. Neither carries a word of Google's own error, and neither is logged.
+ */
+export const QUOTA_REACHED = "Vendor search hit today's Google limit. Use the links below instead.";
+export const UNAVAILABLE = "Vendor search isn't available right now. Use the links below instead.";
+
+/**
+ * The fallback under either message: step 4's own link-outs, one set per brand group. These fetch
+ * nothing and need no key, so the page is still useful with Google's API shut off entirely.
+ */
+export function renderFallback(
+  groups: readonly BrandGroup[],
+  country: Country,
+  city: string,
+): string {
+  if (groups.length === 0) return "";
+  const blocks = groups.map((group) => {
+    const first = group.results[0]!;
+    return `<div class="group">
+        <h3>${escapeHtml(group.oem)}</h3>
+        ${vendorLink(suppliersUrl(first, country, city), `Find suppliers in ${country.name}`)}
+        ${vendorLink(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
+      </div>`;
+  });
+  return blocks.join("\n      ");
+}
 
 function renderSearchForm(input: VendorSearchInput): string {
   const { q, city, country } = input;

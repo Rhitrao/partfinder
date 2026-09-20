@@ -11,7 +11,8 @@ It runs as a Cloudflare Worker at `rohitrao.in/parts/`. The repo is public.
 ## What it does today
 
 Phase 0 is an offline page. Everything on it is computed from the number you typed and a table of
-manufacturer format rules. Nothing is fetched, nothing is stored, and no paid API is called.
+manufacturer format rules. Nothing is fetched and nothing is stored. The one exception is the
+vendor pages below, which are behind a passcode and call Google Places API (New).
 
 **The page, `GET /parts/`.** `GET /parts` redirects to it. One server-rendered HTML document,
 with no client-side JavaScript at all, because it is mostly read on a phone on a site or in a
@@ -36,6 +37,21 @@ such as a quantity. Partfinder has no phone number of its own; you pick who to s
 **5. Keep it.** `/parts/` has a web app manifest and icons, so it saves to a home screen as
 "Partfinder" and opens straight back to the page. There is no service worker: it is a shortcut,
 not offline mode.
+
+**6. Find vendors.** `GET /parts/vendors/`, linked from the bottom of the page and carrying only
+the numbers that were recognised, never what you pasted. This page is not public: it costs money
+per view, so it is behind a shared passcode. Give it a city and it asks Google Places API (New) for
+shops listed for each of your brands, plus one search that names no brand, and merges the answers
+into one list. A shop listed for two of your brands says so, and sorts above one listed for one.
+Tick up to five, choose whether each is asked about all your parts or only its own brands', and
+`GET /parts/vendors/contact` fetches their phone numbers and websites and writes one message per
+shop, addressed to it by name, for WhatsApp, a phone call or email.
+
+Being listed by Google is not a claim that a shop has your part. The page says so, above the list.
+Nothing is stored: a place id travels in a URL and nowhere else, no page is scraped, and no vendor
+list is kept. Google's listings are shown with its attribution. When Google will not answer - the
+daily limit, a timeout, no key - the page says so in its own words, never Google's, and falls back
+to the link-outs from section 3.
 
 **The API, `GET /parts/api/parse?q=<text>`.** The same parsing as JSON:
 
@@ -110,7 +126,16 @@ Everything Partfinder returns today is T5.
 
 ```
 src/index.ts      Worker entry and routing under /parts/, plus the manifest and icons
+src/env.ts        the two Worker secrets, both optional: the page works without either
+src/headers.ts    the response headers every page under /parts/ carries
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
+src/vendors/      the passcode-gated vendor pages
+  auth.ts         the passcode gate: a cookie derived from the passcode, nothing stored
+  places.ts       the Google Places API (New) client, and the only fetch in the Worker
+  search.ts       grouping the numbers by brand, and merging what came back
+  contact.ts      Place Details, the per-vendor message, and WhatsApp or call or email
+  page.ts         the vendor pages themselves
+  index.ts        routing under /parts/vendors
 src/parse.ts      token and hint extraction, normalisation, candidate ranking
 src/rules.ts      manufacturer format rules, as data
 src/hints.ts      brand and model words that hint at a manufacturer
@@ -134,6 +159,7 @@ without deploying.
 
 ```
 npm install
+cp .dev.vars.example .dev.vars   # then put real values in it; .dev.vars is never committed
 npm test              run the test suite (no network, no paid API calls)
 npm run typecheck     strict TypeScript check
 npm run sample        regenerate docs/sample-page.html
