@@ -15,15 +15,27 @@ manufacturer format rules. Nothing is fetched, nothing is stored, and no paid AP
 
 **The page, `GET /parts/`.** `GET /parts` redirects to it. One server-rendered HTML document,
 with no client-side JavaScript at all, because it is mostly read on a phone on a site or in a
-yard. Paste into the box, optionally
-add a brand or machine, pick a country, and press Identify. You get:
+yard. Paste into the box, optionally add a brand or machine and a city, pick a country, and
+press Identify.
 
-- one card per number found in what you pasted, with the manufacturer or manufacturers it could be,
-  the canonical spelling, any suffix, and any warning about the reading;
-- a "Search all spellings" link that searches every spelling of that number at once, quoted and
-  joined with OR, on your country's search domain;
-- one WhatsApp button, which opens a message you can send to any supplier you choose. Partfinder
-  has no phone number of its own and no supplier list.
+**1. Identify.** One card per number found in what you pasted, with the manufacturer or
+manufacturers it could be, the canonical spelling, any suffix, and any warning about the reading.
+
+**2. Check.** On each card: search every spelling at once, see images of it — compare the shape
+before ordering — and search what machines it fits.
+
+**3. Where to buy.** A supplier search narrowed by your city and country, parts shops on Google
+Maps, and the manufacturer's own dealer locator where one has been confirmed. Every one of these
+is a link out. Partfinder holds no supplier list, fetches none of these sites, and vets nobody.
+
+**4. Send the requirement.** Below the cards, the requirement is drafted for you: a read-only box
+you can copy from, a WhatsApp chat straight to a supplier's number if you have one, the WhatsApp
+contact picker if you don't, and email. All four carry exactly the same text. You can add a note,
+such as a quantity. Partfinder has no phone number of its own; you pick who to send to.
+
+**5. Keep it.** `/parts/` has a web app manifest and icons, so it saves to a home screen as
+"Partfinder" and opens straight back to the page. There is no service worker: it is a shortcut,
+not offline mode.
 
 **The API, `GET /parts/api/parse?q=<text>`.** The same parsing as JSON:
 
@@ -75,9 +87,12 @@ sources are tried in. It never hides a result and is never stored on a record.
   labelled T5.
 - **Public data only,** and sources count as independent only across different domains. The same
   listing reposted on five domains counts once.
-- **What you paste stays yours.** Neither the pasted text nor the hint is logged, and the link in
-  the WhatsApp message carries only the part numbers Partfinder extracted, never the message you
-  pasted into it.
+- **What you paste stays yours.** Nothing you type is logged — not the pasted text, the hint, the
+  city, the supplier's number or the note — and the link inside the message carries only the part
+  numbers Partfinder extracted, never anything else you typed.
+- **Suppliers are a link out, never a list.** Google search, Google Images, Google Maps, a
+  manufacturer's official dealer locator, or your own contacts. Partfinder never stores, scrapes
+  or vets supplier data, and no supplier site is fetched when you load the page.
 
 ## Source tiers
 
@@ -94,14 +109,22 @@ Everything Partfinder returns today is T5.
 ## Layout
 
 ```
-src/index.ts      Worker entry and routing under /parts/
-src/page.ts       the /parts/ page: form, cards, search link, WhatsApp handoff
+src/index.ts      Worker entry and routing under /parts/, plus the manifest and icons
+src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/parse.ts      token and hint extraction, normalisation, candidate ranking
 src/rules.ts      manufacturer format rules, as data
 src/hints.ts      brand and model words that hint at a manufacturer
+src/dealers.ts    manufacturers' own dealer locators, as data
+src/manifest.ts   the web app manifest and the theme colour
+src/icons.ts      generated: the home-screen icons, base64, served from the bundle
 scripts/sample.ts regenerates docs/sample-page.html
+scripts/icons.ts  draws the icons and regenerates src/icons.ts and docs/icon-*.png
 test/             vitest; no network; public part numbers only
 ```
+
+`src/dealers.ts` is empty until each locator URL has actually been opened and confirmed to be
+that manufacturer's own dealer-locator page. "Authorised dealers" is a claim, and a guessed URL
+under that label is worse than no link. Adding one is a data commit; the link renders by itself.
 
 Format rules are hypotheses, and are written as data so they can be corrected without touching
 code. `docs/sample-page.html` is the page's exact output for one query, committed so it can be read
@@ -114,6 +137,7 @@ npm install
 npm test              run the test suite (no network, no paid API calls)
 npm run typecheck     strict TypeScript check
 npm run sample        regenerate docs/sample-page.html
+npm run icons         redraw the home-screen icons
 npx wrangler dev      run the Worker locally
 ```
 
