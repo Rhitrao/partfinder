@@ -34,11 +34,15 @@ function respond(status: number, body: unknown, extra: Record<string, string> = 
 function handlePage(url: URL): Response {
   const q = url.searchParams.get("q") ?? "";
   const hint = url.searchParams.get("hint") ?? "";
+  const city = url.searchParams.get("city") ?? "";
   const country = resolveCountry(url.searchParams.get("country"));
-  const tooLong = q.length > MAX_QUERY_LENGTH || hint.length > MAX_QUERY_LENGTH;
+  // Every text field is capped, not just q: each one is rendered, and the budget is the request's.
+  const fields = [q, hint, city];
+  const tooLong = fields.some((value) => value.length > MAX_QUERY_LENGTH);
   const html = renderPage({
     q: tooLong ? "" : q,
     hint: tooLong ? "" : hint,
+    city: tooLong ? "" : city,
     country,
     ...(tooLong
       ? { notice: `That is longer than ${MAX_QUERY_LENGTH} characters. Paste a shorter list.` }

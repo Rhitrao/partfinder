@@ -2,6 +2,7 @@
 // Offline only. Everything on the page comes from the parser in parse.ts; nothing is fetched,
 // stored or logged. Every piece of user input is HTML-escaped wherever it appears.
 
+import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
 import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
 
 export interface Country {
@@ -147,6 +148,29 @@ export function fitsUrl(result: ParseResult, country: Country): string {
   return googleUrl(country, `${spellingQuery(result)} fits models`);
 }
 
+/** Manufacturer links per card, so a two-candidate number does not become a wall of buttons. */
+const MAX_OEM_LINKS = 2;
+
+/** A general supplier search, narrowed by city when the user gave one. */
+export function suppliersUrl(result: ParseResult, country: Country, city: string): string {
+  const query = [spellingQuery(result), "supplier", city.trim(), country.name]
+    .filter((part) => part !== "")
+    .join(" ");
+  return googleUrl(country, query);
+}
+
+/**
+ * Shops on Google Maps. With a city this searches that city by name; without one it falls back
+ * to "near me", which Maps resolves on the user's device, not here.
+ */
+export function mapsUrl(oem: string, country: Country, city: string): string {
+  const where = city.trim();
+  const query = where === ""
+    ? `${oem} spare parts near me`
+    : `${oem} spare parts ${where} ${country.name}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 /** The manufacturers a number could be, in ranked order, without duplicates. */
 function oems(result: ParseResult): string[] {
   return [...new Set(result.candidates.map((c) => c.oem))];
@@ -268,7 +292,7 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 @media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
 `.trim();
 
-function renderForm(q: string, hint: string, country: Country): string {
+function renderForm(q: string, hint: string, country: Country, city: string): string {
   const options = COUNTRIES.map(
     (c) =>
       `<option value="${escapeHtml(c.code)}"${c.code === country.code ? " selected" : ""}>` +
@@ -279,6 +303,8 @@ function renderForm(q: string, hint: string, country: Country): string {
       <textarea id="q" name="q" rows="4" placeholder="Paste part numbers or a WhatsApp message">${escapeHtml(q)}</textarea>
       <label for="hint">Brand or machine (optional)</label>
       <input id="hint" name="hint" type="text" value="${escapeHtml(hint)}" placeholder="Brand or machine (optional)">
+      <label for="city">City (optional)</label>
+      <input id="city" name="city" type="text" value="${escapeHtml(city)}" placeholder="City (optional)">
       <label for="country">Country</label>
       <select id="country" name="country">
         ${options}
@@ -322,7 +348,35 @@ function renderCheck(result: ParseResult, country: Country): string {
         </div>`;
 }
 
-function renderCard(result: ParseResult, country: Country): string {
+/**
+ * Where to buy: a supplier search, shops on Maps, and the manufacturer's own dealer locator
+ * where one has been confirmed. Every one of these is a link out. Partfinder holds no supplier
+ * list, fetches none of these sites, and vets nobody.
+ */
+export function renderWhereToBuy(
+  result: ParseResult,
+  country: Country,
+  city: string,
+  dealers: readonly DealerLocator[] = DEALER_LOCATORS,
+): string {
+  const makers = oems(result).slice(0, MAX_OEM_LINKS);
+  const links = [link(suppliersUrl(result, country, city), `Find suppliers in ${country.name}`)];
+  for (const oem of makers) {
+    links.push(link(mapsUrl(oem, country, city), `${oem} parts shops on Google Maps`));
+  }
+  for (const oem of makers) {
+    const locator = findDealerLocator(oem, country.code, dealers);
+    if (locator) links.push(link(locator.url, `Authorised ${oem} dealers`));
+  }
+  return `<div class="group">
+          <h3>Where to buy</h3>
+          ${links.join("\n          ")}
+          <p class="grouphint">These links open other sites. Partfinder doesn't store or vet
+          suppliers.</p>
+        </div>`;
+}
+
+function renderCard(result: ParseResult, country: Country, city: string): string {
   const body =
     result.candidates.length > 0
       ? result.candidates.map(renderCandidate).join("\n        ")
@@ -335,17 +389,20 @@ function renderCard(result: ParseResult, country: Country): string {
     oems(result).length > 1 ? `\n        <p class="narrow">${NARROW_PROMPT}</p>` : "";
   const note = outboundNote(result);
   const excluded = note === null ? "" : `\n        <p class="excluded">${note}</p>`;
-  const groups = result.candidates.length > 0 ? `\n        ${renderCheck(result, country)}` : "";
+  const groups =
+    result.candidates.length > 0
+      ? `\n        ${renderCheck(result, country)}\n        ${renderWhereToBuy(result, country, city)}`
+      : "";
   return `<section class="card">
         <h2>${escapeHtml(result.input)}</h2>
         ${body}${narrow}${excluded}${groups}
       </section>`;
 }
 
-function renderResults(results: readonly ParseResult[], country: Country): string {
+function renderResults(results: readonly ParseResult[], country: Country, city: string): string {
   const cards =
     results.length > 0
-      ? results.map((r) => renderCard(r, country)).join("\n      ")
+      ? results.map((r) => renderCard(r, country, city)).join("\n      ")
       : `<section class="card">
         <p class="answer">Not determined: nothing in what you pasted looks like a part number.</p>
       </section>`;
@@ -362,13 +419,15 @@ export interface PageInput {
   q: string;
   hint: string;
   country: Country;
+  /** Narrows the supplier and Maps searches. Never stored, and never put in the back-link. */
+  city: string;
   /** Shown above the form, e.g. when the input was too long. Not user text. */
   notice?: string;
 }
 
 /** The whole page, as one HTML document. */
 export function renderPage(input: PageInput): string {
-  const { q, hint, country } = input;
+  const { q, hint, country, city } = input;
   const trimmed = q.trim();
   let results: ParseResult[] = [];
   let hints: string[] = [];
@@ -384,7 +443,7 @@ export function renderPage(input: PageInput): string {
 
   const sections: string[] = [];
   if (input.notice) sections.push(`<p class="note">${escapeHtml(input.notice)}</p>`);
-  sections.push(renderForm(q, hint, country));
+  sections.push(renderForm(q, hint, country, city));
   if (trimmed !== "") {
     if (hints.length > 0) {
       sections.push(`<p class="hints">Hints used: ${escapeHtml(hints.join(", "))}</p>`);
@@ -394,7 +453,7 @@ export function renderPage(input: PageInput): string {
         `<p class="note">Showing the first ${MAX_CARDS} numbers. ${truncated} more were not read.</p>`,
       );
     }
-    sections.push(renderResults(results, country));
+    sections.push(renderResults(results, country, city));
   }
 
   return `<!doctype html>
