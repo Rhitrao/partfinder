@@ -389,6 +389,9 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
 .sname { font-weight: 700; margin: 0; }
 .saddr, .sfound, .scount, .srating { font-size: .9rem; margin: .15rem 0; opacity: .85; }
+.sphone { font-family: ui-monospace, monospace; margin: .35rem 0 .15rem; }
+.shop .whatsapp { margin: .4rem 0 0; }
+.shop .link { margin-top: .4rem; }
 .signin { font-weight: 600; }
 .warn { font-weight: 600; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }

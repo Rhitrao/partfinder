@@ -3,11 +3,12 @@
 // Everything here is rendered from one Text Search round. Nothing is stored, nothing is logged,
 // and a place id travels no further than the links on this page.
 
-import { escapeHtml, type Country } from "../page";
+import { escapeHtml, requirementMessage, whatsappUrl, type Country } from "../page";
 import type { ParseResult } from "../parse";
+import { NO_PHONE, WHATSAPP_LABEL, phoneFor } from "./phone";
 import type { PlacesFailure } from "./places";
 import { renderFallback } from "./page";
-import type { BrandGroup, Vendor } from "./search";
+import { scopeOnly, scopedParts, type BrandGroup, type Vendor } from "./search";
 
 /**
  * Google's attribution for Places results shown without a Google map, and for the map itself.
@@ -111,12 +112,82 @@ export function renderSuppliers(input: SuppliersInput): string {
       </section>`;
 }
 
-/** One shop. Filled in by the next commit; the number is what ties it to its map pin. */
+function link(href: string, text: string, className = "link"): string {
+  return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+}
+
+/** "Caterpillar", "Caterpillar and JCB", "Caterpillar, JCB and Komatsu". */
+export function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** "4.3 (128 ratings)", or "" when the key's tier returned no rating. */
+function ratingLine(vendor: Vendor): string {
+  const { rating, ratingCount } = vendor.place;
+  if (rating === null) return "";
+  const count = ratingCount === null ? "" : ` (${ratingCount} ${ratingCount === 1 ? "rating" : "ratings"})`;
+  return `<p class="srating">Rated ${escapeHtml(rating.toFixed(1))} on Google${escapeHtml(count)}</p>`;
+}
+
+/**
+ * One shop. The number is what ties the row to its map pin, so it is shown, not just used as an
+ * id, and the list is an <ol> whose markers are hidden in favour of it.
+ *
+ * Two WhatsApp buttons when the shop came back for some of the brands but not all: the first asks
+ * about everything on the page, the second only about the brands Google listed this shop for. The
+ * user picks; step 5's radio buttons and its second page are both gone.
+ */
 function renderShop(vendor: Vendor, number: number, input: SuppliersInput): string {
-  void input;
-  const { place } = vendor;
+  const { place, brands } = vendor;
+  const { parts, groups } = input;
+  const name = place.name === "" ? "Unnamed listing" : place.name;
+  const phone = phoneFor(place);
+
+  const lines = [
+    `<p class="sname">${number}. ${escapeHtml(name)}</p>`,
+  ];
+  if (place.address !== "") lines.push(`<p class="saddr">${escapeHtml(place.address)}</p>`);
+  const rated = ratingLine(vendor);
+  if (rated !== "") lines.push(rated);
+  lines.push(
+    brands.length > 0
+      ? `<p class="sfound">Found for: ${escapeHtml(brands.join(", "))}</p>`
+      : `<p class="sfound">Found by the multi-brand search, not by a brand name.</p>`,
+  );
+  if (groups.length > 1 && brands.length > 0) {
+    lines.push(`<p class="scount">Appeared for ${brands.length} of your ${groups.length} brands</p>`);
+  }
+
+  if (phone.display === "") {
+    lines.push(`<p class="note">${NO_PHONE}</p>`);
+  } else {
+    lines.push(`<p class="sphone">${escapeHtml(phone.display)}</p>`);
+  }
+  if (phone.whatsapp !== null) {
+    const everything = requirementMessage(parts, "", `Hi ${name}`);
+    lines.push(link(whatsappUrl(everything, phone.whatsapp), WHATSAPP_LABEL, "whatsapp"));
+    // Only worth a second button when it would actually ask for something narrower.
+    const partial = brands.length > 0 && brands.length < groups.length;
+    if (partial) {
+      const scoped = scopedParts(scopeOnly(vendor), parts);
+      if (scoped.length < parts.length) {
+        const narrower = requirementMessage(scoped, "", `Hi ${name}`);
+        lines.push(
+          link(
+            whatsappUrl(narrower, phone.whatsapp),
+            `WhatsApp: only ${nameList(brands)} parts`,
+            "whatsapp",
+          ),
+        );
+      }
+    }
+  }
+  if (phone.tel !== null) lines.push(link(`tel:${phone.tel}`, "Call"));
+  if (place.website !== "") lines.push(link(place.website, "Website"));
+  if (place.mapsUri !== "") lines.push(link(place.mapsUri, "Open in Google Maps"));
+
   return `<li class="shop" id="pf-shop-${number}">
-            <p class="sname">${number}. ${escapeHtml(place.name === "" ? "Unnamed listing" : place.name)}</p>
-            ${place.address === "" ? "" : `<p class="saddr">${escapeHtml(place.address)}</p>`}
+            ${lines.join("\n            ")}
           </li>`;
 }
