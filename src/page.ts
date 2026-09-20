@@ -50,52 +50,20 @@ export const MAX_CARDS = 50;
 /** Target length of the WhatsApp message, in characters. */
 export const WHATSAPP_LIMIT = 1000;
 
-export const BASIS_TEXT = "Guess from number format only. Not confirmed.";
-export const NOT_DETERMINED = "Not determined: no known number format matched.";
-
-const STRENGTH_TEXT = {
-  distinctive: "usually unique to this manufacturer",
-  shared: "shared with other manufacturers",
-} as const;
-
-/** Shown when a number fits more than one manufacturer: the hint field can settle it. */
-export const NARROW_PROMPT = "Add the brand or machine to narrow this.";
-
 /**
  * A bare digit run shaped like a phone number: 10 digits starting 0 or 6 to 9, or 11 to 15
  * digits. "Bare" means the user typed no separators, so 6754-61-1102 is never phone-shaped.
  */
 const PHONE_SHAPED = /^(?:[06-9]\d{9}|\d{11,15})$/;
 
-/** Why a number stayed on the page but out of the WhatsApp message. */
-export const OUTBOUND_NOTES = {
-  phone:
-    "Looks like a phone number, so it's left out of the WhatsApp message. " +
-    "Type it with dashes if it's a part number.",
-  noFormat:
-    "No format matched, so it's left out of the WhatsApp message. " +
-    "Add it yourself if it's a part number.",
-} as const;
-
-export const NOTHING_TO_SEND = "Nothing to send: no part number was recognised.";
-
 /**
- * Why this number is left out of the WhatsApp message, or null when it goes in.
+ * The numbers that may leave this page: recognised, and not shaped like a phone number.
  *
- * A number leaves this page only if it was recognised and is not phone-shaped. Everything the
- * user pasted is shown to them; only what Partfinder is confident is a part number is put in a
- * message to a third party. A phone-shaped run is checked first, because "looks like a phone
- * number" explains a bare 12-digit run better than "no format matched" does.
+ * What a user pastes can hold a customer's name and number; only what Partfinder reads as a part
+ * number goes into a message to a third party, or onto a card, or into the "Not recognised" line.
  */
-function outboundNote(result: ParseResult): string | null {
-  if (PHONE_SHAPED.test(result.input)) return OUTBOUND_NOTES.phone;
-  if (result.candidates.length === 0) return OUTBOUND_NOTES.noFormat;
-  return null;
-}
-
-/** The numbers the WhatsApp message and its back-link may carry. */
 export function outbound(results: readonly ParseResult[]): ParseResult[] {
-  return results.filter((r) => outboundNote(r) === null);
+  return results.filter((r) => r.candidates.length > 0 && !PHONE_SHAPED.test(r.input));
 }
 
 const ESCAPES: Record<string, string> = {
@@ -155,9 +123,6 @@ export function imagesUrl(result: ParseResult, country: Country): string {
 export function fitsUrl(result: ParseResult, country: Country): string {
   return googleUrl(country, `${spellingQuery(result)} fits models`);
 }
-
-/** Manufacturer links per card, so a two-candidate number does not become a wall of buttons. */
-const MAX_OEM_LINKS = 2;
 
 /** A general supplier search, narrowed by city when the user gave one. */
 export function suppliersUrl(result: ParseResult, country: Country, city: string): string {
@@ -293,20 +258,6 @@ export function mailtoUrl(subject: string, message: string): string {
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
 }
 
-export const FIND_VENDORS = "Find vendors for these parts";
-
-/**
- * The way in to /parts/vendors. It carries only the numbers outbound() passed, exactly as the
- * WhatsApp message and its back-link do: never the pasted text, which can hold a customer name or
- * a price. The city and country are the user's own settings, and the vendor page needs both.
- */
-export function vendorsUrl(sending: readonly ParseResult[], country: Country, city: string): string {
-  const tokens = sending.map((r) => r.input).join(" ");
-  return (
-    `/parts/vendors/?q=${encodeURIComponent(tokens)}` +
-    `&city=${encodeURIComponent(city.trim())}&country=${encodeURIComponent(country.code)}`
-  );
-}
 
 const STYLE = `
 :root { color-scheme: light dark; }
@@ -533,12 +484,12 @@ function renderAsk(q: string, hint: string, country: Country, city: string, note
 }
 
 /** The number as the card shows it, large: the first candidate's canonical form. */
-export function cardNumber(result: ParseResult): string {
+function cardNumber(result: ParseResult): string {
   return result.candidates[0]?.canonical ?? result.input;
 }
 
 /** The suffix split off the number, if any. Shown as a tag, kept on the key and in messages. */
-export function cardSuffix(result: ParseResult): string {
+function cardSuffix(result: ParseResult): string {
   return result.candidates[0]?.suffix ?? "";
 }
 

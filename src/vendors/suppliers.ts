@@ -41,13 +41,6 @@ export function googleMapsBox(inner: string): string {
         </section>`;
 }
 
-/** Above every listing, in the same words each time. A listing is not an answer about stock. */
-export function listingCaveat(city: string): string {
-  return (
-    `These are shops Google lists for these brands in ${city.trim()}. ` +
-    `Being listed doesn't mean they have your part in stock. Ask them.`
-  );
-}
 
 /**
  * What a failed supplier search says. One message for all of them - a spent quota, a missing key,

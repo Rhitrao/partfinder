@@ -22,7 +22,7 @@ import {
 export const MAX_GROUPS = 3;
 
 /** Text Search calls per page view: one per brand group, plus the multi-brand one. */
-export const MAX_SEARCHES = MAX_GROUPS + 1;
+const MAX_SEARCHES = MAX_GROUPS + 1;
 
 /** Suppliers listed on the page. Four searches can return forty; nobody reads forty, and every
  * one of them is a map pin. */
@@ -101,7 +101,7 @@ export function genericQuery(oem: string, city: string, country: Country): strin
 }
 
 /** Kilometres between two points on a sphere. Straight-line, not driving distance, and said so. */
-export function haversineKm(a: Point, b: Point): number {
+function haversineKm(a: Point, b: Point): number {
   const radius = 6371;
   const rad = (degrees: number) => (degrees * Math.PI) / 180;
   const dLat = rad(b.lat - a.lat);
