@@ -42,12 +42,15 @@ Also in scope now:
   10 ms CPU limit. Bulk parsing stays on GitHub Actions.
 - **Manufacturer aliases are data.** For example, JCB is also written "J.C.BAMFORD" and
   "JCB (J.C. BAMFORD)".
-- **Vendor listings come only from Google Places API (New),** through its official API, on the
-  passcode-protected /parts/vendors page. They are shown with Google's required attribution.
-  Nothing is stored except place IDs carried in URLs; nothing is scraped from any site. No other
-  vendor source is added without a new decision recorded here. The key is a Maps demo key, meant
-  for prototyping: after 23 September it is replaced by a billing key with a hard daily cap. The
-  public /parts/ page keeps its link-outs.
+- **Vendor listings come only from Google Places API (New) Text Search,** through its official
+  API, shown inline on /parts/ for signed-in users, with a Google map from the Maps JavaScript
+  API. They are shown with Google's required attribution. Nothing is stored except place IDs
+  carried in URLs; nothing is scraped from any site. No other vendor source is added without a new
+  decision recorded here. The key is a Maps demo key, meant for prototyping: after 23 September it
+  is replaced by a billing key with a hard daily cap. Signed-out users get the link-outs.
+- **Under the demo key, Text Search requests phone and website fields (Enterprise tier).** Before
+  any billing key, revisit that field mask, because of the cost.
+- **Maps JavaScript is the only client-side script,** loaded only on pages that show the map.
 - **The billing key may not replace the demo key until a daily cap and a per-IP limit are
   enforced in code, with Google Cloud quotas set as a second limit.**
 - **Workflow:** work on a branch and open a pull request. Never push to main and never merge.
