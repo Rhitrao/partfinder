@@ -13,10 +13,18 @@ import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
+import {
+  MAX_QUERY_LENGTH,
+  outbound,
+  partKey,
+  readQuery,
+  renderPage,
+  resolveCountry,
+} from "./page";
 import { handleVendors } from "./vendors";
 import { handleSupplierApi } from "./vendors/api";
 import { groupByOem } from "./vendors/search";
+import { renderScripts } from "./vendors/script";
 import { renderLinkOuts, renderPending } from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
@@ -83,6 +91,7 @@ function handlePage(request: Request, url: URL, env: Env): Response {
 
   let suppliers: string | undefined;
   let nonce: string | undefined;
+  let tail: string | undefined;
   // "Other ways to send" is the only way out when there is no Suppliers section, so it opens
   // then, and stays collapsed when the section is there to be used instead.
   let sendOpen = true;
@@ -102,6 +111,13 @@ function handlePage(request: Request, url: URL, env: Env): Response {
           siteKey,
           map: (env.GOOGLE_MAPS_BROWSER_KEY ?? "") !== "",
         });
+        // The script is told the part keys and nothing else. Everything about a shop arrives
+        // from the endpoint, already escaped and with its messages already written.
+        tail = renderScripts(
+          { parts: sending.map(partKey) },
+          env.GOOGLE_MAPS_BROWSER_KEY,
+          nonce,
+        );
         sendOpen = false;
       } else {
         suppliers = renderLinkOuts(groups, country, city);
@@ -121,6 +137,7 @@ function handlePage(request: Request, url: URL, env: Env): Response {
     sendOpen,
     ...(suppliers === undefined ? {} : { suppliers }),
     ...(nonce === undefined ? {} : { nonce }),
+    ...(tail === undefined ? {} : { tail }),
   });
   // Only a page with a Suppliers section runs a script, and only it relaxes the CSP for one.
   const headers = new Headers(nonce === undefined ? PAGE_HEADERS : supplierPageHeaders(nonce));

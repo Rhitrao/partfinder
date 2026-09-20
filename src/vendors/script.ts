@@ -1,118 +1,248 @@
 // The only client-side JavaScript Partfinder ships.
 //
-// It runs on a signed-in /parts/ page that rendered the Suppliers section, and nowhere else. It
-// adds four things to a page that already works without it: the map, "Use my location", the
-// filter chips, and the send queue. Everything it needs is in one JSON block; it never builds a
-// message, because every message was built on the server and is already in the data.
+// It runs on a /parts/ page that has a Suppliers section, and nowhere else. The page it runs on
+// already works: the parts are identified, the messages are written, and "Search on Google
+// instead" is one tap away. What this adds is the supplier list itself - fetched from
+// /parts/api/suppliers with a Turnstile token - and then the map, "Use my location", the filter
+// chips and the send queue.
 //
-// Two rules hold throughout. Text goes in with textContent, never innerHTML, so a shop's name is
-// text however it is spelled. And nothing is stored: no localStorage, no cookies, no beacons.
+// Three rules hold throughout. The endpoint's `html` field is the only string that ever becomes
+// HTML, and it goes through one <template>; every other string goes in with textContent, so a
+// shop's name is text however it is spelled. No message is composed here: waMatched and waAll
+// arrive already written. And nothing is stored: no localStorage, no cookies, no beacons.
 
 import { escapeHtml } from "../page";
-import { jsonForScript } from "./suppliers";
+import { FINDING, MAP_UNAVAILABLE, SUPPLIERS_UNAVAILABLE, jsonForScript } from "./suppliers";
 
-/** What the script is told about one shop. Nothing here is not already on the page. */
-export interface ShopData {
-  n: number;
-  name: string;
-  lat: number | null;
-  lng: number | null;
-  /** The part keys this shop was listed for. Empty means the multi-brand search found it. */
-  matchedParts: string[];
-  /** The full wa.me URL for its own parts, built on the server. Empty when it has no number. */
-  waMatched: string;
-  /** The same for every part on the page. */
-  waAll: string;
-  tel: string;
-}
-
+/** What the script is told before it fetches anything: the part keys, for the filter chips. */
 export interface PageData {
-  /** Where distances were measured from, and whether that was the user's own location. */
-  origin: { lat: number; lng: number; you: boolean } | null;
-  /** Every part key on the page, for the filter chips. */
   parts: string[];
-  shops: ShopData[];
 }
 
-/** What the map box says until the script replaces it, and forever if the script never runs. */
-export const MAP_UNAVAILABLE = "Map unavailable. The list below has everything.";
+/** Turnstile could not mint a token, or would not accept the one it minted. */
+export const VERIFY_FAILED = "Couldn't verify this browser.";
 
-/** What the button says when the browser refuses. It names where distances come from instead. */
-export function locationRefused(originLabel: string): string {
-  return `Location off. Distances are from ${originLabel}.`;
-}
 export const QUEUE_HINT = "WhatsApp opens one chat at a time. Tap each supplier in turn.";
+
+/** The whole round has this long, however many calls it is made of. */
+export const FETCH_TIMEOUT_MS = 15000;
+
+/** Cloudflare's own loader, told not to render anything until we ask it to. */
+export const TURNSTILE_SRC =
+  "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=pfTurnstile";
 
 const SCRIPT = String.raw`
 (function () {
   "use strict";
   var el = document.getElementById("pf-data");
-  var data = { origin: null, parts: [], shops: [] };
-  if (el) { try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; } }
-  var shops = data.shops || [];
-  var byN = {};
-  shops.forEach(function (shop) { byN[shop.n] = shop; });
+  if (!el) return;
+  var data;
+  try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
+  var parts = data.parts || [];
 
-  function card(n) { return document.getElementById("pf-shop-" + n); }
+  var status = document.getElementById("pf-status");
+  var ghosts = document.getElementById("pf-ghosts");
+  var list = document.getElementById("pf-list");
+  var elsewhere = document.getElementById("pf-elsewhere");
+  var widget = document.getElementById("pf-turnstile");
+  var box = document.getElementById("pf-map");
+  if (!status || !list || !widget) return;
+
+  var shops = [];
+  var pins = [];
+  var near = null;
+  var widgetId = null;
+  var running = false;
+
   function make(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
     return node;
   }
+  function card(n) { return document.getElementById("pf-shop-" + n); }
+  function say(message) { status.textContent = message; }
+  function field(id) {
+    var node = document.getElementById(id);
+    return node && typeof node.value === "string" ? node.value : "";
+  }
+  function openElsewhere() { if (elsewhere) elsewhere.open = true; }
+
+  // ---- Asking the endpoint ---------------------------------------------------------------
+  function clearRetry() {
+    var old = document.getElementById("pf-retry");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
+
+  function offerRetry() {
+    clearRetry();
+    var button = make("button", "retry", "Retry");
+    button.type = "button";
+    button.id = "pf-retry";
+    button.addEventListener("click", again);
+    if (status.parentNode) status.parentNode.insertBefore(button, status.nextSibling);
+  }
+
+  function again() {
+    clearRetry();
+    if (!window.turnstile || widgetId === null) return;
+    say(FINDING_TEXT);
+    window.turnstile.reset(widgetId);
+  }
+
+  function fail(message, retry) {
+    say(message);
+    openElsewhere();
+    if (retry) offerRetry();
+  }
+
+  function quantities() {
+    var out = {};
+    var inputs = document.querySelectorAll("input[name^='qty_']");
+    for (var i = 0; i < inputs.length; i++) {
+      var amount = Number(inputs[i].value);
+      if (Number.isInteger(amount) && amount >= 1 && amount <= 9999) {
+        out[inputs[i].name.slice(4)] = amount;
+      }
+    }
+    return out;
+  }
+
+  function search(token) {
+    if (running) return;
+    running = true;
+    clearRetry();
+    say(FINDING_TEXT);
+    var payload = {
+      token: token,
+      q: field("q"),
+      city: field("city"),
+      country: field("country"),
+      note: field("note"),
+      qty: quantities()
+    };
+    if (near) payload.near = near;
+
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT);
+    var done = function () { clearTimeout(timer); running = false; };
+
+    fetch("/parts/api/suppliers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "omit",
+      cache: "no-store",
+      signal: controller.signal
+    }).then(function (response) {
+      return response.json();
+    }).then(function (body) {
+      done();
+      handle(body);
+    }).catch(function () {
+      done();
+      fail(UNAVAILABLE_TEXT, true);
+    });
+  }
+
+  function handle(body) {
+    if (!body || typeof body !== "object") return fail(UNAVAILABLE_TEXT, true);
+    if (body.error === "verify") return fail(VERIFY_TEXT, true);
+    if (body.error === "city") {
+      say("Couldn't find " + field("city").trim() + ". Check the spelling.");
+      openElsewhere();
+      return;
+    }
+    if (typeof body.html !== "string") return fail(UNAVAILABLE_TEXT, false);
+    show(body);
+  }
+
+  function show(body) {
+    // The one place in this script that assigns markup, and the only string allowed to be
+    // markup: body.html came from our own endpoint, which escaped every value in it on the
+    // server. Nothing a user typed is ever assigned this way.
+    var template = document.createElement("template");
+    template.innerHTML = body.html;
+    list.textContent = "";
+    list.appendChild(template.content);
+    if (ghosts && ghosts.parentNode) ghosts.parentNode.removeChild(ghosts);
+
+    shops = body.queue || [];
+    pins = body.pins || [];
+    say(shops.length === 1 ? "1 supplier found" : shops.length + " suppliers found");
+    visible = null;
+    buildFilters();
+    drawMap();
+    picked = [];
+    refreshBar();
+  }
+
+  // ---- Turnstile -------------------------------------------------------------------------
+  window.pfTurnstile = function () {
+    if (!window.turnstile) return;
+    widgetId = window.turnstile.render(widget, {
+      sitekey: widget.getAttribute("data-sitekey") || "",
+      appearance: widget.getAttribute("data-appearance") || "interaction-only",
+      callback: search,
+      "error-callback": function () { fail(VERIFY_TEXT, true); },
+      "expired-callback": function () { if (window.turnstile) window.turnstile.reset(widgetId); }
+    });
+  };
 
   // ---- Use my location -------------------------------------------------------------------
   var slot = document.getElementById("pf-locate");
-  if (slot && navigator.geolocation) {
-    var locate = make("button", "locate", "Use my location");
-    locate.type = "button";
+  var locate = document.getElementById("pf-locate-button");
+  if (slot && locate && navigator.geolocation) {
+    locate.hidden = false;
     locate.addEventListener("click", function () {
       locate.disabled = true;
       locate.textContent = "Finding you…";
       navigator.geolocation.getCurrentPosition(
         function (position) {
           var round = function (v) { return Math.round(v * 1000) / 1000; };
-          var url = new URL(window.location.href);
-          url.searchParams.set(
-            "near",
-            round(position.coords.latitude) + "," + round(position.coords.longitude)
-          );
-          window.location.assign(url.toString());
+          // Three decimals: about a hundred metres, which is all a shop search needs. It is held
+          // in this one variable, is sent to our endpoint, and is never stored or put in the URL.
+          near = round(position.coords.latitude) + "," + round(position.coords.longitude);
+          locate.disabled = false;
+          locate.textContent = "Use my location";
+          again();
         },
         function () {
           locate.disabled = false;
           locate.textContent = "Use my location";
           var said = document.getElementById("pf-locate-note");
           if (!said) {
-            said = make("p", "note", LOCATION_REFUSED_TEXT);
+            said = make("p", "note", "");
             said.id = "pf-locate-note";
             slot.appendChild(said);
           }
+          said.textContent =
+            "Location off. Distances are from " + field("city").trim() + " centre.";
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
       );
     });
-    slot.appendChild(locate);
   }
-
-  if (!shops.length) return;
 
   // ---- Filter chips ----------------------------------------------------------------------
   var visible = null;
-  function matches(shop) {
+  function matches(n) {
     if (visible === null) return true;
-    return (shop.matchedParts || []).indexOf(visible) >= 0;
+    var shop = shops.filter(function (row) { return row.n === n; })[0];
+    return !!shop && (shop.matchedParts || []).indexOf(visible) >= 0;
   }
   function applyFilter() {
     shops.forEach(function (shop) {
       var row = card(shop.n);
-      if (row) row.hidden = !matches(shop);
+      if (row) row.hidden = !matches(shop.n);
     });
-    if (window.pfRedrawPins) window.pfRedrawPins();
+    fit();
   }
-  var filters = document.getElementById("pf-filters");
-  if (filters && (data.parts || []).length > 1) {
-    var choices = [null].concat(data.parts);
+  function buildFilters() {
+    var filters = document.getElementById("pf-filters");
+    if (!filters || parts.length < 2) return;
+    filters.textContent = "";
+    var choices = [null].concat(parts);
     var buttons = [];
     choices.forEach(function (part) {
       var chip = make("button", "chip filter", part === null ? "All" : part);
@@ -131,70 +261,64 @@ const SCRIPT = String.raw`
   }
 
   // ---- The map ---------------------------------------------------------------------------
-  var box = document.getElementById("pf-map");
-  var pinned = shops.filter(function (shop) { return shop.lat !== null && shop.lng !== null; });
-  window.initMap = async function () {
-    if (!box || !pinned.length) return;
+  var mapsReady = false;
+  var gmap = null;
+  var placed = [];
+
+  window.initMap = function () { mapsReady = true; drawMap(); };
+
+  function shopPins() {
+    return pins.filter(function (pin) { return !pin.you; });
+  }
+
+  async function drawMap() {
+    if (!box || !mapsReady || !pins.length) return;
     try {
       var maps = await google.maps.importLibrary("maps");
       var markers = await google.maps.importLibrary("marker");
-      box.textContent = "";
-      var map = new maps.Map(box, {
-        mapId: "DEMO_MAP_ID",
-        zoom: 12,
-        center: { lat: pinned[0].lat, lng: pinned[0].lng }
-      });
-      var placed = [];
-      pinned.forEach(function (shop) {
-        var position = { lat: shop.lat, lng: shop.lng };
-        var glyph = new markers.PinElement({ glyph: String(shop.n) });
+      placed.forEach(function (entry) { entry.marker.map = null; });
+      placed = [];
+      if (!gmap) {
+        box.textContent = "";
+        gmap = new maps.Map(box, {
+          mapId: "DEMO_MAP_ID",
+          zoom: 12,
+          center: { lat: pins[0].lat, lng: pins[0].lng }
+        });
+      }
+      pins.forEach(function (pin) {
+        var glyph = new markers.PinElement({ glyph: pin.you ? "You" : String(pin.n) });
         var marker = new markers.AdvancedMarkerElement({
-          map: map,
-          position: position,
-          title: shop.name,
+          map: gmap,
+          position: { lat: pin.lat, lng: pin.lng },
+          title: pin.name,
           content: glyph.element,
-          gmpClickable: true
+          gmpClickable: !pin.you
         });
-        marker.addListener("gmp-click", function () { focusCard(shop.n); });
-        placed.push({ shop: shop, marker: marker });
-      });
-      if (data.origin && data.origin.you) {
-        var here = new markers.PinElement({ glyph: "You" });
-        new markers.AdvancedMarkerElement({
-          map: map,
-          position: { lat: data.origin.lat, lng: data.origin.lng },
-          title: "You",
-          content: here.element
-        });
-      }
-      function fit() {
-        var bounds = new google.maps.LatLngBounds();
-        var any = false;
-        placed.forEach(function (entry) {
-          if (!matches(entry.shop)) { entry.marker.map = null; return; }
-          entry.marker.map = map;
-          bounds.extend({ lat: entry.shop.lat, lng: entry.shop.lng });
-          any = true;
-        });
-        if (data.origin && data.origin.you) {
-          bounds.extend({ lat: data.origin.lat, lng: data.origin.lng });
-          any = true;
+        if (!pin.you) {
+          marker.addListener("gmp-click", function () { focusCard(pin.n); });
         }
-        if (any) map.fitBounds(bounds);
-      }
-      window.pfRedrawPins = fit;
-      window.pfShowOnMap = function (n) {
-        var entry = placed.filter(function (e) { return e.shop.n === n; })[0];
-        if (!entry) return;
-        map.panTo({ lat: entry.shop.lat, lng: entry.shop.lng });
-        box.scrollIntoView({ behavior: "smooth", block: "center" });
-      };
+        placed.push({ pin: pin, marker: marker });
+      });
       fit();
       addShowOnMap();
     } catch (e) {
       if (box) box.textContent = MAP_UNAVAILABLE_TEXT;
     }
-  };
+  }
+
+  function fit() {
+    if (!gmap || !placed.length) return;
+    var bounds = new google.maps.LatLngBounds();
+    var any = false;
+    placed.forEach(function (entry) {
+      if (!entry.pin.you && !matches(entry.pin.n)) { entry.marker.map = null; return; }
+      entry.marker.map = gmap;
+      bounds.extend({ lat: entry.pin.lat, lng: entry.pin.lng });
+      any = true;
+    });
+    if (any) gmap.fitBounds(bounds);
+  }
 
   function focusCard(n) {
     var row = card(n);
@@ -208,15 +332,17 @@ const SCRIPT = String.raw`
   }
 
   function addShowOnMap() {
-    pinned.forEach(function (shop) {
-      var row = card(shop.n);
+    shopPins().forEach(function (pin) {
+      var row = card(pin.n);
       if (!row || row.querySelector(".showmap")) return;
       var actions = row.querySelector(".actions");
       if (!actions) return;
       var button = make("button", "link showmap", "Show on map");
       button.type = "button";
       button.addEventListener("click", function () {
-        if (window.pfShowOnMap) window.pfShowOnMap(shop.n);
+        if (!gmap) return;
+        gmap.panTo({ lat: pin.lat, lng: pin.lng });
+        if (box) box.scrollIntoView({ behavior: "smooth", block: "center" });
       });
       actions.appendChild(button);
     });
@@ -296,15 +422,15 @@ const SCRIPT = String.raw`
     rows.forEach(function (shop, index) {
       var row = make("div", "sendrow");
       row.appendChild(make("p", "sname", shop.name));
-      var scoped = (shop.matchedParts || []).length > 0 && (shop.matchedParts || []).length < data.parts.length;
+      var matched = shop.matchedParts || [];
+      var scoped = matched.length > 0 && matched.length < parts.length;
       var state = { all: !scoped };
-      var parts = make("p", "sendparts", "");
+      var listed = make("p", "sendparts", "");
       function describe() {
-        var list = state.all ? data.parts : shop.matchedParts;
-        parts.textContent = "Parts: " + list.join(", ");
+        listed.textContent = "Parts: " + (state.all ? parts : matched).join(", ");
       }
       describe();
-      row.appendChild(parts);
+      row.appendChild(listed);
 
       if (scoped) {
         var toggle = make("button", "chip", "");
@@ -383,25 +509,31 @@ const SCRIPT = String.raw`
     area.focus();
     area.select();
   }
-
-  refreshBar();
 })();
 `;
 
-/** The one script tag, its data, and Google's loader. Everything carries the nonce. */
-export function renderScripts(
-  data: PageData,
-  mapsKey: string | undefined,
-  nonce: string,
-  originLabel: string,
-): string {
+/** Replaces one placeholder without letting a "$" sequence in the value mean anything. */
+function fill(body: string, placeholder: string, value: string): string {
+  return body.replace(placeholder, () => value);
+}
+
+/**
+ * The data block, the script, Turnstile's loader and Google's, all carrying the nonce.
+ *
+ * Turnstile is loaded with render=explicit so nothing appears until the script asks for it, and
+ * the widget's own element carries the site key. Google's loader is only added when there is a
+ * browser key to add; without it the list stands on its own and the map box says so.
+ */
+export function renderScripts(data: PageData, mapsKey: string | undefined, nonce: string): string {
   const n = escapeHtml(nonce);
-  const body = SCRIPT.replace("LOCATION_REFUSED_TEXT", jsonForScript(locationRefused(originLabel)))
-    .replace("MAP_UNAVAILABLE_TEXT", jsonForScript(MAP_UNAVAILABLE))
-    .replace("QUEUE_HINT_TEXT", jsonForScript(QUEUE_HINT));
-  const pinned = data.shops.some((shop) => shop.lat !== null && shop.lng !== null);
-  const loader =
-    mapsKey === undefined || mapsKey === "" || !pinned
+  let body = fill(SCRIPT, "FINDING_TEXT", jsonForScript(FINDING));
+  body = fill(body, "UNAVAILABLE_TEXT", jsonForScript(SUPPLIERS_UNAVAILABLE));
+  body = fill(body, "VERIFY_TEXT", jsonForScript(VERIFY_FAILED));
+  body = fill(body, "MAP_UNAVAILABLE_TEXT", jsonForScript(MAP_UNAVAILABLE));
+  body = fill(body, "QUEUE_HINT_TEXT", jsonForScript(QUEUE_HINT));
+  body = fill(body, "FETCH_TIMEOUT", String(FETCH_TIMEOUT_MS));
+  const maps =
+    mapsKey === undefined || mapsKey === ""
       ? ""
       : `\n    <script src="${escapeHtml(
           "https://maps.googleapis.com/maps/api/js" +
@@ -409,5 +541,6 @@ export function renderScripts(
         )}" async nonce="${n}"></script>`;
   return `
     <script type="application/json" id="pf-data" nonce="${n}">${jsonForScript(data)}</script>
-    <script nonce="${n}">${body}</script>${loader}`;
+    <script nonce="${n}">${body}</script>
+    <script src="${escapeHtml(TURNSTILE_SRC)}" async defer nonce="${n}"></script>${maps}`;
 }
