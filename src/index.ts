@@ -119,9 +119,10 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   let sendOpen = true;
   const supplierCounts: Record<string, number> = {};
   const shared = sharedLocation(url.searchParams.get("near"));
+  const signedIn = await isSignedIn(request, env);
   if (sending.length > 0) {
     const { groups } = groupByOem(sending);
-    if (!(await isSignedIn(request, env)) || city.trim() === "") {
+    if (!signedIn || city.trim() === "") {
       // Signed out, or with no city: the link-outs, and nothing about signing in. The only way
       // in is the footer link, which is where section 9 of the step prompt puts it.
       if (groups.length > 0) suppliers = renderLinkOuts(groups, country, city);
@@ -213,6 +214,7 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
     parsed,
     typedQuantities,
     sendOpen,
+    signedIn,
     supplierCounts,
     ...(suppliers === undefined ? {} : { suppliers }),
     ...(nonce === undefined ? {} : { nonce }),

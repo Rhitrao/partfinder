@@ -6,7 +6,7 @@
 import type { Env } from "../env";
 import { VENDOR_PAGE_HEADERS, VENDOR_REDIRECT_HEADERS } from "../headers";
 import { MAX_QUERY_LENGTH } from "../page";
-import { checkPasscode, clearCookie, isSignedIn, setCookie } from "./auth";
+import { checkPasscode, clearCookie, passcodeConfigured, setCookie } from "./auth";
 import { WRONG_PASSCODE, renderGate } from "./page";
 
 /** Where the suppliers live since step 6. */
@@ -124,8 +124,9 @@ export async function handleVendors(
     // GET is the passcode form itself, reached from the "Sign in to see suppliers here" line. It
     // carries q, city and country so that signing in lands back on the page that offered it.
     if (request.method === "GET") {
-      const search = vendorQuery(url.searchParams);
-      return html(renderGate(safeNext(search === "" ? "/parts/" : `/parts/?${search}`)));
+      // next carries the page the footer link was on, so signing in returns to it.
+      const next = safeNext(url.searchParams.get("next") ?? "");
+      return html(renderGate(next, "", passcodeConfigured(env)));
     }
     return notAllowed("POST");
   }

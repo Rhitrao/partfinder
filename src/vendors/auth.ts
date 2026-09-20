@@ -64,10 +64,19 @@ export function constantTimeEqual(a: string, b: string): boolean {
  * passcode can be timed out of this. A missing secret matches nothing.
  */
 export async function checkPasscode(submitted: string, env: Env): Promise<string | null> {
-  if (env.VENDOR_PASSCODE === undefined || env.VENDOR_PASSCODE === "") return null;
-  const expected = await vendorToken(env.VENDOR_PASSCODE);
-  const given = await vendorToken(submitted);
+  const secret = (env.VENDOR_PASSCODE ?? "").trim();
+  if (secret === "") return null;
+  // Both sides are trimmed: a passcode typed on a phone picks up a trailing space from the
+  // keyboard, and one pasted into `wrangler secret put` picks up a newline. Neither is the
+  // passcode, and neither should keep the owner out of their own page.
+  const expected = await vendorToken(secret);
+  const given = await vendorToken(submitted.trim());
   return constantTimeEqual(given, expected) ? expected : null;
+}
+
+/** Whether a passcode is configured at all, so the form can say so instead of just refusing. */
+export function passcodeConfigured(env: Env): boolean {
+  return (env.VENDOR_PASSCODE ?? "").trim() !== "";
 }
 
 /** One cookie's value from a Cookie header, or null. */
@@ -84,8 +93,9 @@ export function readCookie(header: string | null, name: string): string | null {
 export async function isSignedIn(request: Request, env: Env): Promise<boolean> {
   const value = readCookie(request.headers.get("Cookie"), COOKIE_NAME);
   if (value === null) return false;
-  if (env.VENDOR_PASSCODE === undefined || env.VENDOR_PASSCODE === "") return false;
-  return constantTimeEqual(value, await vendorToken(env.VENDOR_PASSCODE));
+  const secret = (env.VENDOR_PASSCODE ?? "").trim();
+  if (secret === "") return false;
+  return constantTimeEqual(value, await vendorToken(secret));
 }
 
 export function setCookie(token: string): string {

@@ -57,10 +57,65 @@ describe("signed out", () => {
 });
 
 describe("the passcode gate", () => {
-  it("serves the form on GET, carrying the query into the return path", async () => {
-    const html = await (await get(`/parts/vendors/login${SEARCH}`)).text();
+  it("serves the form on GET, carrying next into the return path", async () => {
+    const next = "/parts/?q=1u3352&city=Bengaluru&country=IN";
+    const html = await (await get(`/parts/vendors/login?next=${encodeURIComponent(next)}`)).text();
     expect(html).toContain('name="passcode"');
-    expect(html).toContain('value="/parts/?q=1u3352+40%2F300893&amp;city=Bengaluru&amp;country=IN"');
+    expect(html).toContain(`value="${next.replaceAll("&", "&amp;")}"`);
+    // Everything a phone keyboard would otherwise do to a passcode, turned off.
+    expect(html).toContain('type="password"');
+    expect(html).toContain('autocomplete="current-password"');
+    expect(html).toContain('autocapitalize="off"');
+    expect(html).toContain('autocorrect="off"');
+    expect(html).toContain('spellcheck="false"');
+  });
+
+  it("says so when no passcode is configured, instead of just refusing", async () => {
+    const form = await worker.fetch(
+      new Request("https://rohitrao.in/parts/vendors/login"),
+      { GOOGLE_PLACES_KEY: "k" },
+    );
+    const html = await form.text();
+    expect(html).toContain("Sign-in isn&#39;t set up yet.");
+    expect(html).not.toContain('name="passcode"');
+
+    const tried = await worker.fetch(
+      new Request("https://rohitrao.in/parts/vendors/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "passcode=anything",
+      }),
+      { GOOGLE_PLACES_KEY: "k" },
+    );
+    expect(tried.status).toBe(401);
+    expect(await tried.text()).toContain("Sign-in isn&#39;t set up yet.");
+  });
+
+  it("trims the passcode on both sides", async () => {
+    const spaced = await worker.fetch(
+      new Request("https://rohitrao.in/parts/vendors/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `passcode=${encodeURIComponent(" teal-bucket ")}`,
+      }),
+      { VENDOR_PASSCODE: "teal-bucket " },
+    );
+    expect(spaced.status).toBe(303);
+    expect(spaced.headers.get("Set-Cookie")).toContain("pf_vendor=");
+  });
+
+  it("offers the only way in from the footer, and the way out once signed in", async () => {
+    const out = await (await get(`/parts/${SEARCH}`)).text();
+    const footer = out.slice(out.indexOf("<footer"));
+    expect(footer).toContain("Owner sign-in");
+    expect(footer).toContain("/parts/vendors/login?next=");
+    expect(footer).toContain(encodeURIComponent("/parts/?q="));
+
+    stubFetch(searchReply);
+    const inside = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const signedFooter = inside.slice(inside.indexOf("<footer"));
+    expect(signedFooter).toContain("Sign out");
+    expect(signedFooter).not.toContain("Owner sign-in");
   });
 
   it("refuses a wrong passcode with 401 and no cookie", async () => {
