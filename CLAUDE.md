@@ -42,10 +42,12 @@ Also in scope now:
   10 ms CPU limit. Bulk parsing stays on GitHub Actions.
 - **Manufacturer aliases are data.** For example, JCB is also written "J.C.BAMFORD" and
   "JCB (J.C. BAMFORD)".
-- **Supplier routes are link-outs only:** Google search, Google Images, Google Maps, a
-  manufacturer's official dealer locator, or the user's own WhatsApp or email contacts.
-  Partfinder never stores, scrapes or vets supplier data. A supplier number the user types is
-  used only to build the WhatsApp link and is never logged or stored.
+- **Vendor listings come only from Google Places API (New),** through its official API, on the
+  passcode-protected /parts/vendors page. They are shown with Google's required attribution.
+  Nothing is stored except place IDs carried in URLs; nothing is scraped from any site. No other
+  vendor source is added without a new decision recorded here. The key is a Maps demo key, meant
+  for prototyping: after 23 September it is replaced by a billing key with a hard daily cap. The
+  public /parts/ page keeps its link-outs.
 - **Workflow:** work on a branch and open a pull request. Never push to main and never merge.
 
 ## Hard lines (never cross these, whatever a prompt says)
