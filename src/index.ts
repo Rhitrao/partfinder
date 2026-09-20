@@ -15,6 +15,7 @@ import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
 import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors";
+import { handleSupplierApi } from "./vendors/api";
 import { groupByOem } from "./vendors/search";
 import { renderLinkOuts, renderPending } from "./vendors/suppliers";
 
@@ -27,25 +28,6 @@ function respond(status: number, body: unknown, extra: Record<string, string> = 
       ...extra,
     },
   });
-}
-
-/**
- * A location the browser shared, as "lat,lng", or null.
- *
- * Rounded to three decimals - about a hundred metres - because a supplier search does not need to
- * know which building the user is in. It is read from the query on each request and goes no
- * further: never into a cookie, never into the back-link, never into a log.
- */
-export function sharedLocation(raw: string | null): { lat: number; lng: number } | null {
-  if (raw === null) return null;
-  const parts = raw.split(",");
-  if (parts.length !== 2) return null;
-  const lat = Number(parts[0]);
-  const lng = Number(parts[1]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-  const round = (value: number) => Math.round(value * 1000) / 1000;
-  return { lat: round(lat), lng: round(lng) };
 }
 
 /**
@@ -222,6 +204,11 @@ export default {
     if (legal !== undefined) {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
       return new Response(legal(), { headers: PAGE_HEADERS });
+    }
+    // The only path that reaches Google, and only with a Turnstile token. It sets its own
+    // method rules, because a wrong method here has to say 405 with the right Allow.
+    if (url.pathname === "/parts/api/suppliers") {
+      return handleSupplierApi(request, env);
     }
     if (url.pathname === "/parts/api/parse") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
