@@ -1,16 +1,18 @@
 // Worker bindings.
 //
-// Both values are Cloudflare Worker secrets. They are set with `wrangler secret put` and never
-// live in the repo; .dev.vars.example lists the names for local development, and .dev.vars itself
-// stays ignored. Both are optional on purpose: a Worker deployed without them must still serve
-// the page, so every use site has to handle "missing" rather than assume the secret is there.
+// Every value here is a Cloudflare Worker secret. They are set with `wrangler secret put` and
+// never live in the repo; .dev.vars.example lists the names for local development, and .dev.vars
+// itself stays ignored. All of them are optional on purpose: a Worker deployed without them must
+// still serve the page, so every use site has to handle "missing" rather than assume the secret
+// is there.
 
 export interface Env {
   /**
    * A Google Maps key restricted to Places API (New). Today it is a demo key, meant for
    * prototyping; after 23 September it is replaced by a billing key with a hard daily cap.
-   * Missing means the vendor search shows its fallback links, not an error. This one is a server
-   * secret and must never reach a response body; GOOGLE_MAPS_BROWSER_KEY is the one that does.
+   * Missing means the supplier endpoint answers {error:"unavailable"}, not an error page. This
+   * one is a server secret and must never reach a response body or a response header;
+   * GOOGLE_MAPS_BROWSER_KEY is the one that does.
    */
   GOOGLE_PLACES_KEY?: string;
   /**
@@ -21,8 +23,15 @@ export interface Env {
    */
   GOOGLE_MAPS_BROWSER_KEY?: string;
   /**
-   * The shared passcode for /parts/vendors. It is also the HMAC key behind the pf_vendor cookie,
-   * so changing it signs everybody out. Missing means nobody can sign in.
+   * The Cloudflare Turnstile site key. Public by design: it is rendered into the page as the
+   * widget's data-sitekey, which is where Turnstile expects it. Missing means the widget cannot
+   * render, so the page shows its link-outs and never calls the supplier endpoint.
    */
-  VENDOR_PASSCODE?: string;
+  TURNSTILE_SITE_KEY?: string;
+  /**
+   * The Cloudflare Turnstile secret key, used server-side to call siteverify. It is a server
+   * secret and must never reach a response body or a response header. Missing means no token can
+   * be verified, so the endpoint refuses every request rather than letting one through unchecked.
+   */
+  TURNSTILE_SECRET_KEY?: string;
 }

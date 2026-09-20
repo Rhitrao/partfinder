@@ -42,17 +42,21 @@ Also in scope now:
   10 ms CPU limit. Bulk parsing stays on GitHub Actions.
 - **Manufacturer aliases are data.** For example, JCB is also written "J.C.BAMFORD" and
   "JCB (J.C. BAMFORD)".
-- **Supplier cards render inline on /parts/ for signed-in users,** from Places API (New) Text
-  Search, with a Maps JavaScript map. They carry Google's required attribution. No other vendor
-  source is added without a new decision recorded here.
+- **The supplier list is public on /parts/ results pages,** from Places API (New) Text Search,
+  with a Maps JavaScript map. It carries Google's required attribution. It is loaded by the
+  page's script from POST /parts/api/suppliers, which requires a Turnstile token; the page's own
+  render never calls Google. There is no passcode. No other vendor source is added without a new
+  decision recorded here.
 - **Distances are straight-line,** from the user's shared location or the city centre.
 - **Under the demo key, Text Search requests Enterprise-tier fields** (phone, website, rating,
   open now). Revisit that field mask before any billing key.
 - **Nothing from Google is cached except place IDs;** coordinates are never put in cookies.
-- **Client-side JavaScript exists only on pages that show suppliers,** under a per-response
-  nonce CSP.
-- **The billing key may not replace the demo key until a daily cap and a per-IP limit are
-  enforced in code, with Google Cloud quotas set as a second limit.**
+- **Client-side JavaScript runs on /parts/ pages that have a Suppliers section** - Turnstile,
+  the map, location, filters and the send queue - under a per-response nonce CSP.
+- **The script may insert HTML only from our own endpoint's `html` field, through one
+  `<template>`.** Never user strings: everything else goes in with textContent.
+- **Before any billing key: D1 per-IP and daily caps enforced in code, plus Google Cloud quotas
+  as a second limit.** The billing key may not replace the demo key until all three are in place.
 - **Workflow:** work on a branch and open a pull request. Never push to main and never merge.
 
 ## UX principles

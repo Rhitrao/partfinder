@@ -1,58 +1,20 @@
-// Routing for /parts/vendors.
+// What is left of /parts/vendors: four redirects.
 //
-// Every path here is behind the passcode gate except the gate itself. Nothing on these paths is
-// logged: not the passcode, not q, not the city, not a place id, not a phone number.
+// The suppliers moved onto /parts/ itself in step 6, and step 7 removed the passcode gate that
+// stood in front of them. Nothing lives here any more. The paths stay only so that a link
+// somebody saved, or a browser reloading an old form post, still lands on the page that replaced
+// them, with the query it was carrying.
 
-import type { Env } from "../env";
-import { VENDOR_PAGE_HEADERS, VENDOR_REDIRECT_HEADERS } from "../headers";
+import { REDIRECT_HEADERS } from "../headers";
 import { MAX_QUERY_LENGTH } from "../page";
-import { checkPasscode, clearCookie, passcodeConfigured, setCookie } from "./auth";
-import { WRONG_PASSCODE, renderGate } from "./page";
 
-/** Where the suppliers live since step 6. */
+/** Where the suppliers live. */
 export const PAGE_PATH = "/parts/";
 
-export const VENDORS_PATH = "/parts/vendors/";
-const LOGIN_PATH = "/parts/vendors/login";
-const LOGOUT_PATH = "/parts/vendors/logout";
-export const CONTACT_PATH = "/parts/vendors/contact";
-
-/** The only path a successful login may send a browser to. */
-const RETURNABLE_PATHS: readonly string[] = [PAGE_PATH];
+const VENDORS_PATH = "/parts/vendors/";
 
 /** Bounds the work one request can ask for; a browser never sends more than a handful. */
 const MAX_PARAMS = 64;
-
-function html(body: string, status = 200, extra: Record<string, string> = {}): Response {
-  return new Response(body, { status, headers: { ...VENDOR_PAGE_HEADERS, ...extra } });
-}
-
-function redirect(location: string, extra: Record<string, string> = {}): Response {
-  return new Response(null, {
-    status: 303,
-    headers: { ...VENDOR_REDIRECT_HEADERS, Location: location, ...extra },
-  });
-}
-
-/** 302 for a path that moved: the browser keeps using the URL it was given, and no cache keeps it. */
-function found(location: string): Response {
-  return new Response(null, {
-    status: 302,
-    headers: { ...VENDOR_REDIRECT_HEADERS, Location: location },
-  });
-}
-
-function notAllowed(allow: string): Response {
-  return new Response(JSON.stringify({ error: "method not allowed" }), {
-    status: 405,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "X-Robots-Tag": "noindex",
-      "Cache-Control": "no-store",
-      Allow: allow,
-    },
-  });
-}
 
 /** The only parameters /parts/ reads, and so the only ones worth carrying to it. */
 const CARRIED: readonly string[] = ["q", "city", "country"];
@@ -60,7 +22,7 @@ const CARRIED: readonly string[] = ["q", "city", "country"];
 /**
  * The query string rebuilt from those three, each within the length cap. Anything else a URL is
  * carrying is dropped rather than copied forward, so nothing unknown ever reaches a Location
- * header or a form.
+ * header.
  */
 export function vendorQuery(params: URLSearchParams): string {
   const out = new URLSearchParams();
@@ -73,79 +35,24 @@ export function vendorQuery(params: URLSearchParams): string {
   return out.toString();
 }
 
-/**
- * Where to send a browser after it signs in. The value comes from a form field, so it is read as
- * a relative URL against this origin and then rebuilt from a fixed list of paths and parameters.
- * Anything else, including an absolute URL to another site, becomes the vendor search page.
- */
-export function safeNext(raw: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(raw, "https://rohitrao.in");
-  } catch {
-    return PAGE_PATH;
-  }
-  const path = RETURNABLE_PATHS.includes(parsed.pathname) ? parsed.pathname : PAGE_PATH;
-  const search = vendorQuery(parsed.searchParams);
-  return search === "" ? path : `${path}?${search}`;
-}
-
-async function handleLogin(request: Request, env: Env): Promise<Response> {
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    return html(renderGate(PAGE_PATH, WRONG_PASSCODE), 401);
-  }
-  const passcode = String(form.get("passcode") ?? "");
-  const next = safeNext(String(form.get("next") ?? ""));
-  const token = await checkPasscode(passcode, env);
-  if (token === null) {
-    // A wrong passcode says so. A Worker with no passcode set says that instead, because the
-    // owner can do something about it and no attacker learns anything they could not guess.
-    const configured = passcodeConfigured(env);
-    return html(renderGate(next, configured ? WRONG_PASSCODE : "", configured), 401);
-  }
-  return redirect(next, { "Set-Cookie": setCookie(token) });
+/** 302 for a path that moved: the browser keeps using the URL it was given, and no cache keeps it. */
+function found(location: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: { ...REDIRECT_HEADERS, Location: location },
+  });
 }
 
 /**
- * Routes every /parts/vendors path, or returns null when the path is not one of ours.
+ * Sends every /parts/vendors path to /parts/, or returns null when the path is not one of ours.
  *
- * POST is allowed on the login path and nowhere else. GET on the login path is a browser
- * reloading a form post, so it goes to the search page rather than to an error.
+ * Every method redirects, including the POST an old passcode form would send: there is nothing
+ * here to post to, and answering 405 would leave a browser stranded on a page that no longer
+ * exists.
  */
-export async function handleVendors(
-  request: Request,
-  url: URL,
-  env: Env,
-): Promise<Response | null> {
+export function handleVendors(url: URL): Response | null {
   const path = url.pathname;
   if (path !== "/parts/vendors" && !path.startsWith(VENDORS_PATH)) return null;
-
-  if (path === LOGIN_PATH) {
-    if (request.method === "POST") return handleLogin(request, env);
-    // GET is the passcode form itself, reached from the "Sign in to see suppliers here" line. It
-    // carries q, city and country so that signing in lands back on the page that offered it.
-    if (request.method === "GET") {
-      // next carries the page the footer link was on, so signing in returns to it.
-      const next = safeNext(url.searchParams.get("next") ?? "");
-      return html(renderGate(next, "", passcodeConfigured(env)));
-    }
-    return notAllowed("POST");
-  }
-  if (request.method !== "GET") return notAllowed("GET");
-
-  if (path === "/parts/vendors") {
-    const search = vendorQuery(url.searchParams);
-    return found(search === "" ? PAGE_PATH : `${PAGE_PATH}?${search}`);
-  }
-  if (path === LOGOUT_PATH) return redirect(PAGE_PATH, { "Set-Cookie": clearCookie() });
-  // The suppliers are on /parts/ itself now. The two old pages keep working as links, by
-  // sending the browser to the page that replaced them with the same query.
-  if (path === VENDORS_PATH || path === CONTACT_PATH) {
-    const search = vendorQuery(url.searchParams);
-    return found(search === "" ? PAGE_PATH : `${PAGE_PATH}?${search}`);
-  }
-  return null;
+  const search = vendorQuery(url.searchParams);
+  return found(search === "" ? PAGE_PATH : `${PAGE_PATH}?${search}`);
 }

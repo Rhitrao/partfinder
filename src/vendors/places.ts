@@ -57,8 +57,13 @@ export interface Place {
 export type PlacesFailure = "quota" | "unavailable";
 
 export class PlacesError extends Error {
-  constructor(readonly kind: PlacesFailure) {
+  // A plain field, not a constructor parameter property: scripts/sample.ts runs this tree
+  // through Node's type-stripping, which does not implement that piece of TypeScript.
+  readonly kind: PlacesFailure;
+
+  constructor(kind: PlacesFailure) {
     super(kind);
+    this.kind = kind;
     this.name = "PlacesError";
   }
 }

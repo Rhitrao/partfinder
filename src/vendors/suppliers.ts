@@ -15,12 +15,7 @@ import {
 } from "../page";
 import type { ParseResult } from "../parse";
 import { WHATSAPP_LABEL, phoneFor } from "./phone";
-import {
-  formatDistance,
-  type BrandGroup,
-  type Supplier,
-  type SupplierFailure,
-} from "./search";
+import { formatDistance, type BrandGroup, type Supplier } from "./search";
 
 /**
  * Google's attribution for Places results shown without a Google map, and for the map itself.
@@ -45,8 +40,8 @@ export function googleMapsBox(inner: string): string {
 /**
  * What a failed supplier search says. One message for all of them - a spent quota, a missing key,
  * a timeout, a 500, a body that would not parse - because the user can do the same thing about
- * each: use the links below. Neither Google's error text nor which case it was reaches the page,
- * and nothing is logged.
+ * each: use the links under "Search on Google instead". Neither Google's error text nor which
+ * case it was reaches the browser, and nothing is logged.
  */
 export const SUPPLIERS_UNAVAILABLE = "Supplier list unavailable right now";
 
@@ -132,25 +127,87 @@ export function renderLinkOuts(
       </section>`;
 }
 
-export interface SuppliersInput {
-  suppliers: readonly Supplier[];
+/** What the status line says while the page's script is fetching the list. */
+export const FINDING = "Finding suppliers\u2026";
+
+/** What a browser with no JavaScript is told, since the list only ever arrives by fetch. */
+export const NO_SCRIPT = "Turn on JavaScript to see suppliers here.";
+
+/**
+ * "Use my location" is rendered here rather than by the script, so the section is complete in the
+ * HTML, and hidden until the script unhides it: without JavaScript there is nothing behind it.
+ */
+const LOCATE_BUTTON =
+  `<button type="button" class="locate" id="pf-locate-button" hidden>Use my location</button>`;
+
+/** Grey rows in the shape of the cards that will replace them. Decoration, so hidden from AT. */
+function renderGhosts(): string {
+  const row = `<li class="ghost">
+              <span class="ghostbar"></span>
+              <span class="ghostbar short"></span>
+            </li>`;
+  return `<ol class="ghosts" id="pf-ghosts" aria-hidden="true">
+            ${[row, row, row].join("\n            ")}
+          </ol>`;
+}
+
+export interface PendingInput {
   groups: readonly BrandGroup[];
+  country: Country;
+  city: string;
+  /** Public by design: Turnstile reads it off the widget's own element. */
+  siteKey: string;
+  /** Whether to draw the map box at all. Without a browser key nothing can fill it. */
+  map: boolean;
+}
+
+/**
+ * The Suppliers section as the server renders it: a heading, a status line, three grey
+ * placeholders, an empty list, the Turnstile widget and the way out if none of it works.
+ *
+ * Nothing here has been fetched. The section is a promise the page's script keeps by posting to
+ * /parts/api/suppliers with a Turnstile token; until then, and forever without JavaScript, the
+ * link-outs under "Search on Google instead" are the answer. Google's attribution box is drawn
+ * now rather than with the cards, so the cards can never appear without it.
+ */
+export function renderPending(input: PendingInput): string {
+  const { groups, country, city, siteKey, map } = input;
+  const where = city.trim();
+  const inner = [
+    ...(map ? [renderMapBox()] : []),
+    renderGhosts(),
+    `<div id="pf-list"></div>`,
+  ];
+  return `<section class="suppliers">
+        <h2>Suppliers near ${escapeHtml(where)}</h2>
+        <p class="status" id="pf-status" aria-live="polite">${escapeHtml(FINDING)}</p>
+        ${googleMapsBox(inner.join("\n          "))}
+        <div class="turnstile" id="pf-turnstile" data-sitekey="${escapeHtml(siteKey)}"
+          data-appearance="interaction-only"></div>
+        <div id="pf-locate">${LOCATE_BUTTON}</div>
+        <noscript>
+          <p class="warn">${escapeHtml(NO_SCRIPT)}</p>
+          ${renderFallback(groups, country, city)}
+        </noscript>
+        <details class="elsewhere" id="pf-elsewhere">
+          <summary>Search on Google instead</summary>
+          ${renderFallback(groups, country, city)}
+        </details>
+      </section>`;
+}
+
+export interface CardsInput {
+  suppliers: readonly Supplier[];
   /** Every part number the page is asking about, before any shop's brands narrow it. */
   parts: readonly ParseResult[];
   /** Quantity per part key, for the messages. */
   quantities: Record<string, number>;
   /** A line for the supplier, from "More options". */
   note: string;
-  city: string;
-  country: Country;
   /** What distances are measured from: "you" or "<city> centre". */
   originLabel: string;
-  /** Null when the search ran. Otherwise why the section shows link-outs instead. */
-  failure: SupplierFailure | null;
   /** Shops past MAX_LISTED, counted rather than hidden. */
   omitted: number;
-  /** The map box, when a key and a located shop are both present. */
-  map?: string;
 }
 
 export const NO_SUPPLIERS = "Google listed no shops for these brands in this city.";
@@ -158,48 +215,34 @@ export const NO_SUPPLIERS = "Google listed no shops for these brands in this cit
 export const MATCH_NOTE =
   "Matched by the brands Google lists each shop for. Listed doesn't mean in stock. Ask them.";
 
-export function cityNotFound(city: string): string {
-  return `Couldn't find ${city.trim()}. Check the spelling.`;
-}
-
-function heading(suppliers: readonly Supplier[], city: string, originLabel: string): string {
-  const where = originLabel === "you" ? "you" : city.trim();
-  return `<h2>Suppliers near ${escapeHtml(where)} (${suppliers.length})</h2>`;
-}
-
-/** The whole section, or the fallback when Google would not answer. */
-export function renderSuppliers(input: SuppliersInput): string {
-  const { suppliers, groups, city, country, failure, omitted, originLabel } = input;
-  if (failure !== null) {
-    const message = failure === "city" ? cityNotFound(city) : SUPPLIERS_UNAVAILABLE;
-    return `<section class="suppliers">
-        <h2>Suppliers</h2>
-        <p class="warn">${escapeHtml(message)}</p>
-        ${renderFallback(groups, country, city)}
-      </section>`;
-  }
-
-  const inner: string[] = [];
-  // JavaScript fills this with "All / 1U-3352 / 40/300893". Empty and invisible without it.
-  inner.push(`<div class="filters" id="pf-filters"></div>`);
-  if (input.map) inner.push(input.map);
-  inner.push(
+/**
+ * The cards, and only the cards: what POST /parts/api/suppliers puts in its html field.
+ *
+ * The heading, the map box, Google's attribution and the link-outs are already on the page, so
+ * this renders what was not known until Google answered - the note about what a match means, the
+ * filter slot the script fills, and one numbered row per shop. Every value in it is escaped here,
+ * on the server, because this is the one string the page's script is allowed to insert as HTML.
+ */
+export function renderSupplierCards(input: CardsInput): string {
+  const { suppliers, omitted } = input;
+  const parts: string[] = [
+    `<p class="caveat">${escapeHtml(MATCH_NOTE)}</p>`,
+    // JavaScript fills this with "All / 1U-3352 / 40/300893". Empty and invisible without it.
+    `<div class="filters" id="pf-filters"></div>`,
+  ];
+  parts.push(
     suppliers.length === 0
-      ? `<p class="nothing">${NO_SUPPLIERS}</p>`
+      ? `<p class="nothing">${escapeHtml(NO_SUPPLIERS)}</p>`
       : `<ol class="shops">
           ${suppliers.map((supplier, i) => renderShop(supplier, i + 1, input)).join("\n          ")}
           </ol>`,
   );
-
-  const more =
-    omitted > 0
-      ? `\n        <p class="note">Showing the first ${suppliers.length}. ${omitted} more were left out.</p>`
-      : "";
-  return `<section class="suppliers">
-        ${heading(suppliers, city, originLabel)}
-        <p class="caveat">${escapeHtml(MATCH_NOTE)}</p>
-        ${googleMapsBox(inner.join("\n          "))}${more}
-      </section>`;
+  if (omitted > 0) {
+    parts.push(
+      `<p class="note">Showing the first ${suppliers.length}. ${omitted} more were left out.</p>`,
+    );
+  }
+  return parts.join("\n        ");
 }
 
 /** "4.3 * (120)", or "" when the key's tier returned no rating. */
@@ -236,7 +279,7 @@ function matchedOf(supplier: Supplier, parts: readonly ParseResult[]): ParseResu
  * JavaScript at all. A shop listed for some of the parts but not all gets a second link for every
  * part, because without JavaScript there is no toggle to switch between them.
  */
-function renderShop(supplier: Supplier, number: number, input: SuppliersInput): string {
+function renderShop(supplier: Supplier, number: number, input: CardsInput): string {
   const { place, distanceKm, matchedGroups, multiBrandOnly } = supplier;
   const { parts, quantities, note, originLabel } = input;
   const name = place.name === "" ? "Unnamed listing" : place.name;

@@ -1,13 +1,15 @@
 // Step 5b: the Terms and Privacy pages Google's Places API policies require, and the footer that
 // makes them reachable from everywhere. The handler is called in-process; no network.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { GOOGLE_MAPS_TERMS_URL, GOOGLE_PRIVACY_URL } from "../src/legal";
-import { vendorToken } from "../src/vendors/auth";
+import {
+  CLOUDFLARE_PRIVACY_URL,
+  GOOGLE_MAPS_TERMS_URL,
+  GOOGLE_PRIVACY_URL,
+} from "../src/legal";
 
-const PASSCODE = "step-five-b-passcode";
-const env = { VENDOR_PASSCODE: PASSCODE, GOOGLE_PLACES_KEY: "not-a-real-key" };
+const env = { GOOGLE_PLACES_KEY: "not-a-real-key", TURNSTILE_SITE_KEY: "not-a-real-site-key" };
 
 const get = (path: string, init?: RequestInit) =>
   worker.fetch(new Request(`https://rohitrao.in${path}`, init), env);
@@ -17,21 +19,6 @@ const hrefs = (html: string) =>
 
 /** Just the footer element. */
 const footer = (html: string) => html.match(/<footer class="footer">[\s\S]*?<\/footer>/)?.[0];
-
-/** One shop, enough for the footer and attribution checks. */
-const SHOP = JSON.stringify({
-  places: [
-    {
-      id: "a",
-      displayName: { text: "A Shop" },
-      formattedAddress: "A Shop, Bengaluru",
-      location: { latitude: 12.97, longitude: 77.59 },
-      googleMapsUri: "https://maps.google.com/?cid=a",
-    },
-  ],
-});
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("GET /parts/terms and /parts/privacy", () => {
   it("both answer 200 as HTML, noindex, with the site's security headers", async () => {
@@ -44,13 +31,6 @@ describe("GET /parts/terms and /parts/privacy", () => {
       expect(res.headers.get("Content-Security-Policy"), path).toContain("default-src 'none'");
       const html = await res.text();
       expect(html, path).toContain('<meta name="robots" content="noindex">');
-    }
-  });
-
-  it("are public: neither asks for the vendor passcode", async () => {
-    for (const path of ["/parts/terms", "/parts/privacy"]) {
-      const html = await (await get(path)).text();
-      expect(html, path).not.toContain('name="passcode"');
     }
   });
 
@@ -73,11 +53,33 @@ describe("GET /parts/terms and /parts/privacy", () => {
     const html = await (await get("/parts/privacy")).text();
     expect(GOOGLE_PRIVACY_URL).toBe("https://policies.google.com/privacy");
     expect(hrefs(html)).toContain(GOOGLE_PRIVACY_URL);
-    // The four things the page has to be straight about.
-    expect(html).toContain("pf_vendor");
+    // The three things the page has to be straight about.
     expect(html).toContain("Workers Logs are turned off");
     expect(html).toContain("place IDs");
     expect(html).toContain("WhatsApp link");
+  });
+
+  it("says what Turnstile does, and links Cloudflare's policy", async () => {
+    const html = await (await get("/parts/privacy")).text();
+    expect(CLOUDFLARE_PRIVACY_URL).toBe("https://www.cloudflare.com/privacypolicy/");
+    expect(hrefs(html)).toContain(CLOUDFLARE_PRIVACY_URL);
+    expect(html).toContain(
+      "To keep bots from using the supplier search, Cloudflare Turnstile checks the browser",
+    );
+  });
+
+  it("says what a supplier search sends to Google", async () => {
+    const html = await (await get("/parts/privacy")).text();
+    expect(html).toContain(
+      "Supplier searches send the brands, the city, and your rounded location if you share it",
+    );
+  });
+
+  it("no longer claims a passcode cookie, or that no script runs", async () => {
+    const html = await (await get("/parts/privacy")).text();
+    expect(html).not.toContain("pf_vendor");
+    expect(html).not.toContain("passcode");
+    expect(html).not.toContain("runs no JavaScript at all");
   });
 
   it("rejects anything but GET", async () => {
@@ -96,41 +98,17 @@ describe("the footer", () => {
     expect(footer(html)).toContain('href="/parts/privacy"');
   });
 
-  it("links both pages from a page showing suppliers", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(SHOP, { status: 200 })));
-    const html = await (
-      await get("/parts/?q=1u3352&city=Bengaluru", {
-        headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
-      })
-    ).text();
-    expect(html).toContain("A Shop");
-    expect(footer(html)).toContain('href="/parts/terms"');
-    expect(footer(html)).toContain('href="/parts/privacy"');
-  });
-
-  it("links both pages from the passcode gate and from the pages themselves", async () => {
-    for (const path of ["/parts/vendors/login", "/parts/terms", "/parts/privacy"]) {
+  it("links both pages from the pages themselves", async () => {
+    for (const path of ["/parts/terms", "/parts/privacy"]) {
       const html = await (await get(path)).text();
       expect(footer(html), path).toContain('href="/parts/terms"');
       expect(footer(html), path).toContain('href="/parts/privacy"');
     }
   });
-
-  it("keeps the Google attribution beside the listings, not down here", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(SHOP, { status: 200 })));
-    const html = await (
-      await get("/parts/?q=1u3352&city=Bengaluru", {
-        headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
-      })
-    ).text();
-    expect(html.indexOf('class="attribution"')).toBeGreaterThan(0);
-    expect(html.indexOf('class="attribution"')).toBeLessThan(html.indexOf("<footer"));
-    expect(footer(html)).not.toContain("Google");
-  });
 });
 
 describe("what the privacy page has to say since the cards", () => {
-  it("names both cookies, the rounded location and what the map sends", async () => {
+  it("names the two cookies that are left, the rounded location and what the map sends", async () => {
     const html = await (await get("/parts/privacy")).text();
     expect(html).toContain("pf_city");
     expect(html).toContain("pf_country");
