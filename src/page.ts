@@ -469,7 +469,6 @@ function renderAsk(q: string, hint: string, country: Country, city: string, note
       <input id="city" name="city" type="text" value="${escapeHtml(city)}" placeholder="e.g. Bengaluru"
         autocomplete="address-level2">
       <button type="submit" class="primary">Find parts &amp; suppliers</button>
-      <div id="pf-locate"></div>
       <details class="more">
         <summary>More options</summary>
         <label for="country">Country</label>
@@ -574,10 +573,6 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
               aria-label="Quantity for ${escapeHtml(number)}">
           </p>`);
 
-  const count = input.supplierCounts?.[key];
-  if (count !== undefined) {
-    lines.push(`<p class="asknote">Suppliers to ask: ${count}</p>`);
-  }
   lines.push(renderCheck(result, input.country));
 
   return `<section class="card">
@@ -688,16 +683,14 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
 /**
  * Terms and privacy, on every page under /parts. Google's Places API policies require both to be
  * publicly reachable from anywhere its data is used, and the rest of the site is no worse for it.
+ *
+ * There is no sign-in link beside them any more: the supplier list is public.
  */
-function renderFooter(signIn: string): string {
+function renderFooter(): string {
   return `<footer class="footer">
       <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
-      &middot; ${signIn}
     </footer>`;
 }
-
-/** Signed out, the only way in. Signed in, the only way out. Small, and at the foot of the page. */
-const SIGN_IN_LINK = `<a href="/parts/vendors/login">Owner sign-in</a>`;
 
 /**
  * The shared HTML shell for every page under /parts: one head, one stylesheet, no client-side
@@ -713,14 +706,12 @@ export interface DocumentOptions {
    * so an unnonced <style> would simply not apply.
    */
   nonce?: string;
-  /** Markup just before </body>. The Maps scripts, and nothing else so far. */
+  /** Markup just before </body>. The page's scripts, and nothing else so far. */
   tail?: string;
-  /** The footer's sign-in link, which carries where to come back to. */
-  signIn?: string;
 }
 
 export function renderDocument(main: string, options: DocumentOptions = {}): string {
-  const { extraStyle = "", nonce, tail = "", signIn = SIGN_IN_LINK } = options;
+  const { extraStyle = "", nonce, tail = "" } = options;
   const style = extraStyle === "" ? STYLE : `${STYLE}\n${extraStyle.trim()}`;
   const styleNonce = nonce === undefined ? "" : ` nonce="${escapeHtml(nonce)}"`;
   return `<!doctype html>
@@ -738,7 +729,7 @@ export function renderDocument(main: string, options: DocumentOptions = {}): str
   </head>
   <body>
     ${main}
-    ${renderFooter(signIn)}${tail}
+    ${renderFooter()}${tail}
   </body>
 </html>
 `;
@@ -788,15 +779,11 @@ export interface PageInput {
   quantities?: Record<string, number>;
   /** The subset of `quantities` the user typed, so the card can stop saying "from message". */
   typedQuantities?: Record<string, number>;
-  /** Supplier cards matching each part key. Absent when no supplier search ran. */
-  supplierCounts?: Record<string, number>;
   /**
    * Open "Other ways to send" and make the WhatsApp picker its primary button. True when there
    * are no supplier cards to use instead, so this block is the only way out.
    */
   sendOpen?: boolean;
-  /** Whether this browser is signed in, which decides what the footer link says. */
-  signedIn?: boolean;
   /** The parse, when the caller already has it. Recomputed here when it does not. */
   parsed?: ParsedQuery;
   /** The Suppliers section, rendered by the caller because only it can reach Google. */
@@ -805,19 +792,6 @@ export interface PageInput {
   nonce?: string;
   /** Markup just before </body>: the Maps scripts. */
   tail?: string;
-}
-
-/**
- * Where the footer's sign-in link goes: this page, so signing in comes straight back to it. It
- * carries what the user typed because that is where they were; it never carries near=, which is
- * a location and belongs to one page view only.
- */
-function signInUrl(input: PageInput): string {
-  const params = new URLSearchParams();
-  if (input.q !== "") params.set("q", input.q);
-  if (input.city.trim() !== "") params.set("city", input.city.trim());
-  params.set("country", input.country.code);
-  return `/parts/vendors/login?next=${encodeURIComponent(`/parts/?${params.toString()}`)}`;
 }
 
 /** Moved out of the main flow: true, needed once, and not what the user came for. */
@@ -876,9 +850,6 @@ export function renderPage(input: PageInput): string {
       ${sections.join("\n      ")}
       ${HOW_IT_WORKS}
     </main>`, {
-    signIn: input.signedIn
-      ? `<a href="/parts/vendors/logout">Sign out</a>`
-      : `<a href="${escapeHtml(signInUrl(input))}">Owner sign-in</a>`,
     ...(input.nonce === undefined ? {} : { nonce: input.nonce }),
     ...(input.tail === undefined ? {} : { tail: input.tail }),
   });

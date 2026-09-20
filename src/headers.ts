@@ -15,16 +15,6 @@ export const PAGE_HEADERS: Record<string, string> = {
 };
 
 /**
- * The vendor pages carry everything above plus Cache-Control: no-store. Their URLs hold the part
- * numbers and the city, and their bodies hold vendor names and phone numbers, so no cache -
- * shared, browser or back-forward - may keep a copy.
- */
-export const VENDOR_PAGE_HEADERS: Record<string, string> = {
-  ...PAGE_HEADERS,
-  "Cache-Control": "no-store",
-};
-
-/**
  * A fresh nonce per response, which is what makes a nonce CSP worth anything: a nonce reused
  * across responses is a nonce an attacker can read off one page and use on the next.
  */
@@ -73,8 +63,8 @@ export function mapPageHeaders(nonce: string): Record<string, string> {
   };
 }
 
-/** The same no-store policy on a redirect, which carries no body but still ends a vendor request. */
-export const VENDOR_REDIRECT_HEADERS: Record<string, string> = {
+/** A redirect carries no body, but its Location can hold a part number, so no cache keeps it. */
+export const REDIRECT_HEADERS: Record<string, string> = {
   "X-Robots-Tag": "noindex",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store",

@@ -1,15 +1,14 @@
-// Shared fixtures for the step 6 tests. Not a suite: vitest collects test/**/*.test.ts only, and
-// importing one test file from another would run its cases twice.
+// Shared fixtures for the supplier tests. Not a suite: vitest collects test/**/*.test.ts only,
+// and importing one test file from another would run its cases twice.
 
 import { vi } from "vitest";
 import worker from "../src/index";
-import { vendorToken } from "../src/vendors/auth";
 
-export const PASSCODE = "step-six-passcode";
 export const env = {
-  VENDOR_PASSCODE: PASSCODE,
   GOOGLE_PLACES_KEY: "places-key-must-never-be-rendered",
   GOOGLE_MAPS_BROWSER_KEY: "browser-key-meant-to-be-rendered",
+  TURNSTILE_SITE_KEY: "turnstile-site-key-meant-to-be-rendered",
+  TURNSTILE_SECRET_KEY: "turnstile-secret-must-never-be-rendered",
 };
 
 /** The two numbers the step prompt names: one Caterpillar, one JCB. */
@@ -18,15 +17,6 @@ export const SEARCH = `?q=${encodeURIComponent(Q)}&city=Bengaluru&country=IN`;
 
 export const get = (path: string, init?: RequestInit) =>
   worker.fetch(new Request(`https://rohitrao.in${path}`, init), env);
-
-export async function cookie(passcode = PASSCODE): Promise<string> {
-  return `pf_vendor=${await vendorToken(passcode)}`;
-}
-
-export async function signedIn(path: string, extraCookies = ""): Promise<Response> {
-  const jar = [await cookie(), extraCookies].filter((c) => c !== "").join("; ");
-  return get(path, { headers: { Cookie: jar } });
-}
 
 export function unescapeHtml(text: string): string {
   return text

@@ -6,28 +6,17 @@
 // the bare path only, and a pattern may not contain query parameters, so the page has to sit
 // under "rohitrao.in/parts/*" for /parts/?q=... to reach the Worker at all. See wrangler.toml.
 
+import { readCity, readCountry, setCity, setCountry } from "./cookies";
 import type { Env } from "./env";
-import { PAGE_HEADERS, mapPageHeaders, newNonce } from "./headers";
+import { PAGE_HEADERS } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import {
-  MAX_QUERY_LENGTH,
-  outbound,
-  readQuery,
-  renderPage,
-  requirementMessage,
-  resolveCountry,
-  whatsappUrl,
-} from "./page";
+import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors";
-import { isSignedIn, readCity, readCountry, setCity, setCountry } from "./vendors/auth";
-import { MAX_LISTED, findSuppliers, groupByOem } from "./vendors/search";
-import { renderScripts, type ShopData } from "./vendors/script";
-import { renderLinkOuts, renderMapBox, renderSuppliers } from "./vendors/suppliers";
-import { phoneFor } from "./vendors/phone";
-import { partKey } from "./page";
+import { groupByOem } from "./vendors/search";
+import { renderLinkOuts } from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -60,14 +49,13 @@ export function sharedLocation(raw: string | null): { lat: number; lng: number }
 }
 
 /**
- * The page. Since step 6 it also carries the Suppliers section, so it can reach Google and has to
- * know who is asking.
+ * The page.
  *
- * Nothing is fetched unless all three hold: the browser has a valid passcode cookie, there is a
- * city, and at least one number passed the outbound rule. A signed-out visitor gets exactly
- * today's page plus one line offering the passcode form.
+ * It calls nothing. Since step 7 the Suppliers section is filled by the page's own script from
+ * POST /parts/api/suppliers, so rendering this page never reaches Google and never reaches
+ * Cloudflare's siteverify: a crawler, a bot or a WhatsApp link preview costs nothing.
  */
-async function handlePage(request: Request, url: URL, env: Env): Promise<Response> {
+function handlePage(request: Request, url: URL): Response {
   const q = url.searchParams.get("q") ?? "";
   const hint = url.searchParams.get("hint") ?? "";
   const typedCity = url.searchParams.get("city");
@@ -105,7 +93,6 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
       typedQuantities[name.slice("qty_".length)] = amount;
     }
   }
-  const extra: Record<string, string> = {};
   // Only what the user actually typed or picked: a page view that merely read a cookie need not
   // rewrite it. Two Set-Cookie headers need an array, which Headers.append builds below.
   const cookies: string[] = [];
@@ -113,95 +100,9 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   if (typedCountry !== null && typedCountry.trim() !== "") cookies.push(setCountry(country.code));
 
   let suppliers: string | undefined;
-  let nonce: string | undefined;
-  let tail: string | undefined;
-  // "Other ways to send" is the only way out until supplier cards render, so it opens by default.
-  let sendOpen = true;
-  const supplierCounts: Record<string, number> = {};
-  const shared = sharedLocation(url.searchParams.get("near"));
-  const signedIn = await isSignedIn(request, env);
   if (sending.length > 0) {
     const { groups } = groupByOem(sending);
-    if (!signedIn || city.trim() === "") {
-      // Signed out, or with no city: the link-outs, and nothing about signing in. The only way
-      // in is the footer link, which is where section 9 of the step prompt puts it.
-      if (groups.length > 0) suppliers = renderLinkOuts(groups, country, city);
-    } else {
-      {
-        const answer = await findSuppliers(env.GOOGLE_PLACES_KEY, groups, country, city, shared);
-        const listed = answer.suppliers.slice(0, MAX_LISTED);
-        const quantities = { ...parsed.quantities, ...typedQuantities };
-        const origin = answer.origin;
-        const originLabel = origin?.label ?? `${city.trim()} centre`;
-        const pinned = listed.some((s) => s.place.location !== null);
-        const mapsKey = env.GOOGLE_MAPS_BROWSER_KEY;
-        // The one page that runs a script: signed in, with the Suppliers section on it. The map
-        // needs a key and a shop to pin as well; the rest of the script works without either.
-        if (answer.failure === null) {
-          nonce = newNonce();
-          const shops: ShopData[] = listed.map((supplier, index) => {
-            const phone = phoneFor(supplier.place);
-            const matched = sending.filter((p) => supplier.matchedParts.includes(partKey(p)));
-            const asking = matched.length > 0 ? matched : sending;
-            const wa = (parts: typeof sending) =>
-              phone.whatsapp === null
-                ? ""
-                : whatsappUrl(
-                    requirementMessage(parts, {
-                      name: supplier.place.name === "" ? "there" : supplier.place.name,
-                      note,
-                      quantities,
-                    }),
-                    phone.whatsapp,
-                  );
-            return {
-              n: index + 1,
-              name: supplier.place.name === "" ? "Unnamed listing" : supplier.place.name,
-              lat: supplier.place.location?.lat ?? null,
-              lng: supplier.place.location?.lng ?? null,
-              matchedParts: supplier.matchedParts,
-              waMatched: wa(asking),
-              waAll: wa(sending),
-              tel: phone.tel ?? "",
-            };
-          });
-          tail = renderScripts(
-            {
-              origin:
-                origin === null
-                  ? null
-                  : { lat: origin.lat, lng: origin.lng, you: origin.label === "you" },
-              parts: sending.map(partKey),
-              shops,
-            },
-            pinned ? mapsKey : undefined,
-            nonce,
-            originLabel,
-          );
-        }
-        suppliers = renderSuppliers({
-          ...(pinned && mapsKey !== undefined && mapsKey !== "" ? { map: renderMapBox() } : {}),
-          suppliers: listed,
-          groups,
-          parts: sending,
-          quantities,
-          note,
-          city,
-          country,
-          originLabel,
-          failure: answer.failure,
-          omitted: answer.suppliers.length - listed.length,
-        });
-        for (const supplier of listed) {
-          for (const key of supplier.matchedParts) {
-            supplierCounts[key] = (supplierCounts[key] ?? 0) + 1;
-          }
-        }
-        sendOpen = listed.length === 0;
-        // Supplier data, and who asked for it, are on this page. No cache may keep a copy.
-        extra["Cache-Control"] = "no-store";
-      }
-    }
+    if (groups.length > 0) suppliers = renderLinkOuts(groups, country, city);
   }
 
   const html = renderPage({
@@ -213,17 +114,10 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
     country,
     parsed,
     typedQuantities,
-    sendOpen,
-    signedIn,
-    supplierCounts,
+    sendOpen: true,
     ...(suppliers === undefined ? {} : { suppliers }),
-    ...(nonce === undefined ? {} : { nonce }),
-    ...(tail === undefined ? {} : { tail }),
   });
-  // Only a page that actually runs the Maps script relaxes the CSP for it. Every other page,
-  // including a signed-in page whose search found nothing to pin, keeps today's headers.
-  const base = nonce === undefined ? PAGE_HEADERS : mapPageHeaders(nonce);
-  const headers = new Headers({ ...base, ...extra });
+  const headers = new Headers(PAGE_HEADERS);
   for (const cookie of cookies) headers.append("Set-Cookie", cookie);
   return new Response(html, { status: 200, headers });
 }
@@ -287,8 +181,8 @@ const LEGAL_PAGES: Record<string, () => string> = {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    // /parts/vendors is passcode-gated and has its own method rules, so it is routed first.
-    const vendors = await handleVendors(request, url, env);
+    // /parts/vendors is gone: every path under it redirects to the page that replaced it.
+    const vendors = handleVendors(request, url);
     if (vendors !== null) return vendors;
 
     const asset = ASSETS[url.pathname];
@@ -311,7 +205,7 @@ export default {
     }
     if (url.pathname === "/parts/") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
-      return handlePage(request, url, env);
+      return handlePage(request, url);
     }
     if (url.pathname === "/parts") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });

@@ -4,10 +4,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { GOOGLE_MAPS_TERMS_URL, GOOGLE_PRIVACY_URL } from "../src/legal";
-import { vendorToken } from "../src/vendors/auth";
 
-const PASSCODE = "step-five-b-passcode";
-const env = { VENDOR_PASSCODE: PASSCODE, GOOGLE_PLACES_KEY: "not-a-real-key" };
+const env = { GOOGLE_PLACES_KEY: "not-a-real-key", TURNSTILE_SITE_KEY: "not-a-real-site-key" };
 
 const get = (path: string, init?: RequestInit) =>
   worker.fetch(new Request(`https://rohitrao.in${path}`, init), env);
@@ -47,13 +45,6 @@ describe("GET /parts/terms and /parts/privacy", () => {
     }
   });
 
-  it("are public: neither asks for the vendor passcode", async () => {
-    for (const path of ["/parts/terms", "/parts/privacy"]) {
-      const html = await (await get(path)).text();
-      expect(html, path).not.toContain('name="passcode"');
-    }
-  });
-
   it("carry no form at all, so there is nothing on them to submit", async () => {
     for (const path of ["/parts/terms", "/parts/privacy"]) {
       const html = await (await get(path)).text();
@@ -73,8 +64,7 @@ describe("GET /parts/terms and /parts/privacy", () => {
     const html = await (await get("/parts/privacy")).text();
     expect(GOOGLE_PRIVACY_URL).toBe("https://policies.google.com/privacy");
     expect(hrefs(html)).toContain(GOOGLE_PRIVACY_URL);
-    // The four things the page has to be straight about.
-    expect(html).toContain("pf_vendor");
+    // The three things the page has to be straight about.
     expect(html).toContain("Workers Logs are turned off");
     expect(html).toContain("place IDs");
     expect(html).toContain("WhatsApp link");
@@ -96,36 +86,12 @@ describe("the footer", () => {
     expect(footer(html)).toContain('href="/parts/privacy"');
   });
 
-  it("links both pages from a page showing suppliers", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(SHOP, { status: 200 })));
-    const html = await (
-      await get("/parts/?q=1u3352&city=Bengaluru", {
-        headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
-      })
-    ).text();
-    expect(html).toContain("A Shop");
-    expect(footer(html)).toContain('href="/parts/terms"');
-    expect(footer(html)).toContain('href="/parts/privacy"');
-  });
-
-  it("links both pages from the passcode gate and from the pages themselves", async () => {
-    for (const path of ["/parts/vendors/login", "/parts/terms", "/parts/privacy"]) {
+  it("links both pages from the pages themselves", async () => {
+    for (const path of ["/parts/terms", "/parts/privacy"]) {
       const html = await (await get(path)).text();
       expect(footer(html), path).toContain('href="/parts/terms"');
       expect(footer(html), path).toContain('href="/parts/privacy"');
     }
-  });
-
-  it("keeps the Google attribution beside the listings, not down here", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(SHOP, { status: 200 })));
-    const html = await (
-      await get("/parts/?q=1u3352&city=Bengaluru", {
-        headers: { Cookie: `pf_vendor=${await vendorToken(PASSCODE)}` },
-      })
-    ).text();
-    expect(html.indexOf('class="attribution"')).toBeGreaterThan(0);
-    expect(html.indexOf('class="attribution"')).toBeLessThan(html.indexOf("<footer"));
-    expect(footer(html)).not.toContain("Google");
   });
 });
 
