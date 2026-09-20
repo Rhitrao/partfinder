@@ -42,6 +42,9 @@ export const NO_SUPPLIERS = "Google listed no shops for these brands in this cit
 /** Shown to everyone who is not signed in, wherever the Suppliers section would have been. */
 export const SIGN_IN_PROMPT = "Sign in to see suppliers here";
 
+/** What the map box says until the script replaces it, and forever if the script never runs. */
+export const MAP_UNAVAILABLE = "Map unavailable. The list below has everything.";
+
 export const QUOTA_REACHED = "Vendor search hit today's Google limit. Use the links below instead.";
 export const UNAVAILABLE = "Vendor search isn't available right now. Use the links below instead.";
 
@@ -60,6 +63,102 @@ export function renderSignIn(q: string, city: string, country: Country): string 
         <p class="signin"><a href="${escapeHtml(signInUrl(q, city, country))}">${SIGN_IN_PROMPT}</a>,
         or use the Where-to-buy links on each card.</p>
       </section>`;
+}
+
+/** All the map is told about a shop: its number, its name and where it is. Nothing else. */
+export interface Pin {
+  n: number;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+/** One pin per listed shop Google gave coordinates for, numbered as the list numbers it. */
+export function pinsFor(vendors: readonly Vendor[]): Pin[] {
+  const pins: Pin[] = [];
+  vendors.forEach((vendor, index) => {
+    const { location, name } = vendor.place;
+    if (location === null) return;
+    pins.push({ n: index + 1, name: name === "" ? "Unnamed listing" : name, ...location });
+  });
+  return pins;
+}
+
+/**
+ * JSON safe to put between <script> tags. Escaping "<" is what stops a shop called
+ * "</script><script>..." from ending the block early and becoming code; ">" and "&" go with it,
+ * and U+2028/U+2029 because they are line terminators to a JavaScript parser.
+ */
+export function jsonForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+/** The box the map is drawn into. Its text is the no-JavaScript answer. */
+export function renderMapBox(): string {
+  return `<div class="map" id="pf-map">${MAP_UNAVAILABLE}</div>`;
+}
+
+/**
+ * The pin data, the code that draws the map, and Google's loader. Everything carries the nonce.
+ *
+ * The data is a JSON block rather than anything interpolated into code, so a shop's name is never
+ * parsed as JavaScript. initMap is defined before the loader runs, which is what &callback=initMap
+ * needs; the loader is async, so the list is on screen whether or not the map ever arrives, and
+ * every failure path leaves the box's own text in place.
+ */
+export function renderMapScripts(pins: readonly Pin[], key: string, nonce: string): string {
+  const n = escapeHtml(nonce);
+  const loader =
+    "https://maps.googleapis.com/maps/api/js" +
+    `?key=${encodeURIComponent(key)}&callback=initMap&loading=async`;
+  return `
+    <script type="application/json" id="pf-pins" nonce="${n}">${jsonForScript(pins)}</script>
+    <script nonce="${n}">
+window.initMap = async function () {
+  var box = document.getElementById("pf-map");
+  var data = document.getElementById("pf-pins");
+  if (!box || !data) return;
+  var pins;
+  try { pins = JSON.parse(data.textContent || "[]"); } catch (e) { return; }
+  if (!pins.length) return;
+  try {
+    var maps = await google.maps.importLibrary("maps");
+    var markers = await google.maps.importLibrary("marker");
+    box.textContent = "";
+    var map = new maps.Map(box, {
+      mapId: "DEMO_MAP_ID",
+      zoom: 12,
+      center: { lat: pins[0].lat, lng: pins[0].lng }
+    });
+    var bounds = new google.maps.LatLngBounds();
+    pins.forEach(function (pin) {
+      var position = { lat: pin.lat, lng: pin.lng };
+      var glyph = new markers.PinElement({ glyph: String(pin.n) });
+      var marker = new markers.AdvancedMarkerElement({
+        map: map,
+        position: position,
+        title: pin.name,
+        content: glyph.element,
+        gmpClickable: true
+      });
+      marker.addListener("gmp-click", function () {
+        var row = document.getElementById("pf-shop-" + pin.n);
+        if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      bounds.extend(position);
+    });
+    map.fitBounds(bounds);
+  } catch (e) {
+    box.textContent = ${jsonForScript(MAP_UNAVAILABLE)};
+  }
+};
+    </script>
+    <script src="${escapeHtml(loader)}" async nonce="${n}"></script>`;
 }
 
 export interface SuppliersInput {

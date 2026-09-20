@@ -393,6 +393,19 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .shop .whatsapp { margin: .4rem 0 0; }
 .shop .link { margin-top: .4rem; }
 .signin { font-weight: 600; }
+.map {
+  height: 260px;
+  margin-top: 1rem;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: .9rem;
+  padding: .5rem;
+}
+@media (min-width: 40rem) { .map { height: 340px; } }
 .warn { font-weight: 600; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
 .footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }

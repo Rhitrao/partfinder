@@ -7,7 +7,7 @@
 // under "rohitrao.in/parts/*" for /parts/?q=... to reach the Worker at all. See wrangler.toml.
 
 import type { Env } from "./env";
-import { PAGE_HEADERS } from "./headers";
+import { PAGE_HEADERS, mapPageHeaders, newNonce } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
@@ -16,7 +16,13 @@ import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } fro
 import { handleVendors } from "./vendors";
 import { isSignedIn, readCity, setCity } from "./vendors/auth";
 import { MAX_LISTED, findVendors, groupByOem } from "./vendors/search";
-import { renderSignIn, renderSuppliers } from "./vendors/suppliers";
+import {
+  pinsFor,
+  renderMapBox,
+  renderMapScripts,
+  renderSignIn,
+  renderSuppliers,
+} from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -70,6 +76,8 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   if (typedCity !== null && typedCity.trim() !== "") extra["Set-Cookie"] = setCity(typedCity);
 
   let suppliers: string | undefined;
+  let nonce: string | undefined;
+  let tail: string | undefined;
   if (sending.length > 0) {
     if (!(await isSignedIn(request, env))) {
       suppliers = renderSignIn(q, city, country);
@@ -83,6 +91,15 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
           city,
         );
         const listed = vendors.slice(0, MAX_LISTED);
+        // The map is drawn only when there is a key to draw it with and a shop to pin. Without
+        // either, the section is the list, which is the part that carries the phone numbers.
+        const pins = pinsFor(listed);
+        const mapsKey = env.GOOGLE_MAPS_BROWSER_KEY;
+        const withMap = failure === null && pins.length > 0 && mapsKey !== undefined && mapsKey !== "";
+        if (withMap) {
+          nonce = newNonce();
+          tail = renderMapScripts(pins, mapsKey, nonce);
+        }
         suppliers = renderSuppliers({
           vendors: listed,
           groups,
@@ -91,6 +108,7 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
           country,
           failure,
           omitted: vendors.length - listed.length,
+          ...(withMap ? { map: renderMapBox() } : {}),
         });
         // Supplier data, and who asked for it, are on this page. No cache may keep a copy.
         extra["Cache-Control"] = "no-store";
@@ -107,8 +125,13 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
     country,
     parsed,
     ...(suppliers === undefined ? {} : { suppliers }),
+    ...(nonce === undefined ? {} : { nonce }),
+    ...(tail === undefined ? {} : { tail }),
   });
-  return new Response(html, { status: 200, headers: { ...PAGE_HEADERS, ...extra } });
+  // Only a page that actually runs the Maps script relaxes the CSP for it. Every other page,
+  // including a signed-in page whose search found nothing to pin, keeps today's headers.
+  const base = nonce === undefined ? PAGE_HEADERS : mapPageHeaders(nonce);
+  return new Response(html, { status: 200, headers: { ...base, ...extra } });
 }
 
 function handleParse(url: URL): Response {
