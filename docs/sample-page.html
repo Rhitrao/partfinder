@@ -9,7 +9,7 @@
     <link rel="manifest" href="/parts/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/parts/icon-192.png">
     <title>Partfinder</title>
-    <style>:root { color-scheme: light dark; }
+    <style nonce="sample-nonce">:root { color-scheme: light dark; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -279,6 +279,62 @@ body { padding-bottom: 5rem; }
         <button type="submit" class="update">Update quantities</button>
       </section>
       </form>
+      <section class="suppliers">
+        <h2>Suppliers near Bengaluru</h2>
+        <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+        <section class="gmaps" aria-label="Google Maps">
+          <div class="map" id="pf-map">Map unavailable. The list below has everything.</div>
+          <ol class="ghosts" id="pf-ghosts" aria-hidden="true">
+            <li class="ghost">
+              <span class="ghostbar"></span>
+              <span class="ghostbar short"></span>
+            </li>
+            <li class="ghost">
+              <span class="ghostbar"></span>
+              <span class="ghostbar short"></span>
+            </li>
+            <li class="ghost">
+              <span class="ghostbar"></span>
+              <span class="ghostbar short"></span>
+            </li>
+          </ol>
+          <div id="pf-list"></div>
+          <p class="attribution">Google Maps</p>
+        </section>
+        <div class="turnstile" id="pf-turnstile" data-sitekey="sample-turnstile-site-key"
+          data-appearance="interaction-only"></div>
+        <div id="pf-locate"><button type="button" class="locate" id="pf-locate-button" hidden>Use my location</button></div>
+        <noscript>
+          <p class="warn">Turn on JavaScript to see suppliers here.</p>
+          <div class="group">
+          <h3>Caterpillar</h3>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          
+        </div>
+        <div class="group">
+          <h3>JCB</h3>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          
+        </div>
+        </noscript>
+        <details class="elsewhere" id="pf-elsewhere">
+          <summary>Search on Google instead</summary>
+          <div class="group">
+          <h3>Caterpillar</h3>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          
+        </div>
+        <div class="group">
+          <h3>JCB</h3>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          
+        </div>
+        </details>
+      </section>
       <details class="send">
         <summary>Other ways to send</summary>
         <label for="message">The message</label>
@@ -320,5 +376,488 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     <footer class="footer">
       <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
     </footer>
+    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"]}</script>
+    <script nonce="sample-nonce">
+(function () {
+  "use strict";
+  var el = document.getElementById("pf-data");
+  if (!el) return;
+  var data;
+  try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
+  var parts = data.parts || [];
+
+  var status = document.getElementById("pf-status");
+  var ghosts = document.getElementById("pf-ghosts");
+  var list = document.getElementById("pf-list");
+  var elsewhere = document.getElementById("pf-elsewhere");
+  var widget = document.getElementById("pf-turnstile");
+  var box = document.getElementById("pf-map");
+  if (!status || !list || !widget) return;
+
+  var shops = [];
+  var pins = [];
+  var near = null;
+  var widgetId = null;
+  var running = false;
+
+  function make(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function card(n) { return document.getElementById("pf-shop-" + n); }
+  function say(message) { status.textContent = message; }
+  function field(id) {
+    var node = document.getElementById(id);
+    return node && typeof node.value === "string" ? node.value : "";
+  }
+  function openElsewhere() { if (elsewhere) elsewhere.open = true; }
+
+  // ---- Asking the endpoint ---------------------------------------------------------------
+  function clearRetry() {
+    var old = document.getElementById("pf-retry");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
+
+  function offerRetry() {
+    clearRetry();
+    var button = make("button", "retry", "Retry");
+    button.type = "button";
+    button.id = "pf-retry";
+    button.addEventListener("click", again);
+    if (status.parentNode) status.parentNode.insertBefore(button, status.nextSibling);
+  }
+
+  function again() {
+    clearRetry();
+    if (!window.turnstile || widgetId === null) return;
+    say("Finding suppliers…");
+    window.turnstile.reset(widgetId);
+  }
+
+  function fail(message, retry) {
+    say(message);
+    openElsewhere();
+    if (retry) offerRetry();
+  }
+
+  function quantities() {
+    var out = {};
+    var inputs = document.querySelectorAll("input[name^='qty_']");
+    for (var i = 0; i < inputs.length; i++) {
+      var amount = Number(inputs[i].value);
+      if (Number.isInteger(amount) && amount >= 1 && amount <= 9999) {
+        out[inputs[i].name.slice(4)] = amount;
+      }
+    }
+    return out;
+  }
+
+  function search(token) {
+    if (running) return;
+    running = true;
+    clearRetry();
+    say(FINDING_TEXT);
+    var payload = {
+      token: token,
+      q: field("q"),
+      city: field("city"),
+      country: field("country"),
+      note: field("note"),
+      qty: quantities()
+    };
+    if (near) payload.near = near;
+
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    var done = function () { clearTimeout(timer); running = false; };
+
+    fetch("/parts/api/suppliers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "omit",
+      cache: "no-store",
+      signal: controller.signal
+    }).then(function (response) {
+      return response.json();
+    }).then(function (body) {
+      done();
+      handle(body);
+    }).catch(function () {
+      done();
+      fail("Supplier list unavailable right now", true);
+    });
+  }
+
+  function handle(body) {
+    if (!body || typeof body !== "object") return fail(UNAVAILABLE_TEXT, true);
+    if (body.error === "verify") return fail("Couldn't verify this browser.", true);
+    if (body.error === "city") {
+      say("Couldn't find " + field("city").trim() + ". Check the spelling.");
+      openElsewhere();
+      return;
+    }
+    if (typeof body.html !== "string") return fail(UNAVAILABLE_TEXT, false);
+    show(body);
+  }
+
+  function show(body) {
+    // The one place in this script that assigns markup, and the only string allowed to be
+    // markup: body.html came from our own endpoint, which escaped every value in it on the
+    // server. Nothing a user typed is ever assigned this way.
+    var template = document.createElement("template");
+    template.innerHTML = body.html;
+    list.textContent = "";
+    list.appendChild(template.content);
+    if (ghosts && ghosts.parentNode) ghosts.parentNode.removeChild(ghosts);
+
+    shops = body.queue || [];
+    pins = body.pins || [];
+    say(shops.length === 1 ? "1 supplier found" : shops.length + " suppliers found");
+    visible = null;
+    buildFilters();
+    drawMap();
+    picked = [];
+    refreshBar();
+  }
+
+  // ---- Turnstile -------------------------------------------------------------------------
+  window.pfTurnstile = function () {
+    if (!window.turnstile) return;
+    widgetId = window.turnstile.render(widget, {
+      sitekey: widget.getAttribute("data-sitekey") || "",
+      appearance: widget.getAttribute("data-appearance") || "interaction-only",
+      callback: search,
+      "error-callback": function () { fail(VERIFY_TEXT, true); },
+      "expired-callback": function () { if (window.turnstile) window.turnstile.reset(widgetId); }
+    });
+  };
+
+  // ---- Use my location -------------------------------------------------------------------
+  var slot = document.getElementById("pf-locate");
+  var locate = document.getElementById("pf-locate-button");
+  if (slot && locate && navigator.geolocation) {
+    locate.hidden = false;
+    locate.addEventListener("click", function () {
+      locate.disabled = true;
+      locate.textContent = "Finding you…";
+      navigator.geolocation.getCurrentPosition(
+        function (position) {
+          var round = function (v) { return Math.round(v * 1000) / 1000; };
+          // Three decimals: about a hundred metres, which is all a shop search needs. It is held
+          // in this one variable, is sent to our endpoint, and is never stored or put in the URL.
+          near = round(position.coords.latitude) + "," + round(position.coords.longitude);
+          locate.disabled = false;
+          locate.textContent = "Use my location";
+          again();
+        },
+        function () {
+          locate.disabled = false;
+          locate.textContent = "Use my location";
+          var said = document.getElementById("pf-locate-note");
+          if (!said) {
+            said = make("p", "note", "");
+            said.id = "pf-locate-note";
+            slot.appendChild(said);
+          }
+          said.textContent =
+            "Location off. Distances are from " + field("city").trim() + " centre.";
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+      );
+    });
+  }
+
+  // ---- Filter chips ----------------------------------------------------------------------
+  var visible = null;
+  function matches(n) {
+    if (visible === null) return true;
+    var shop = shops.filter(function (row) { return row.n === n; })[0];
+    return !!shop && (shop.matchedParts || []).indexOf(visible) >= 0;
+  }
+  function applyFilter() {
+    shops.forEach(function (shop) {
+      var row = card(shop.n);
+      if (row) row.hidden = !matches(shop.n);
+    });
+    fit();
+  }
+  function buildFilters() {
+    var filters = document.getElementById("pf-filters");
+    if (!filters || parts.length < 2) return;
+    filters.textContent = "";
+    var choices = [null].concat(parts);
+    var buttons = [];
+    choices.forEach(function (part) {
+      var chip = make("button", "chip filter", part === null ? "All" : part);
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", part === null ? "true" : "false");
+      chip.addEventListener("click", function () {
+        visible = part;
+        buttons.forEach(function (other) {
+          other.setAttribute("aria-pressed", other === chip ? "true" : "false");
+        });
+        applyFilter();
+      });
+      buttons.push(chip);
+      filters.appendChild(chip);
+    });
+  }
+
+  // ---- The map ---------------------------------------------------------------------------
+  var mapsReady = false;
+  var gmap = null;
+  var placed = [];
+
+  window.initMap = function () { mapsReady = true; drawMap(); };
+
+  function shopPins() {
+    return pins.filter(function (pin) { return !pin.you; });
+  }
+
+  async function drawMap() {
+    if (!box || !mapsReady || !pins.length) return;
+    try {
+      var maps = await google.maps.importLibrary("maps");
+      var markers = await google.maps.importLibrary("marker");
+      placed.forEach(function (entry) { entry.marker.map = null; });
+      placed = [];
+      if (!gmap) {
+        box.textContent = "";
+        gmap = new maps.Map(box, {
+          mapId: "DEMO_MAP_ID",
+          zoom: 12,
+          center: { lat: pins[0].lat, lng: pins[0].lng }
+        });
+      }
+      pins.forEach(function (pin) {
+        var glyph = new markers.PinElement({ glyph: pin.you ? "You" : String(pin.n) });
+        var marker = new markers.AdvancedMarkerElement({
+          map: gmap,
+          position: { lat: pin.lat, lng: pin.lng },
+          title: pin.name,
+          content: glyph.element,
+          gmpClickable: !pin.you
+        });
+        if (!pin.you) {
+          marker.addListener("gmp-click", function () { focusCard(pin.n); });
+        }
+        placed.push({ pin: pin, marker: marker });
+      });
+      fit();
+      addShowOnMap();
+    } catch (e) {
+      if (box) box.textContent = "Map unavailable. The list below has everything.";
+    }
+  }
+
+  function fit() {
+    if (!gmap || !placed.length) return;
+    var bounds = new google.maps.LatLngBounds();
+    var any = false;
+    placed.forEach(function (entry) {
+      if (!entry.pin.you && !matches(entry.pin.n)) { entry.marker.map = null; return; }
+      entry.marker.map = gmap;
+      bounds.extend({ lat: entry.pin.lat, lng: entry.pin.lng });
+      any = true;
+    });
+    if (any) gmap.fitBounds(bounds);
+  }
+
+  function focusCard(n) {
+    var row = card(n);
+    if (!row) return;
+    shops.forEach(function (shop) {
+      var other = card(shop.n);
+      if (other) other.classList.remove("here");
+    });
+    row.classList.add("here");
+    row.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function addShowOnMap() {
+    shopPins().forEach(function (pin) {
+      var row = card(pin.n);
+      if (!row || row.querySelector(".showmap")) return;
+      var actions = row.querySelector(".actions");
+      if (!actions) return;
+      var button = make("button", "link showmap", "Show on map");
+      button.type = "button";
+      button.addEventListener("click", function () {
+        if (!gmap) return;
+        gmap.panTo({ lat: pin.lat, lng: pin.lng });
+        if (box) box.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      actions.appendChild(button);
+    });
+  }
+
+  // ---- Send queue ------------------------------------------------------------------------
+  var picked = [];
+  var bar = null;
+  var panel = null;
+
+  function selected() {
+    return shops.filter(function (shop) { return picked.indexOf(shop.n) >= 0; });
+  }
+
+  function refreshBar() {
+    var count = picked.length;
+    if (!bar) {
+      bar = make("div", "sendbar");
+      bar.setAttribute("role", "region");
+      bar.setAttribute("aria-label", "Selected suppliers");
+      var open = make("button", "primary", "");
+      open.type = "button";
+      open.addEventListener("click", openPanel);
+      bar.appendChild(open);
+      document.body.appendChild(bar);
+    }
+    bar.hidden = count === 0;
+    bar.firstChild.textContent = count + " selected · Message selected";
+  }
+
+  document.addEventListener("change", function (event) {
+    var input = event.target;
+    if (!input || !input.classList || !input.classList.contains("pick")) return;
+    var n = Number(input.getAttribute("data-n"));
+    var at = picked.indexOf(n);
+    if (input.checked && at < 0) picked.push(n);
+    if (!input.checked && at >= 0) picked.splice(at, 1);
+    picked.sort(function (a, b) { return a - b; });
+    refreshBar();
+    if (panel && !panel.hidden) fillPanel();
+  });
+
+  function closePanel() {
+    if (panel) panel.hidden = true;
+  }
+
+  function openPanel() {
+    if (!panel) {
+      panel = make("div", "sendpanel");
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "false");
+      panel.setAttribute("aria-label", "Message selected suppliers");
+      document.body.appendChild(panel);
+    }
+    panel.hidden = false;
+    fillPanel();
+    panel.setAttribute("tabindex", "-1");
+    panel.focus();
+  }
+
+  function fillPanel() {
+    if (!panel) return;
+    panel.textContent = "";
+    var head = make("div", "sendhead");
+    head.appendChild(make("p", "hint", "WhatsApp opens one chat at a time. Tap each supplier in turn."));
+    var shut = make("button", "link", "Close");
+    shut.type = "button";
+    shut.addEventListener("click", closePanel);
+    head.appendChild(shut);
+    panel.appendChild(head);
+
+    var live = make("p", "sr-live", "");
+    live.setAttribute("aria-live", "polite");
+    panel.appendChild(live);
+
+    var rows = selected();
+    rows.forEach(function (shop, index) {
+      var row = make("div", "sendrow");
+      row.appendChild(make("p", "sname", shop.name));
+      var matched = shop.matchedParts || [];
+      var scoped = matched.length > 0 && matched.length < parts.length;
+      var state = { all: !scoped };
+      var listed = make("p", "sendparts", "");
+      function describe() {
+        listed.textContent = "Parts: " + (state.all ? parts : matched).join(", ");
+      }
+      describe();
+      row.appendChild(listed);
+
+      if (scoped) {
+        var toggle = make("button", "chip", "");
+        toggle.type = "button";
+        var label = function () {
+          toggle.textContent = state.all ? "All parts" : "Only matched parts";
+          toggle.setAttribute("aria-pressed", state.all ? "true" : "false");
+        };
+        label();
+        toggle.addEventListener("click", function () {
+          state.all = !state.all;
+          label();
+          describe();
+          setLink();
+        });
+        row.appendChild(toggle);
+      }
+
+      var action;
+      if (shop.waMatched || shop.waAll) {
+        action = make("a", "whatsapp", "Open WhatsApp");
+        action.target = "_blank";
+        action.rel = "noopener";
+        action.addEventListener("click", function () {
+          action.textContent = "Opened ✓";
+          row.classList.add("done");
+          live.textContent = shop.name + " opened. Next: " +
+            (rows[index + 1] ? rows[index + 1].name : "none left");
+          var next = panel.querySelectorAll(".sendrow")[index + 1];
+          if (next) next.classList.add("next");
+        });
+      } else if (shop.tel) {
+        action = make("a", "link", "Call");
+        action.href = "tel:" + shop.tel;
+      } else {
+        action = make("p", "note", "No number listed");
+      }
+      function setLink() {
+        if (action.tagName !== "A" || !(shop.waMatched || shop.waAll)) return;
+        action.href = state.all ? shop.waAll || shop.waMatched : shop.waMatched || shop.waAll;
+      }
+      setLink();
+      row.appendChild(action);
+
+      var copy = make("button", "link", "Copy message");
+      copy.type = "button";
+      copy.addEventListener("click", function () {
+        var href = state.all ? shop.waAll || shop.waMatched : shop.waMatched || shop.waAll;
+        var text = "";
+        try {
+          text = decodeURIComponent((href.split("?text=")[1] || "").replace(/\+/g, " "));
+        } catch (e) { text = ""; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            function () { copy.textContent = "Copied ✓"; },
+            function () { showText(row, text); }
+          );
+        } else {
+          showText(row, text);
+        }
+      });
+      row.appendChild(copy);
+      panel.appendChild(row);
+    });
+  }
+
+  function showText(row, text) {
+    var area = row.querySelector("textarea");
+    if (!area) {
+      area = document.createElement("textarea");
+      area.readOnly = true;
+      area.rows = 8;
+      row.appendChild(area);
+    }
+    area.value = text;
+    area.focus();
+    area.select();
+  }
+})();
+</script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=pfTurnstile" async defer nonce="sample-nonce"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=sample-maps-browser-key&amp;callback=initMap&amp;loading=async" async nonce="sample-nonce"></script>
   </body>
 </html>

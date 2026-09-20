@@ -11,13 +11,14 @@ It runs as a Cloudflare Worker at `rohitrao.in/parts/`. The repo is public.
 ## What it does today
 
 Phase 0 is an offline page. Everything on it is computed from the number you typed and a table of
-manufacturer format rules. Nothing is fetched and nothing is stored. The one exception is the
-vendor pages below, which are behind a passcode and call Google Places API (New).
+manufacturer format rules. Nothing is fetched while the page is rendered and nothing is stored.
+The one exception is the supplier list below, which the page's own script asks for afterwards,
+from Google Places API (New).
 
 **The page, `GET /parts/`.** `GET /parts` redirects to it. One server-rendered HTML document,
-with no client-side JavaScript at all, because it is mostly read on a phone on a site or in a
-yard. Paste into the box, optionally add a brand or machine and a city, pick a country, and
-press Identify.
+which carries everything except the supplier list, because it is mostly read on a phone on a site
+or in a yard. Paste into the box, optionally add a brand or machine and a city, pick a country,
+and press the button.
 
 **1. Paste.** One box, one city, one button. Country, a brand hint and a note for suppliers sit
 behind "More options"; none of them is needed to get an answer.
@@ -32,32 +33,41 @@ One line under the cards says the whole truth about them: the manufacturer is ma
 number's format, not confirmed, and suppliers confirm fitment. Anything unrecognised is named in
 one line. "Check this part" is collapsed: images, fitment, a plain search.
 
-**3. Suppliers.** Signed in, with a city, the shops appear under the cards: a Google map with
+**3. Suppliers.** With a city, the shops appear under the cards, for everyone: a Google map with
 numbered pins and matching numbered cards. Each card carries how far away it is - from you if you
 shared your location, otherwise from the city centre - its rating, whether Google says it is open,
 and which of your parts it can be asked about, with the brand Google listed it under. Then Select,
 WhatsApp with the requirement already written, Call, Website and Map.
 
+They arrive a moment after the rest of the page. Rendering `/parts/` calls nobody: the section
+starts as a heading, a status line and three grey placeholders, and the page's script fills it
+from `POST /parts/api/suppliers`, which answers only to a browser holding a valid Cloudflare
+Turnstile token. That is what makes the list public without spending the Google allowance on
+crawlers, bots and WhatsApp link previews, none of which run the script. The endpoint re-parses
+the numbers itself and never trusts the list the browser sends it. Turnstile is set to
+interaction-only, so nobody sees it unless their browser is challenged.
+
 Tick several and a bar appears: "3 selected - Message selected". The panel opens each chat in
 turn, marks the ones you have done, and can copy any message instead. WhatsApp opens one chat at a
 time, so that is how the panel works.
 
-Every WhatsApp link is a plain link with the message already in it, so all of that works with
-JavaScript off. JavaScript adds the map, "Use my location", the filter chips and the send queue,
-and nothing else - it never writes a message.
+Every WhatsApp link is a plain link with the message already in it, and every message on a
+supplier card is written on the server, so the script never composes one. The script fetches the
+list, inserts it through a single `<template>` - the one place anything is assigned as HTML, and
+only ever the endpoint's own escaped output - and then adds the map, "Use my location", the filter
+chips and the send queue.
 
 Being listed by Google is not a claim that a shop has your part. The page says so, above the list.
 Nothing is stored: a place id travels in a link and nowhere else, a shared location is rounded to
-about a hundred metres and lives in one page address, no page is scraped, and no vendor list is
-kept. When Google will not answer, the page says "Supplier list unavailable right now" and falls
-back to per-brand link-outs, which need no key.
+about a hundred metres and never leaves the one request it was sent in, no page is scraped, and no
+supplier list is kept. When Google will not answer, the status line says "Supplier list
+unavailable right now" and opens "Search on Google instead", which is the per-brand link-outs and
+needs no key. With JavaScript off, `<noscript>` says so and carries the same links. With no city,
+the section is one line asking for one.
 
-Signed out, the section is those link-outs. Supplier search costs money per view, so it is behind
-a passcode; the only way in is "Owner sign-in" in the footer.
-
-**4. Other ways to send.** Collapsed under the suppliers, open when there are none: the message to
-copy, the WhatsApp contact picker, email, and a box for a supplier's own number. All four carry
-exactly the same text.
+**4. Other ways to send.** Collapsed under the suppliers, open when there is no Suppliers section
+at all: the message to copy, the WhatsApp contact picker, email, and a box for a supplier's own
+number. All four carry exactly the same text, and none of them needs a supplier or a script.
 
 **5. Keep it.** `/parts/` has a web app manifest and icons, so it saves to a home screen as
 "Partfinder" and opens straight back to the page. There is no service worker: it is a shortcut,
@@ -65,15 +75,21 @@ not offline mode.
 
 **Terms and privacy, `GET /parts/terms` and `GET /parts/privacy`.** Public, static, linked from
 the footer of every page. Google's Places API policies require an app using its data to publish
-both, incorporating Google's own terms and privacy policy, so these are a condition of the vendor
-pages rather than decoration. The privacy page is the short list of what Partfinder keeps, which
-is nothing you type, and the one cookie it sets.
+both, incorporating Google's own terms and privacy policy, so these are a condition of the
+supplier list rather than decoration. The privacy page is the short list of what Partfinder keeps,
+which is nothing you type, and the two cookies it sets.
 
 **The API, `GET /parts/api/parse?q=<text>`.** The same parsing as JSON:
 
 ```
 { hints: string[], results: [{ input, compact, candidates: [...], reason? }] }
 ```
+
+**The supplier endpoint, `POST /parts/api/suppliers`.** Not a public API: it is the page talking
+to itself. It takes JSON only, from `https://rohitrao.in` only, and requires a Turnstile token,
+which it verifies with Cloudflare before it calls Google. It answers `{ html, pins, queue }` -
+the escaped cards, the map's pins and one row per shop with both WhatsApp messages already
+written - or `{ error: "verify" | "city" | "unavailable" }`. Nothing about a request is logged.
 
 ## Every result is a guess, and says so
 
@@ -122,9 +138,10 @@ sources are tried in. It never hides a result and is never stored on a record.
 - **What you paste stays yours.** Nothing you type is logged — not the pasted text, the hint, the
   city, the supplier's number or the note — and the link inside the message carries only the part
   numbers Partfinder extracted, never anything else you typed.
-- **Suppliers are a link out, never a list.** Google search, Google Images, Google Maps, a
-  manufacturer's official dealer locator, or your own contacts. Partfinder never stores, scrapes
-  or vets supplier data, and no supplier site is fetched when you load the page.
+- **Suppliers are looked up, never kept.** Google search, Google Images, Google Maps, shops from
+  the Google Places API, a manufacturer's official dealer locator, or your own contacts.
+  Partfinder never stores, scrapes or vets supplier data, and nothing is fetched while the page
+  is rendered.
 
 ## Source tiers
 
@@ -142,20 +159,22 @@ Everything Partfinder returns today is T5.
 
 ```
 src/index.ts      Worker entry and routing under /parts/, plus the manifest and icons
-src/env.ts        the three Worker secrets, all optional: the page works without any of them
+src/env.ts        the four Worker secrets, all optional: the page works without any of them
+src/cookies.ts    the remembered city and country, and nothing else
 src/legal.ts      the public Terms and Privacy pages
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
-src/headers.ts    the response headers, including the map page's nonce CSP
+src/headers.ts    the response headers, including the supplier page's nonce CSP
 src/quantity.ts   how many, read out of the pasted message
-src/vendors/      the suppliers behind the passcode
-  auth.ts         the passcode gate and the remembered city and country, nothing stored
-  places.ts       the Google Places API (New) client, and the only fetch in the Worker
+src/vendors/      the suppliers
+  api.ts          POST /parts/api/suppliers: the only path that reaches Google
+  turnstile.ts    the Cloudflare siteverify call, and nothing else
+  places.ts       the Google Places API (New) client
   search.ts       the origin, the brand groups, distances, and merging what came back
   phone.ts        what can be done with a number: WhatsApp, a call, or neither
-  suppliers.ts    the Suppliers section on /parts/ and the fallback links
-  script.ts       the only client-side JavaScript: map, location, filters, send queue
-  page.ts         the passcode form
-  index.ts        routing under /parts/vendors
+  suppliers.ts    the Suppliers section on /parts/, the cards, and the fallback links
+  script.ts       the only client-side JavaScript: Turnstile, fetch, map, location,
+                  filters, send queue
+  index.ts        what is left of /parts/vendors: four redirects to /parts/
 src/parse.ts      token and hint extraction, normalisation, candidate ranking
 src/rules.ts      manufacturer format rules, as data
 src/hints.ts      brand and model words that hint at a manufacturer
@@ -186,6 +205,10 @@ npm run sample        regenerate docs/sample-page.html
 npm run icons         redraw the home-screen icons
 npx wrangler dev      run the Worker locally
 ```
+
+Four secrets, all optional. `GOOGLE_PLACES_KEY` and `TURNSTILE_SECRET_KEY` are server-side and
+must never appear in a response; `GOOGLE_MAPS_BROWSER_KEY` and `TURNSTILE_SITE_KEY` are rendered
+into the page on purpose, which is what they are for.
 
 `GOOGLE_MAPS_BROWSER_KEY` is a browser key and is rendered into the page on purpose; its Google
 Cloud restrictions are what protect it. Restrict it by **origin** (`https://rohitrao.in/*`), not

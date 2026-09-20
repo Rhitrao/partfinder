@@ -45,6 +45,15 @@ export interface Call {
   body: Record<string, unknown> | null;
 }
 
+/** Google is sent JSON; Cloudflare's siteverify is sent a form. Both read back as one record. */
+function readBody(body: string): Record<string, unknown> {
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return Object.fromEntries(new URLSearchParams(body));
+  }
+}
+
 /** Records every fetch and answers it with `reply`. Nothing leaves the process. */
 export function stubFetch(reply: (call: Call) => Response): Call[] {
   const calls: Call[] = [];
@@ -55,13 +64,50 @@ export function stubFetch(reply: (call: Call) => Response): Call[] {
         url: String(input),
         method: init.method ?? "GET",
         headers: { ...((init.headers ?? {}) as Record<string, string>) },
-        body: init.body === undefined ? null : JSON.parse(String(init.body)),
+        body: init.body === undefined ? null : readBody(String(init.body)),
       };
       calls.push(call);
       return reply(call);
     }),
   );
   return calls;
+}
+
+export const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+export const isVerifyCall = (call: Call): boolean => call.url === SITEVERIFY_URL;
+
+/** Every call that went to Google, which is every call that costs anything. */
+export const placesCalls = (calls: readonly Call[]): Call[] =>
+  calls.filter((c) => c.url.startsWith("https://places.googleapis.com/"));
+
+/** Cloudflare says yes (or no), and Google answers as it does for the two sample numbers. */
+export function apiReply(verified = true): (call: Call) => Response {
+  return (call) =>
+    isVerifyCall(call)
+      ? new Response(JSON.stringify({ success: verified }), { status: 200 })
+      : searchReply(call);
+}
+
+/** A POST to the endpoint, shaped as the page's script shapes it. */
+export function postSuppliers(
+  body: Record<string, unknown>,
+  init: { origin?: string | null; method?: string; contentType?: string | null } = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {};
+  const contentType = init.contentType === undefined ? "application/json" : init.contentType;
+  if (contentType !== null) headers["Content-Type"] = contentType;
+  const origin = init.origin === undefined ? "https://rohitrao.in" : init.origin;
+  if (origin !== null) headers.Origin = origin;
+  const method = init.method ?? "POST";
+  return worker.fetch(
+    new Request("https://rohitrao.in/parts/api/suppliers", {
+      method,
+      headers,
+      ...(method === "GET" || method === "HEAD" ? {} : { body: JSON.stringify(body) }),
+    }),
+    env,
+  );
 }
 
 export const place = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
@@ -106,4 +152,5 @@ export function searchReply(call: Call): Response {
 }
 
 /** Every call that searched for shops, in order, leaving out the one that placed the city. */
-export const shopSearches = (calls: readonly Call[]): Call[] => calls.filter((c) => !isOriginCall(c));
+export const shopSearches = (calls: readonly Call[]): Call[] =>
+  placesCalls(calls).filter((c) => !isOriginCall(c));

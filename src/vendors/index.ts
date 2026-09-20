@@ -50,7 +50,7 @@ function found(location: string): Response {
  * here to post to, and answering 405 would leave a browser stranded on a page that no longer
  * exists.
  */
-export function handleVendors(request: Request, url: URL): Response | null {
+export function handleVendors(url: URL): Response | null {
   const path = url.pathname;
   if (path !== "/parts/vendors" && !path.startsWith(VENDORS_PATH)) return null;
   const search = vendorQuery(url.searchParams);

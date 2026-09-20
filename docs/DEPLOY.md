@@ -84,12 +84,20 @@ The cost is real: there are no request logs to debug from. Reproduce a problem l
 
 ## Secrets
 
-There are none in Phase 0. The Worker fetches nothing, stores nothing and calls no paid API, so
-there is nothing to authenticate. No secret needs to be set before a deploy, and no secret is
-needed for one.
+Four, all optional: a Worker deployed without any of them still serves the page, which is why
+every use site handles "missing" rather than assuming the secret is there. They go in with
+`wrangler secret put`, never into this repository and never into the Cloudflare build
+configuration. `.dev.vars.example` lists the same four names for `npx wrangler dev`.
 
-When a step prompt does add one, it goes in with `wrangler secret put`, never into this
-repository or into the Cloudflare build configuration.
+| Secret | Side | Missing means |
+| --- | --- | --- |
+| `GOOGLE_PLACES_KEY` | server only, never in a response | the supplier endpoint answers `{error:"unavailable"}` |
+| `GOOGLE_MAPS_BROWSER_KEY` | rendered into the page on purpose | no map; the list stands on its own |
+| `TURNSTILE_SITE_KEY` | rendered into the page on purpose | no Suppliers section at all; the page shows its link-outs |
+| `TURNSTILE_SECRET_KEY` | server only, never in a response | the supplier endpoint refuses every request |
+
+A missing `TURNSTILE_SECRET_KEY` refusing everything is deliberate. A Worker that cannot verify a
+token has not verified it, and "cannot check" must never fall open onto a paid API.
 
 ## Rolling back
 

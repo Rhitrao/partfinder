@@ -23,7 +23,7 @@ import {
 import type { ParseResult } from "../parse";
 import { MAX_LISTED, findSuppliers, groupByOem, type Supplier } from "./search";
 import { phoneFor } from "./phone";
-import { renderSupplierCards } from "./suppliers";
+import { pinsFor, renderSupplierCards, type Pin } from "./suppliers";
 import { verifyTurnstile } from "./turnstile";
 
 /** The one origin whose pages may spend a token. A missing or foreign Origin is refused. */
@@ -49,14 +49,8 @@ interface SupplierRequest {
   quantities: Record<string, number>;
 }
 
-/** One pin the map draws. "you" is the user's own location, when they shared one. */
-export interface ApiPin {
-  n: number;
-  name: string;
-  lat: number;
-  lng: number;
-  you?: boolean;
-}
+/** A shop's pin, plus the one for the user's own location when they shared one. */
+export type ApiPin = Pin & { you?: boolean };
 
 /** One row of the send queue: everything the script needs, and no message it has to write. */
 export interface QueueRow {
@@ -241,12 +235,8 @@ export async function handleSupplierApi(request: Request, env: Env): Promise<Res
     omitted: answer.suppliers.length - listed.length,
   });
 
-  const pins: ApiPin[] = [];
-  listed.forEach((supplier, index) => {
-    const { location, name } = supplier.place;
-    if (location === null) return;
-    pins.push({ n: index + 1, name: name === "" ? "Unnamed listing" : name, ...location });
-  });
+  const pins: ApiPin[] = pinsFor(listed);
+  // The user's own pin is numbered 0: the list numbers shops from 1, and this is not one.
   if (near !== null) pins.push({ n: 0, name: "you", lat: near.lat, lng: near.lng, you: true });
 
   const queue = listed.map((supplier, index) =>

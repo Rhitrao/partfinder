@@ -1,17 +1,20 @@
 // The two public pages Google's Places API policies require: Terms of Use and a Privacy Policy,
 // each incorporating Google's own.
 //
-// They are public, unlike /parts/vendors, because a policy nobody can read is not a policy. They
+// A policy nobody can read is not a policy, so both are public and linked from every page. They
 // are static text with no form, no query parameter and nothing user-supplied on them, so there is
 // nothing on either page to escape.
 
 import { renderDocument } from "./page";
 
-/** The Google terms a user of the vendor pages is also agreeing to. */
+/** The Google terms a user of the supplier list is also agreeing to. */
 export const GOOGLE_MAPS_TERMS_URL = "https://maps.google.com/help/terms_maps/";
 
-/** The Google privacy policy that covers what a vendor search sends to Google. */
+/** The Google privacy policy that covers what a supplier search sends to Google. */
 export const GOOGLE_PRIVACY_URL = "https://policies.google.com/privacy";
+
+/** Cloudflare's, which covers what Turnstile checks about a browser. */
+export const CLOUDFLARE_PRIVACY_URL = "https://www.cloudflare.com/privacypolicy/";
 
 const LEGAL_STYLE = `
 .legal h2 { margin-top: 1.75rem; }
@@ -39,14 +42,14 @@ export function renderTerms(): string {
       <p>Partfinder shows no prices, no stock and no lead times, and never will. Industrial spares
       are quoted per account, never published.</p>
 
-      <h2>Vendor listings</h2>
+      <h2>Supplier listings</h2>
 
-      <p>The vendor pages list shops from Google Maps, through the Google Places API. Partfinder
-      does not keep a vendor list, does not scrape any site, and vets nobody. A shop being listed
-      is not a statement that it stocks your part, that it is authorised by any manufacturer, or
-      that it is any good. Ask it yourself.</p>
+      <p>The supplier list on a results page comes from Google Maps, through the Google Places
+      API. Partfinder does not keep a supplier list, does not scrape any site, and vets nobody. A
+      shop being listed is not a statement that it stocks your part, that it is authorised by any
+      manufacturer, or that it is any good. Ask it yourself.</p>
 
-      <p>By using the vendor pages you also agree to the
+      <p>By using the supplier list you also agree to the
       <a href="${GOOGLE_MAPS_TERMS_URL}">Google Maps / Google Earth Additional Terms of
       Service</a>, which include the
       <a href="https://policies.google.com/terms">Google Terms of Service</a>.</p>
@@ -83,16 +86,14 @@ export function renderPrivacy(): string {
         never logged, stored or sent anywhere by Partfinder.</li>
         <li>Nothing from Google is cached except place IDs, which travel in a link and are not
         stored.</li>
-        <li>There is no analytics, no tracking pixel, and no third-party script. The page runs no
-        JavaScript at all.</li>
+        <li>There is no analytics and no tracking pixel. The only scripts anywhere on Partfinder
+        are its own, Cloudflare Turnstile and Google's map, and they load only on a page that is
+        showing you suppliers.</li>
       </ul>
 
       <h2>Cookies</h2>
 
       <ul>
-        <li><code>pf_vendor</code>, set when you enter the vendor passcode, so you are not asked
-        again for 30 days. It holds a value derived from the passcode, not your passcode and
-        nothing about you.</li>
         <li><code>pf_city</code> and <code>pf_country</code>, set when you type a city or pick a
         country, so you do not have to do it again. They hold only what you typed or picked.</li>
       </ul>
@@ -102,11 +103,20 @@ export function renderPrivacy(): string {
 
       <h2>What goes to Google</h2>
 
-      <p>A vendor search sends the manufacturer names and the city you typed to the Google Places
-      API, so that Google can answer with shops. Asking for a shop's contact details sends that
-      shop's place ID. Nothing else is sent, and what you pasted is never sent. Google's handling
-      of those requests is covered by the
+      <p>Supplier searches send the brands, the city, and your rounded location if you share it
+      to Google. That is the whole of it: the manufacturer names Partfinder read out of your
+      numbers, the city you typed, and a location rounded to about a hundred metres if you shared
+      one, so that Google can answer with shops near you. Nothing else is sent, and what you
+      pasted is never sent. Google's handling of those requests is covered by the
       <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a>.</p>
+
+      <h2>Turnstile</h2>
+
+      <p>To keep bots from using the supplier search, Cloudflare Turnstile checks the browser
+      (Cloudflare's privacy policy:
+      <a href="${CLOUDFLARE_PRIVACY_URL}">https://www.cloudflare.com/privacypolicy/</a>). The
+      check runs in your browser when a results page asks for suppliers, and usually shows you
+      nothing. Partfinder learns only whether it passed.</p>
 
       <h2>Your location</h2>
 
@@ -123,9 +133,9 @@ export function renderPrivacy(): string {
       request for it exactly as it does on any page with a Google Map: your IP address, your
       browser, and the address of this site. Partfinder sends Google the site's address only -
       "https://rohitrao.in/" - and never the page's query string, so what you pasted, the city you
-      typed and any location you shared are not in that request. The map and "Use my location" are
-      the only JavaScript on Partfinder, and they load only on a page that is showing you shops.
-      The same <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a> covers the map.</p>
+      typed and any location you shared are not in that request. The map loads only on a page
+      that is showing you shops. The same
+      <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a> covers the map.</p>
 
       <h2>Links out</h2>
 

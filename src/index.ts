@@ -21,7 +21,7 @@ import {
   renderPage,
   resolveCountry,
 } from "./page";
-import { handleVendors } from "./vendors";
+import { handleVendors } from "./vendors/index";
 import { handleSupplierApi } from "./vendors/api";
 import { groupByOem } from "./vendors/search";
 import { renderScripts } from "./vendors/script";
@@ -205,7 +205,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     // /parts/vendors is gone: every path under it redirects to the page that replaced it.
-    const vendors = handleVendors(request, url);
+    const vendors = handleVendors(url);
     if (vendors !== null) return vendors;
 
     const asset = ASSETS[url.pathname];
