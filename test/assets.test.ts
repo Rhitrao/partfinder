@@ -6,7 +6,7 @@ import { ICON_192_BASE64, ICON_512_BASE64 } from "../src/icons";
 import { ICON_SIZES, renderIcon, renderIconsModule } from "../scripts/icons";
 
 const get = (path: string, init?: RequestInit) =>
-  worker.fetch(new Request(`https://rohitrao.in${path}`, init));
+  worker.fetch(new Request(`https://rohitrao.in${path}`, init), {});
 
 /** Width and height straight out of the PNG's IHDR: 8-byte signature, 4-byte length, "IHDR". */
 function pngSize(bytes: Uint8Array): { width: number; height: number; signature: boolean } {

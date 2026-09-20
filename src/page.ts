@@ -37,6 +37,9 @@ export function resolveCountry(code: string | null): Country {
   return COUNTRIES.find((c) => c.code === wanted) ?? DEFAULT_COUNTRY;
 }
 
+/** Caps every text field on every page under /parts, keeping one request inside the CPU budget. */
+export const MAX_QUERY_LENGTH = 5000;
+
 /** At most this many spellings per number, in the search link and in the WhatsApp message. */
 const MAX_SPELLINGS = 6;
 
@@ -532,6 +535,33 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
       </section>`;
 }
 
+/**
+ * The shared HTML shell for every page under /parts: one head, one stylesheet, no client-side
+ * JavaScript. `main` is the whole <main> element, indented to sit at four spaces. `extraStyle` is
+ * for rules only one page needs, so the public page does not carry the vendor pages' CSS.
+ */
+export function renderDocument(main: string, extraStyle = ""): string {
+  const style = extraStyle === "" ? STYLE : `${STYLE}\n${extraStyle.trim()}`;
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="${THEME_COLOR}">
+    <meta name="apple-mobile-web-app-title" content="Partfinder">
+    <link rel="manifest" href="/parts/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/parts/icon-192.png">
+    <title>Partfinder</title>
+    <style>${style}</style>
+  </head>
+  <body>
+    ${main}
+  </body>
+</html>
+`;
+}
+
 export interface PageInput {
   q: string;
   hint: string;
@@ -578,21 +608,7 @@ export function renderPage(input: PageInput): string {
     sections.push(renderSend(input, results));
   }
 
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex">
-    <meta name="theme-color" content="${THEME_COLOR}">
-    <meta name="apple-mobile-web-app-title" content="Partfinder">
-    <link rel="manifest" href="/parts/manifest.webmanifest">
-    <link rel="apple-touch-icon" href="/parts/icon-192.png">
-    <title>Partfinder</title>
-    <style>${STYLE}</style>
-  </head>
-  <body>
-    <main>
+  return renderDocument(`<main>
       <h1>Partfinder</h1>
       <p class="lede">Paste a part number, a list, or a WhatsApp message. Partfinder identifies the
       likely manufacturer, helps you check the part and find where to buy it, and drafts the
@@ -608,8 +624,5 @@ export function renderPage(input: PageInput): string {
         <p>Identification aid only. Confirm fitment with your supplier.</p>
         <p>Not affiliated with any manufacturer. Brand names identify the parts they make.</p>
       </section>
-    </main>
-  </body>
-</html>
-`;
+    </main>`);
 }

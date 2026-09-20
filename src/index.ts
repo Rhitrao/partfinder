@@ -6,22 +6,13 @@
 // the bare path only, and a pattern may not contain query parameters, so the page has to sit
 // under "rohitrao.in/parts/*" for /parts/?q=... to reach the Worker at all. See wrangler.toml.
 
+import type { Env } from "./env";
+import { PAGE_HEADERS } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import { renderPage, resolveCountry } from "./page";
-
-/** Keeps a single request well inside the 10 ms CPU budget. */
-const MAX_QUERY_LENGTH = 5000;
-
-const PAGE_HEADERS: Record<string, string> = {
-  "Content-Type": "text/html; charset=utf-8",
-  "X-Robots-Tag": "noindex",
-  "Content-Security-Policy":
-    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
-    "form-action 'self'; base-uri 'none'",
-  "Referrer-Policy": "no-referrer",
-};
+import { MAX_QUERY_LENGTH, renderPage, resolveCountry } from "./page";
+import { handleVendors } from "./vendors";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -110,8 +101,12 @@ function redirectToPage(url: URL): Response {
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    // /parts/vendors is passcode-gated and has its own method rules, so it is routed first.
+    const vendors = await handleVendors(request, url, env);
+    if (vendors !== null) return vendors;
+
     const asset = ASSETS[url.pathname];
     if (asset !== undefined) {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
@@ -133,4 +128,4 @@ export default {
     }
     return respond(404, { error: "not found" });
   },
-} satisfies ExportedHandler;
+} satisfies ExportedHandler<Env>;

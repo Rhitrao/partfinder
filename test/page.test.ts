@@ -5,7 +5,7 @@ import worker from "../src/index";
 import { WHATSAPP_LIMIT } from "../src/page";
 
 const page = async (query = ""): Promise<string> => {
-  const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${query}`));
+  const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${query}`), {});
   expect(res.status).toBe(200);
   return res.text();
 };
@@ -139,7 +139,7 @@ describe("escaping", () => {
 
 describe("not determined", () => {
   it("is an answer, not an error", async () => {
-    const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${q("HELLO12")}`));
+    const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${q("HELLO12")}`), {});
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Not determined: no known number format matched.");
@@ -240,7 +240,7 @@ describe("prices", () => {
 
 describe("headers", () => {
   it("carry noindex, the CSP and no-referrer", async () => {
-    const res = await worker.fetch(new Request("https://rohitrao.in/parts/"));
+    const res = await worker.fetch(new Request("https://rohitrao.in/parts/"), {});
     expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
     expect(res.headers.get("Content-Security-Policy")).toBe(
       "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
