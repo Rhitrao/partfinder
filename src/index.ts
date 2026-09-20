@@ -15,7 +15,7 @@ import { extractHints, extractTokens, parse } from "./parse";
 import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors";
 import { isSignedIn, readCity, readCountry, setCity, setCountry } from "./vendors/auth";
-import { MAX_LISTED, findVendors, groupByOem } from "./vendors/search";
+import { MAX_LISTED, findSuppliers, groupByOem } from "./vendors/search";
 import {
   pinsFor,
   renderMapBox,
@@ -33,6 +33,25 @@ function respond(status: number, body: unknown, extra: Record<string, string> = 
       ...extra,
     },
   });
+}
+
+/**
+ * A location the browser shared, as "lat,lng", or null.
+ *
+ * Rounded to three decimals - about a hundred metres - because a supplier search does not need to
+ * know which building the user is in. It is read from the query on each request and goes no
+ * further: never into a cookie, never into the back-link, never into a log.
+ */
+export function sharedLocation(raw: string | null): { lat: number; lng: number } | null {
+  if (raw === null) return null;
+  const parts = raw.split(",");
+  if (parts.length !== 2) return null;
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return { lat: round(lat), lng: round(lng) };
 }
 
 /**
@@ -93,38 +112,44 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   let tail: string | undefined;
   // "Other ways to send" is the only way out until supplier cards render, so it opens by default.
   let sendOpen = true;
+  const supplierCounts: Record<string, number> = {};
+  const shared = sharedLocation(url.searchParams.get("near"));
   if (sending.length > 0) {
     if (!(await isSignedIn(request, env))) {
       suppliers = renderSignIn(q, city, country);
     } else if (city.trim() !== "") {
       const { groups } = groupByOem(sending);
       if (groups.length > 0) {
-        const { vendors, failure } = await findVendors(
-          env.GOOGLE_PLACES_KEY,
-          groups,
-          country,
-          city,
-        );
-        const listed = vendors.slice(0, MAX_LISTED);
+        const answer = await findSuppliers(env.GOOGLE_PLACES_KEY, groups, country, city, shared);
+        const listed = answer.suppliers.slice(0, MAX_LISTED);
         // The map is drawn only when there is a key to draw it with and a shop to pin. Without
         // either, the section is the list, which is the part that carries the phone numbers.
         const pins = pinsFor(listed);
         const mapsKey = env.GOOGLE_MAPS_BROWSER_KEY;
-        const withMap = failure === null && pins.length > 0 && mapsKey !== undefined && mapsKey !== "";
+        const withMap =
+          answer.failure === null && pins.length > 0 && mapsKey !== undefined && mapsKey !== "";
         if (withMap) {
           nonce = newNonce();
           tail = renderMapScripts(pins, mapsKey, nonce);
         }
         suppliers = renderSuppliers({
-          vendors: listed,
+          ...(withMap ? { map: renderMapBox() } : {}),
+          suppliers: listed,
           groups,
           parts: sending,
+          quantities: { ...parsed.quantities, ...typedQuantities },
+          note,
           city,
           country,
-          failure,
-          omitted: vendors.length - listed.length,
-          ...(withMap ? { map: renderMapBox() } : {}),
+          originLabel: answer.origin?.label ?? `${city.trim()} centre`,
+          failure: answer.failure,
+          omitted: answer.suppliers.length - listed.length,
         });
+        for (const supplier of listed) {
+          for (const key of supplier.matchedParts) {
+            supplierCounts[key] = (supplierCounts[key] ?? 0) + 1;
+          }
+        }
         sendOpen = listed.length === 0;
         // Supplier data, and who asked for it, are on this page. No cache may keep a copy.
         extra["Cache-Control"] = "no-store";
@@ -142,6 +167,7 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
     parsed,
     typedQuantities,
     sendOpen,
+    supplierCounts,
     ...(suppliers === undefined ? {} : { suppliers }),
     ...(nonce === undefined ? {} : { nonce }),
     ...(tail === undefined ? {} : { tail }),

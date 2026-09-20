@@ -77,19 +77,35 @@ export function stubFetch(reply: (call: Call) => Response): Call[] {
 export const place = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
   id,
   displayName: { text: name, languageCode: "en" },
-  formattedAddress: `${name}, Bengaluru 560001`,
-  location: { latitude: 12.97, longitude: 77.59 },
+  formattedAddress: `${name}, Indiranagar, Bengaluru 560038, India`,
+  shortFormattedAddress: `${name}, Indiranagar`,
+  location: { latitude: 12.978, longitude: 77.64 },
   googleMapsUri: `https://maps.google.com/?cid=${id}`,
   internationalPhoneNumber: "+91 98765 43210",
   nationalPhoneNumber: "098765 43210",
   websiteUri: `https://${id}.example`,
   rating: 4.3,
-  userRatingCount: 128,
+  userRatingCount: 120,
+  currentOpeningHours: { openNow: true },
   ...extra,
 });
 
-/** Caterpillar and JCB both return "Shared Spares"; Caterpillar also returns one of its own. */
+/** Bengaluru's centre, for the origin call. */
+export const CITY_CENTRE = { latitude: 12.9716, longitude: 77.5946 };
+
+/** True for the one call that places the city rather than searching for shops. */
+export function isOriginCall(call: Call): boolean {
+  return call.headers["X-Goog-FieldMask"] === "places.location";
+}
+
+/**
+ * The origin call answers with the city centre. Caterpillar and JCB both return "Shared Spares";
+ * Caterpillar also returns one of its own, and the multi-brand search returns a third.
+ */
 export function searchReply(call: Call): Response {
+  if (isOriginCall(call)) {
+    return new Response(JSON.stringify({ places: [{ location: CITY_CENTRE }] }), { status: 200 });
+  }
   const query = String((call.body as { textQuery?: unknown } | null)?.textQuery ?? "");
   const places = query.startsWith("Caterpillar")
     ? [place("shared", "Shared Spares"), place("cat-only", "Cat Corner")]
@@ -98,3 +114,6 @@ export function searchReply(call: Call): Response {
       : [place("multi", "Multi Brand Traders")];
   return new Response(JSON.stringify({ places }), { status: 200 });
 }
+
+/** Every call that searched for shops, in order, leaving out the one that placed the city. */
+export const shopSearches = (calls: readonly Call[]): Call[] => calls.filter((c) => !isOriginCall(c));

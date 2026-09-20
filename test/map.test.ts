@@ -5,7 +5,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { jsonForScript, pinsFor } from "../src/vendors/suppliers";
-import { Q, SEARCH, cookie, place, searchReply, signedIn, stubFetch } from "./helpers";
+import {
+  CITY_CENTRE,
+  Q,
+  SEARCH,
+  cookie,
+  isOriginCall,
+  place,
+  searchReply,
+  signedIn,
+  stubFetch,
+} from "./helpers";
 
 const PLACES_KEY = "places-key-must-never-be-rendered";
 const BROWSER_KEY = "browser-key-meant-to-be-rendered";
@@ -46,14 +56,14 @@ describe("the map", () => {
     const json = html.match(/<script type="application\/json" id="pf-pins"[^>]*>([\s\S]*?)<\/script>/)?.[1];
     const pins = JSON.parse(json!) as Record<string, unknown>[];
     expect(pins).toHaveLength(3);
-    expect(pins[0]).toEqual({ n: 1, name: "Shared Spares", lat: 12.97, lng: 77.59 });
+    expect(pins[0]).toEqual({ n: 1, name: "Shared Spares", lat: 12.978, lng: 77.64 });
     for (const pin of pins) {
       expect(Object.keys(pin).sort()).toEqual(["lat", "lng", "n", "name"]);
     }
     // Nothing that identifies the place to a third party rides along.
     expect(json).not.toContain("shared");
     expect(json).not.toContain("98765");
-    expect(json).not.toContain("560001");
+    expect(json).not.toContain("560038");
   });
 
   it("escapes a name that would otherwise close the script block", async () => {
@@ -70,16 +80,17 @@ describe("the map", () => {
   });
 
   it("draws nothing when Google gave no coordinates", async () => {
-    stubFetch(
-      () =>
-        new Response(
-          JSON.stringify({ places: [place("nowhere", "No Pin Shop", { location: undefined })] }),
-          { status: 200 },
-        ),
+    stubFetch((call) =>
+      isOriginCall(call)
+        ? new Response(JSON.stringify({ places: [{ location: CITY_CENTRE }] }), { status: 200 })
+        : new Response(
+            JSON.stringify({ places: [place("nowhere", "No Pin Shop", { location: undefined })] }),
+            { status: 200 },
+          ),
     );
     const res = await signedIn(`/parts/${SEARCH}`);
     const html = await res.text();
-    expect(html).toContain("1. No Pin Shop");
+    expect(html).toContain("No Pin Shop");
     expect(html).not.toContain("maps.googleapis.com");
     expect(html).not.toContain("pf-pins");
     expect(res.headers.get("Content-Security-Policy")).not.toContain("nonce-");
@@ -93,8 +104,8 @@ describe("the map", () => {
     );
     const html = await res.text();
     expect(html).not.toContain("maps.googleapis.com");
-    expect(html).toContain("1. Shared Spares");
-    expect(html).toContain('href="tel:+919876543210"');
+    expect(html).toContain("Shared Spares");
+    expect(html).toContain("Indiranagar");
   });
 });
 
@@ -178,11 +189,12 @@ describe("the two keys", () => {
 
 describe("pin helpers", () => {
   it("numbers pins as the list numbers rows, skipping shops with no location", async () => {
-    const vendor = (id: string, located: boolean) => ({
+    const supplier = (id: string, located: boolean) => ({
       place: {
         id,
         name: id,
         address: "",
+        shortAddress: "",
         mapsUri: "",
         location: located ? { lat: 1, lng: 2 } : null,
         internationalPhone: "",
@@ -190,13 +202,16 @@ describe("pin helpers", () => {
         website: "",
         rating: null,
         ratingCount: null,
+        openNow: null,
       },
-      brands: [],
-      generic: false,
+      matchedGroups: [],
+      matchedParts: [],
+      multiBrandOnly: true,
+      distanceKm: null,
     });
     // The second shop has no coordinates, so it has a row but no pin - and the third keeps the
     // number its row shows.
-    expect(pinsFor([vendor("a", true), vendor("b", false), vendor("c", true)])).toEqual([
+    expect(pinsFor([supplier("a", true), supplier("b", false), supplier("c", true)])).toEqual([
       { n: 1, name: "a", lat: 1, lng: 2 },
       { n: 3, name: "c", lat: 1, lng: 2 },
     ]);
