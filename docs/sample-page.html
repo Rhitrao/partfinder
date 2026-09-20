@@ -141,6 +141,37 @@ a.chip { min-height: 44px; padding: .6rem .9rem; }
 .unrecognised { font-size: .9rem; opacity: .85; }
 .check summary { cursor: pointer; font-size: .9rem; padding: .5rem 0; min-height: 44px; }
 .signin { font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+.filters:empty { display: none; }
+.filter { cursor: pointer; }
+.filter[aria-pressed="true"] { font-weight: 700; outline: 2px solid currentColor; }
+.locate { margin-top: .5rem; min-height: 44px; }
+.shop.here { outline: 3px solid currentColor; outline-offset: 3px; }
+.sendbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: .6rem 1rem;
+  background: Canvas;
+  border-top: 2px solid currentColor;
+}
+.sendbar[hidden] { display: none; }
+.sendpanel {
+  position: fixed;
+  inset: auto 0 0 0;
+  max-height: 80vh;
+  overflow: auto;
+  padding: 1rem;
+  background: Canvas;
+  border-top: 2px solid currentColor;
+}
+.sendpanel[hidden] { display: none; }
+.sendrow { border-top: 1px solid currentColor; padding: .75rem 0; }
+.sendrow.done { opacity: .6; }
+.sendrow.next { outline: 2px dashed currentColor; outline-offset: 2px; }
+.sendparts { font-size: .9rem; opacity: .85; margin: .15rem 0; }
+.sr-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* The send bar is fixed, so the last card needs room to clear it. */
+body { padding-bottom: 5rem; }
 .map {
   height: 260px;
   margin-top: 1rem;

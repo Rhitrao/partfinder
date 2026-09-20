@@ -187,6 +187,8 @@ export function renderSuppliers(input: SuppliersInput): string {
   }
 
   const inner: string[] = [];
+  // JavaScript fills this with "All / 1U-3352 / 40/300893". Empty and invisible without it.
+  inner.push(`<div class="filters" id="pf-filters"></div>`);
   if (input.map) inner.push(input.map);
   inner.push(
     suppliers.length === 0
@@ -307,62 +309,4 @@ function renderShop(supplier: Supplier, number: number, input: SuppliersInput): 
   return `<li class="shop" id="pf-shop-${number}">
             ${lines.join("\n            ")}
           </li>`;
-}
-
-/**
- * The pin data, the code that draws the map, and Google's loader. Everything carries the nonce.
- *
- * The data is a JSON block rather than anything interpolated into code, so a shop's name is never
- * parsed as JavaScript. initMap is defined before the loader runs, which is what &callback=initMap
- * needs; the loader is async, so the list is on screen whether or not the map ever arrives, and
- * every failure path leaves the box's own text in place.
- */
-export function renderMapScripts(pins: readonly Pin[], key: string, nonce: string): string {
-  const n = escapeHtml(nonce);
-  const loader =
-    "https://maps.googleapis.com/maps/api/js" +
-    `?key=${encodeURIComponent(key)}&callback=initMap&loading=async`;
-  return `
-    <script type="application/json" id="pf-pins" nonce="${n}">${jsonForScript(pins)}</script>
-    <script nonce="${n}">
-window.initMap = async function () {
-  var box = document.getElementById("pf-map");
-  var data = document.getElementById("pf-pins");
-  if (!box || !data) return;
-  var pins;
-  try { pins = JSON.parse(data.textContent || "[]"); } catch (e) { return; }
-  if (!pins.length) return;
-  try {
-    var maps = await google.maps.importLibrary("maps");
-    var markers = await google.maps.importLibrary("marker");
-    box.textContent = "";
-    var map = new maps.Map(box, {
-      mapId: "DEMO_MAP_ID",
-      zoom: 12,
-      center: { lat: pins[0].lat, lng: pins[0].lng }
-    });
-    var bounds = new google.maps.LatLngBounds();
-    pins.forEach(function (pin) {
-      var position = { lat: pin.lat, lng: pin.lng };
-      var glyph = new markers.PinElement({ glyph: String(pin.n) });
-      var marker = new markers.AdvancedMarkerElement({
-        map: map,
-        position: position,
-        title: pin.name,
-        content: glyph.element,
-        gmpClickable: true
-      });
-      marker.addListener("gmp-click", function () {
-        var row = document.getElementById("pf-shop-" + pin.n);
-        if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      bounds.extend(position);
-    });
-    map.fitBounds(bounds);
-  } catch (e) {
-    box.textContent = ${jsonForScript(MAP_UNAVAILABLE)};
-  }
-};
-    </script>
-    <script src="${escapeHtml(loader)}" async nonce="${n}"></script>`;
 }

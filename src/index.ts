@@ -12,17 +12,22 @@ import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
+import {
+  MAX_QUERY_LENGTH,
+  outbound,
+  readQuery,
+  renderPage,
+  requirementMessage,
+  resolveCountry,
+  whatsappUrl,
+} from "./page";
 import { handleVendors } from "./vendors";
 import { isSignedIn, readCity, readCountry, setCity, setCountry } from "./vendors/auth";
 import { MAX_LISTED, findSuppliers, groupByOem } from "./vendors/search";
-import {
-  pinsFor,
-  renderMapBox,
-  renderMapScripts,
-  renderLinkOuts,
-  renderSuppliers,
-} from "./vendors/suppliers";
+import { renderScripts, type ShopData } from "./vendors/script";
+import { renderLinkOuts, renderMapBox, renderSuppliers } from "./vendors/suppliers";
+import { phoneFor } from "./vendors/phone";
+import { partKey } from "./page";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -124,26 +129,65 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
       {
         const answer = await findSuppliers(env.GOOGLE_PLACES_KEY, groups, country, city, shared);
         const listed = answer.suppliers.slice(0, MAX_LISTED);
-        // The map is drawn only when there is a key to draw it with and a shop to pin. Without
-        // either, the section is the list, which is the part that carries the phone numbers.
-        const pins = pinsFor(listed);
+        const quantities = { ...parsed.quantities, ...typedQuantities };
+        const origin = answer.origin;
+        const originLabel = origin?.label ?? `${city.trim()} centre`;
+        const pinned = listed.some((s) => s.place.location !== null);
         const mapsKey = env.GOOGLE_MAPS_BROWSER_KEY;
-        const withMap =
-          answer.failure === null && pins.length > 0 && mapsKey !== undefined && mapsKey !== "";
-        if (withMap) {
+        // The one page that runs a script: signed in, with the Suppliers section on it. The map
+        // needs a key and a shop to pin as well; the rest of the script works without either.
+        if (answer.failure === null) {
           nonce = newNonce();
-          tail = renderMapScripts(pins, mapsKey, nonce);
+          const shops: ShopData[] = listed.map((supplier, index) => {
+            const phone = phoneFor(supplier.place);
+            const matched = sending.filter((p) => supplier.matchedParts.includes(partKey(p)));
+            const asking = matched.length > 0 ? matched : sending;
+            const wa = (parts: typeof sending) =>
+              phone.whatsapp === null
+                ? ""
+                : whatsappUrl(
+                    requirementMessage(parts, {
+                      name: supplier.place.name === "" ? "there" : supplier.place.name,
+                      note,
+                      quantities,
+                    }),
+                    phone.whatsapp,
+                  );
+            return {
+              n: index + 1,
+              name: supplier.place.name === "" ? "Unnamed listing" : supplier.place.name,
+              lat: supplier.place.location?.lat ?? null,
+              lng: supplier.place.location?.lng ?? null,
+              matchedParts: supplier.matchedParts,
+              waMatched: wa(asking),
+              waAll: wa(sending),
+              tel: phone.tel ?? "",
+            };
+          });
+          tail = renderScripts(
+            {
+              origin:
+                origin === null
+                  ? null
+                  : { lat: origin.lat, lng: origin.lng, you: origin.label === "you" },
+              parts: sending.map(partKey),
+              shops,
+            },
+            pinned ? mapsKey : undefined,
+            nonce,
+            originLabel,
+          );
         }
         suppliers = renderSuppliers({
-          ...(withMap ? { map: renderMapBox() } : {}),
+          ...(pinned && mapsKey !== undefined && mapsKey !== "" ? { map: renderMapBox() } : {}),
           suppliers: listed,
           groups,
           parts: sending,
-          quantities: { ...parsed.quantities, ...typedQuantities },
+          quantities,
           note,
           city,
           country,
-          originLabel: answer.origin?.label ?? `${city.trim()} centre`,
+          originLabel,
           failure: answer.failure,
           omitted: answer.suppliers.length - listed.length,
         });
