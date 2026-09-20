@@ -3,6 +3,7 @@
 // stored or logged. Every piece of user input is HTML-escaped wherever it appears.
 
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
+import { THEME_COLOR } from "./manifest";
 import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
 
 export interface Country {
@@ -583,6 +584,10 @@ export function renderPage(input: PageInput): string {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
+    <meta name="theme-color" content="${THEME_COLOR}">
+    <meta name="apple-mobile-web-app-title" content="Partfinder">
+    <link rel="manifest" href="/parts/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/parts/icon-192.png">
     <title>Partfinder</title>
     <style>${STYLE}</style>
   </head>

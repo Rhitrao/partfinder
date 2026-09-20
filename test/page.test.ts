@@ -243,7 +243,8 @@ describe("headers", () => {
     const res = await worker.fetch(new Request("https://rohitrao.in/parts/"));
     expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
     expect(res.headers.get("Content-Security-Policy")).toBe(
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
+        "form-action 'self'; base-uri 'none'",
     );
     expect(res.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
