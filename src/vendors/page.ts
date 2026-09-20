@@ -32,6 +32,10 @@ export const VENDOR_STYLE = `
 .scope label { display: block; font-weight: 400; font-size: .95rem; }
 .attribution { font-size: .9rem; margin-top: 1rem; opacity: .85; }
 .pickhint { font-size: .9rem; opacity: .85; }
+.vendor h2 { margin-top: 0; }
+.vphone { font-family: ui-monospace, monospace; margin: .15rem 0; }
+.vendor textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
+.vendor label { display: block; margin-top: .75rem; }
 `;
 
 /** The whole vendor document: the shared shell, plus the vendor rules. */
@@ -39,7 +43,12 @@ export function renderVendorDocument(main: string): string {
   return renderDocument(main, VENDOR_STYLE);
 }
 
-function hidden(name: string, value: string): string {
+/** The same button-shaped link the public page uses. */
+export function vendorLink(href: string, text: string): string {
+  return `<a class="link" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+}
+
+export function hidden(name: string, value: string): string {
   return `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`;
 }
 
@@ -83,6 +92,8 @@ export const CITY_REQUIRED = "Enter a city, so the search has somewhere to look.
 
 export const NOTHING_TO_SEARCH =
   "Nothing to search for: no part number here was recognised, so there is no brand to look up.";
+
+export const NO_VENDOR_PICKED = "No shop was ticked, so there is nobody to contact yet.";
 
 /** Never Google's own words. A page says what the user can do, not what went wrong at Google. */
 export const UNAVAILABLE = "Vendor search isn't available right now.";

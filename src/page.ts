@@ -204,8 +204,15 @@ function messageBlock(result: ParseResult, index: number, maxSpellings: number):
  * the reader gets back to the full page.
  *
  * Kept within WHATSAPP_LIMIT by trimming spellings first, then whole numbers off the end.
+ *
+ * `greeting` is the opening words. It is "Hi" for a message the user addresses themselves, and
+ * "Hi <shop>" on the vendor contact page, where Partfinder knows who the message is going to.
  */
-export function requirementMessage(results: readonly ParseResult[], note = ""): string {
+export function requirementMessage(
+  results: readonly ParseResult[],
+  note = "",
+  greeting = "Hi",
+): string {
   const tokens = results.map((r) => r.input).join(" ");
   const tail = [
     ...(note.trim() === "" ? [] : [`Note: ${note.trim()}`]),
@@ -216,7 +223,7 @@ export function requirementMessage(results: readonly ParseResult[], note = ""): 
     const blocks = results.slice(0, count).map((r, i) => messageBlock(r, i, maxSpellings));
     const omitted = results.length - count;
     if (omitted > 0) blocks.push(`(+${omitted} more on the page)`);
-    return ["Hi, we have a requirement for:", ...blocks, ...tail].join("\n");
+    return [`${greeting}, we have a requirement for:`, ...blocks, ...tail].join("\n");
   };
 
   for (let maxSpellings = MAX_SPELLINGS; maxSpellings >= 0; maxSpellings--) {
@@ -228,6 +235,11 @@ export function requirementMessage(results: readonly ParseResult[], note = ""): 
     if (message.length <= WHATSAPP_LIMIT) return message;
   }
   return assemble(1, 0);
+}
+
+/** Enough rows to read the whole message without scrolling, within reason. */
+export function textareaRows(message: string): number {
+  return Math.min(20, Math.max(6, message.split("\n").length + 1));
 }
 
 /** Roughly the length an email subject can be before clients start truncating it. */
@@ -515,7 +527,7 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   const { q, hint, country, city, to, note } = input;
   const message = requirementMessage(sending, note);
   const digits = to.trim() === "" ? null : normaliseWhatsapp(to, country);
-  const rows = Math.min(20, Math.max(6, message.split("\n").length + 1));
+  const rows = textareaRows(message);
 
   const parts = [
     `<form method="GET" action="/parts/">

@@ -7,16 +7,18 @@ import type { Env } from "../env";
 import { VENDOR_PAGE_HEADERS, VENDOR_REDIRECT_HEADERS } from "../headers";
 import { MAX_QUERY_LENGTH, resolveCountry } from "../page";
 import { checkPasscode, clearCookie, isSignedIn, setCookie } from "./auth";
+import { fetchPicked, picksFrom, renderContact, tooManyPicked } from "./contact";
 import {
   CITY_REQUIRED,
   NOTHING_TO_SEARCH,
+  NO_VENDOR_PICKED,
   UNAVAILABLE,
   WRONG_PASSCODE,
   renderGate,
   renderVendorList,
   renderVendorSearch,
 } from "./page";
-import { MAX_LISTED, findVendors, groupByOem, partsFor } from "./search";
+import { MAX_LISTED, MAX_PICKS, findVendors, groupByOem, partsFor } from "./search";
 
 export const VENDORS_PATH = "/parts/vendors/";
 const LOGIN_PATH = "/parts/vendors/login";
@@ -160,6 +162,53 @@ async function handleSearch(url: URL, env: Env): Promise<Response> {
 }
 
 /**
+ * The contact page: Place Details for the vendors the user ticked, and a message for each.
+ *
+ * At most MAX_PICKS vendors, so a hand-written URL with fifty place ids costs five calls, not
+ * fifty, and says so on the page rather than quietly dropping the rest.
+ */
+async function handleContact(url: URL, env: Env): Promise<Response> {
+  const q = url.searchParams.get("q") ?? "";
+  const city = url.searchParams.get("city") ?? "";
+  const country = resolveCountry(url.searchParams.get("country"));
+  if (q.length > MAX_QUERY_LENGTH || city.length > MAX_QUERY_LENGTH) {
+    return html(
+      renderContact({
+        vendors: [],
+        parts: [],
+        q: "",
+        city: "",
+        country,
+        notice: `That is longer than ${MAX_QUERY_LENGTH} characters. Paste a shorter list.`,
+      }),
+      400,
+    );
+  }
+  const picks = picksFrom(url.searchParams);
+  const parts = partsFor(q);
+  const tooMany = picks.length > MAX_PICKS ? tooManyPicked(picks.length) : "";
+  // With no recognised number there is no requirement to write, so there is nothing to ask for.
+  if (parts.length === 0) {
+    return html(
+      renderContact({ vendors: [], parts, q, city, country, notice: NOTHING_TO_SEARCH }),
+    );
+  }
+  if (picks.length === 0) {
+    return html(
+      renderContact({ vendors: [], parts, q, city, country, notice: NO_VENDOR_PICKED }),
+    );
+  }
+
+  const { vendors, failure } = await fetchPicked(env.GOOGLE_PLACES_KEY, picks);
+  if (failure !== null) {
+    return html(renderContact({ vendors: [], parts, q, city, country, notice: UNAVAILABLE }));
+  }
+  return html(
+    renderContact({ vendors, parts, q, city, country, ...(tooMany ? { notice: tooMany } : {}) }),
+  );
+}
+
+/**
  * Routes every /parts/vendors path, or returns null when the path is not one of ours.
  *
  * POST is allowed on the login path and nowhere else. GET on the login path is a browser
@@ -188,5 +237,5 @@ export async function handleVendors(
   if (path !== VENDORS_PATH && path !== CONTACT_PATH) return null;
 
   if (!(await isSignedIn(request, env))) return html(renderGate(nextFor(url)));
-  return handleSearch(url, env);
+  return path === CONTACT_PATH ? handleContact(url, env) : handleSearch(url, env);
 }
