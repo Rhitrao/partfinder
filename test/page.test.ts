@@ -323,3 +323,30 @@ describe("the hint field", () => {
     expect(oems(without)[0]).toBe("Caterpillar or Hitachi");
   });
 });
+
+describe("what the page never shows", () => {
+  it("prints no spelling list and no Google domain, while the links still use both", async () => {
+    for (const query of [q("need 2 nos 1u3352 and 40/300893 x1"), q("3200677"), ""]) {
+      const html = await page(query);
+      expect(html, query).not.toContain("Also written");
+      expect(html, query).not.toContain("Search all spellings");
+      expect(html, query).not.toContain("Hints used");
+      // A search domain may sit inside an href; it may not be words the user reads.
+      const visible = html.replace(/<[^>]*>/g, " ");
+      expect(visible, query).not.toContain("google.co.in");
+    }
+    // The query behind the link is unchanged: every spelling, on the country's own domain.
+    const html = await page(q("1u3352", "&country=AE"));
+    const url = new URL(linkByText(html, "Search Google")!);
+    expect(url.host).toBe("www.google.ae");
+    expect(url.searchParams.get("q")).toBe('"1U3352" OR "1U-3352"');
+  });
+
+  it("reads two parts and their quantities out of one pasted line", async () => {
+    const html = await page(q("need 2 nos 1u3352 and 40/300893 x1"));
+    expect(numbers(html)).toEqual(["1U-3352", "40/300893"]);
+    expect(html).toContain("Qty 2 (from message)");
+    expect(html).toContain("Qty 1 (from message)");
+    expect(html).toContain("as typed: 1U3352");
+  });
+});

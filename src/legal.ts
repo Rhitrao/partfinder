@@ -93,8 +93,8 @@ export function renderPrivacy(): string {
         <li><code>pf_vendor</code>, set when you enter the vendor passcode, so you are not asked
         again for 30 days. It holds a value derived from the passcode, not your passcode and
         nothing about you.</li>
-        <li><code>pf_city</code>, set when you type a city, so you do not have to type it again.
-        It holds the last city you typed and nothing else.</li>
+        <li><code>pf_city</code> and <code>pf_country</code>, set when you type a city or pick a
+        country, so you do not have to do it again. They hold only what you typed or picked.</li>
       </ul>
 
       <p>Both are readable only by this site, not by any script on the page. Nothing else sets a
@@ -108,15 +108,24 @@ export function renderPrivacy(): string {
       of those requests is covered by the
       <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a>.</p>
 
+      <h2>Your location</h2>
+
+      <p>"Use my location" asks your browser where you are, and your browser asks you. If you say
+      yes, the position is rounded to about a hundred metres and put in the address of that one
+      page, so the supplier list can be sorted by distance. It is not stored: not in a cookie, not
+      in a database, not in a log, and it is not carried into any message or link you send. Say
+      no, or never ask, and distances are measured from the centre of the city you typed
+      instead.</p>
+
       <h2>The map</h2>
 
       <p>When suppliers are shown, the map is loaded from Google, so Google receives your browser's
       request for it exactly as it does on any page with a Google Map: your IP address, your
       browser, and the address of this site. Partfinder sends Google the site's address only -
-      "https://rohitrao.in/" - and never the page's query string, so what you pasted and the city
-      you typed are not in that request. The map is the only script on Partfinder, and it loads
-      only on a page that is showing you shops. The same
-      <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a> covers it.</p>
+      "https://rohitrao.in/" - and never the page's query string, so what you pasted, the city you
+      typed and any location you shared are not in that request. The map and "Use my location" are
+      the only JavaScript on Partfinder, and they load only on a page that is showing you shops.
+      The same <a href="${GOOGLE_PRIVACY_URL}">Google Privacy Policy</a> covers the map.</p>
 
       <h2>Links out</h2>
 

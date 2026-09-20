@@ -19,46 +19,49 @@ with no client-side JavaScript at all, because it is mostly read on a phone on a
 yard. Paste into the box, optionally add a brand or machine and a city, pick a country, and
 press Identify.
 
-**1. Identify.** One card per number found in what you pasted, with the manufacturer or
-manufacturers it could be, the canonical spelling, any suffix, and any warning about the reading.
+**1. Paste.** One box, one city, one button. Country, a brand hint and a note for suppliers sit
+behind "More options"; none of them is needed to get an answer.
 
-**2. Check.** On each card: search every spelling at once, see images of it — compare the shape
-before ordering — and search what machines it fits.
+**2. Parts.** One card per number: the canonical form large, how you typed it underneath when they
+differ, the manufacturer with a small "format match" badge, the suffix as a tag, and the quantity
+read out of your message - "2 nos 1u3352" and "40/300893 x1" both count, "1u3352 2023" does not.
+Each card has a quantity box you can correct, and every message updates. A number that fits two
+manufacturers offers a chip for each, which re-runs the search with that one hinted.
 
-**3. Where to buy.** A supplier search narrowed by your city and country, parts shops on Google
-Maps, and the manufacturer's own dealer locator where one has been confirmed. Every one of these
-is a link out. Partfinder holds no supplier list, fetches none of these sites, and vets nobody.
+One line under the cards says the whole truth about them: the manufacturer is matched from the
+number's format, not confirmed, and suppliers confirm fitment. Anything unrecognised is named in
+one line. "Check this part" is collapsed: images, fitment, a plain search.
 
-**4. Send the requirement.** Below the cards, the requirement is drafted for you: a read-only box
-you can copy from, a WhatsApp chat straight to a supplier's number if you have one, the WhatsApp
-contact picker if you don't, and email. All four carry exactly the same text. You can add a note,
-such as a quantity. Partfinder has no phone number of its own; you pick who to send to.
+**3. Suppliers.** Signed in, with a city, the shops appear under the cards: a Google map with
+numbered pins and matching numbered cards. Each card carries how far away it is - from you if you
+shared your location, otherwise from the city centre - its rating, whether Google says it is open,
+and which of your parts it can be asked about, with the brand Google listed it under. Then Select,
+WhatsApp with the requirement already written, Call, Website and Map.
+
+Tick several and a bar appears: "3 selected - Message selected". The panel opens each chat in
+turn, marks the ones you have done, and can copy any message instead. WhatsApp opens one chat at a
+time, so that is how the panel works.
+
+Every WhatsApp link is a plain link with the message already in it, so all of that works with
+JavaScript off. JavaScript adds the map, "Use my location", the filter chips and the send queue,
+and nothing else - it never writes a message.
+
+Being listed by Google is not a claim that a shop has your part. The page says so, above the list.
+Nothing is stored: a place id travels in a link and nowhere else, a shared location is rounded to
+about a hundred metres and lives in one page address, no page is scraped, and no vendor list is
+kept. When Google will not answer, the page says "Supplier list unavailable right now" and falls
+back to per-brand link-outs, which need no key.
+
+Signed out, the section is those link-outs. Supplier search costs money per view, so it is behind
+a passcode; the only way in is "Owner sign-in" in the footer.
+
+**4. Other ways to send.** Collapsed under the suppliers, open when there are none: the message to
+copy, the WhatsApp contact picker, email, and a box for a supplier's own number. All four carry
+exactly the same text.
 
 **5. Keep it.** `/parts/` has a web app manifest and icons, so it saves to a home screen as
 "Partfinder" and opens straight back to the page. There is no service worker: it is a shortcut,
 not offline mode.
-
-**6. Suppliers, on the same page.** Give Partfinder a city and sign in with the shared passcode,
-and the shops appear under the cards: a Google map with numbered pins, and a numbered list to
-match. Each shop carries its address, its Google rating where there is one, which of your brands
-Google listed it for, and buttons - WhatsApp with the requirement already written and addressed to
-that shop, a second WhatsApp button for only its own brands' parts when it was listed for some of
-them, Call, Website, and Open in Google Maps. No second page and no form to fill in.
-
-It is not public, because it costs money per view. Signed out, the page is exactly what it was,
-plus one line offering the passcode form, which returns you to the same query.
-
-Being listed by Google is not a claim that a shop has your part. The page says so, above the list.
-Nothing is stored: a place id travels in a link and nowhere else, no page is scraped, and no
-vendor list is kept. Google's listings are shown with its attribution. When Google will not answer
-- the daily limit, a timeout, no key - the page says so in its own words, never Google's, and
-falls back to the link-outs from section 3.
-
-The map is the only client-side script this project ships. It loads only when there are shops to
-pin, carries a per-response CSP nonce, and takes its pin data from a JSON block rather than from
-anything interpolated into code. Without it - no key, no JavaScript, a loader that never arrives -
-the box says "Map unavailable. The list below has everything", and the list is where the phone
-numbers are anyway.
 
 **Terms and privacy, `GET /parts/terms` and `GET /parts/privacy`.** Public, static, linked from
 the footer of every page. Google's Places API policies require an app using its data to publish
@@ -143,12 +146,14 @@ src/env.ts        the three Worker secrets, all optional: the page works without
 src/legal.ts      the public Terms and Privacy pages
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/headers.ts    the response headers, including the map page's nonce CSP
+src/quantity.ts   how many, read out of the pasted message
 src/vendors/      the suppliers behind the passcode
-  auth.ts         the passcode gate and the remembered city, both cookies, nothing stored
+  auth.ts         the passcode gate and the remembered city and country, nothing stored
   places.ts       the Google Places API (New) client, and the only fetch in the Worker
-  search.ts       grouping the numbers by brand, and merging what came back
+  search.ts       the origin, the brand groups, distances, and merging what came back
   phone.ts        what can be done with a number: WhatsApp, a call, or neither
-  suppliers.ts    the Suppliers section on /parts/, the map, and the fallback links
+  suppliers.ts    the Suppliers section on /parts/ and the fallback links
+  script.ts       the only client-side JavaScript: map, location, filters, send queue
   page.ts         the passcode form
   index.ts        routing under /parts/vendors
 src/parse.ts      token and hint extraction, normalisation, candidate ranking
