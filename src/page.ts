@@ -380,6 +380,8 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .send label { display: block; margin-top: .75rem; font-weight: 600; }
 .send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
+.footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }
+.footer a { color: inherit; }
 .note { font-size: .9rem; opacity: .85; }
 @media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
 `.trim();
@@ -564,6 +566,14 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
 }
 
 /**
+ * Terms and privacy, on every page under /parts. Google's Places API policies require both to be
+ * publicly reachable from anywhere its data is used, and the rest of the site is no worse for it.
+ */
+const FOOTER = `<footer class="footer">
+      <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
+    </footer>`;
+
+/**
  * The shared HTML shell for every page under /parts: one head, one stylesheet, no client-side
  * JavaScript. `main` is the whole <main> element, indented to sit at four spaces. `extraStyle` is
  * for rules only one page needs, so the public page does not carry the vendor pages' CSS.
@@ -585,6 +595,7 @@ export function renderDocument(main: string, extraStyle = ""): string {
   </head>
   <body>
     ${main}
+    ${FOOTER}
   </body>
 </html>
 `;

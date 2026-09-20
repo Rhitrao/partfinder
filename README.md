@@ -53,6 +53,12 @@ list is kept. Google's listings are shown with its attribution. When Google will
 daily limit, a timeout, no key - the page says so in its own words, never Google's, and falls back
 to the link-outs from section 3.
 
+**Terms and privacy, `GET /parts/terms` and `GET /parts/privacy`.** Public, static, linked from
+the footer of every page. Google's Places API policies require an app using its data to publish
+both, incorporating Google's own terms and privacy policy, so these are a condition of the vendor
+pages rather than decoration. The privacy page is the short list of what Partfinder keeps, which
+is nothing you type, and the one cookie it sets.
+
 **The API, `GET /parts/api/parse?q=<text>`.** The same parsing as JSON:
 
 ```
@@ -127,6 +133,7 @@ Everything Partfinder returns today is T5.
 ```
 src/index.ts      Worker entry and routing under /parts/, plus the manifest and icons
 src/env.ts        the two Worker secrets, both optional: the page works without either
+src/legal.ts      the public Terms and Privacy pages
 src/headers.ts    the response headers every page under /parts/ carries
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/vendors/      the passcode-gated vendor pages

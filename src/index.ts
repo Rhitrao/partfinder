@@ -9,6 +9,7 @@
 import type { Env } from "./env";
 import { PAGE_HEADERS } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
+import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
 import { MAX_QUERY_LENGTH, renderPage, resolveCountry } from "./page";
@@ -100,6 +101,11 @@ function redirectToPage(url: URL): Response {
   });
 }
 
+const LEGAL_PAGES: Record<string, () => string> = {
+  "/parts/terms": renderTerms,
+  "/parts/privacy": renderPrivacy,
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -113,6 +119,13 @@ export default {
       return new Response(asset.body(), {
         headers: { "Content-Type": asset.type, ...ASSET_HEADERS },
       });
+    }
+    // Public, static and required by Google's Places API policies. Still noindex: nothing under
+    // /parts is indexable until a step prompt lifts it.
+    const legal = LEGAL_PAGES[url.pathname];
+    if (legal !== undefined) {
+      if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
+      return new Response(legal(), { headers: PAGE_HEADERS });
     }
     if (url.pathname === "/parts/api/parse") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
