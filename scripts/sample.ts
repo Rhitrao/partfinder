@@ -15,7 +15,14 @@ export const SAMPLE_QUERY = "need 1u3352 and 40/300893 for JCB 3CX";
 export const SAMPLE_FILE = "docs/sample-page.html";
 
 export function renderSample(): string {
-  return renderPage({ q: SAMPLE_QUERY, hint: "", city: "", country: resolveCountry("IN") });
+  return renderPage({
+    q: SAMPLE_QUERY,
+    hint: "",
+    city: "",
+    to: "",
+    note: "",
+    country: resolveCountry("IN"),
+  });
 }
 
 const entry = process.argv[1];

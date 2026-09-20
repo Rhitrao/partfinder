@@ -1,5 +1,5 @@
 // Worker entry and routing under /parts. Every response carries X-Robots-Tag: noindex.
-// q and hint are never logged.
+// q, hint, city, to and note are never logged.
 //
 // The page is served at /parts/, with a trailing slash, and /parts redirects to it. That is a
 // routing constraint, not a preference: a Cloudflare route pattern with no trailing "*" matches
@@ -35,14 +35,18 @@ function handlePage(url: URL): Response {
   const q = url.searchParams.get("q") ?? "";
   const hint = url.searchParams.get("hint") ?? "";
   const city = url.searchParams.get("city") ?? "";
+  const to = url.searchParams.get("to") ?? "";
+  const note = url.searchParams.get("note") ?? "";
   const country = resolveCountry(url.searchParams.get("country"));
   // Every text field is capped, not just q: each one is rendered, and the budget is the request's.
-  const fields = [q, hint, city];
+  const fields = [q, hint, city, to, note];
   const tooLong = fields.some((value) => value.length > MAX_QUERY_LENGTH);
   const html = renderPage({
     q: tooLong ? "" : q,
     hint: tooLong ? "" : hint,
     city: tooLong ? "" : city,
+    to: tooLong ? "" : to,
+    note: tooLong ? "" : note,
     country,
     ...(tooLong
       ? { notice: `That is longer than ${MAX_QUERY_LENGTH} characters. Paste a shorter list.` }

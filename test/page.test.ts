@@ -28,6 +28,13 @@ const linkByText = (html: string, text: string) =>
     .replaceAll("&#39;", "'");
 const whatsappLink = (html: string) => hrefs(html).find((h) => h.startsWith("https://wa.me/"));
 
+/**
+ * Just the cards. The send form below them carries q back as a hidden field, so slicing to the
+ * end of the document would find the pasted text again and prove nothing about the cards.
+ */
+const cards = (html: string) =>
+  html.slice(html.indexOf('<section class="card"'), html.indexOf('<section class="send"'));
+
 /** The text of every candidate's manufacturer line, in rendered order. */
 const oems = (html: string) => [...html.matchAll(/<p class="oem">([^<]*)<\/p>/g)].map((m) => m[1]);
 
@@ -174,10 +181,10 @@ describe("the WhatsApp link", () => {
 
   it("shows a phone-shaped number on the page, with the reason it is not sent", async () => {
     const html = await page(q("Ramesh 9876543210 needs 1u3352 at Rs 4500"));
-    const cards = html.slice(html.indexOf('<section class="card"'));
-    expect(cards).toContain("9876543210");
-    expect(cards).toContain("Looks like a phone number, so it's left out of the WhatsApp message.");
-    expect(cards).toContain("Type it with dashes if it's a part number.");
+    const shown = cards(html);
+    expect(shown).toContain("9876543210");
+    expect(shown).toContain("Looks like a phone number, so it's left out of the WhatsApp message.");
+    expect(shown).toContain("Type it with dashes if it's a part number.");
   });
 
   it("drops a number with a country code from the message", async () => {
@@ -225,9 +232,9 @@ describe("prices", () => {
 
   it("never reach a card either", async () => {
     const html = await page(q("price \u20b945,000 for 40/300893"));
-    const cards = html.slice(html.indexOf('<section class="card"'));
-    expect(cards).not.toContain("45,000");
-    expect(cards).toContain("40/300893");
+    const shown = cards(html);
+    expect(shown).not.toContain("45,000");
+    expect(shown).toContain("40/300893");
   });
 });
 

@@ -11,16 +11,19 @@ export interface Country {
   name: string;
   /** Search domain, without the leading "www.". */
   domain: string;
+  /** International dialling code, used only to turn a local number into a wa.me link. */
+  dialCode?: string;
 }
 
 /** Country is a user setting. It only picks the search region; it never hides a result. */
 export const COUNTRIES: readonly Country[] = [
-  { code: "IN", name: "India", domain: "google.co.in" },
-  { code: "AE", name: "UAE", domain: "google.ae" },
-  { code: "SA", name: "Saudi Arabia", domain: "google.com.sa" },
-  { code: "ZA", name: "South Africa", domain: "google.co.za" },
-  { code: "KE", name: "Kenya", domain: "google.co.ke" },
-  { code: "NG", name: "Nigeria", domain: "google.com.ng" },
+  { code: "IN", name: "India", domain: "google.co.in", dialCode: "91" },
+  { code: "AE", name: "UAE", domain: "google.ae", dialCode: "971" },
+  { code: "SA", name: "Saudi Arabia", domain: "google.com.sa", dialCode: "966" },
+  { code: "ZA", name: "South Africa", domain: "google.co.za", dialCode: "27" },
+  { code: "KE", name: "Kenya", domain: "google.co.ke", dialCode: "254" },
+  { code: "NG", name: "Nigeria", domain: "google.com.ng", dialCode: "234" },
+  // "Other" has no dialling code, so a supplier number there must be typed with its own +.
   { code: "OTHER", name: "Other", domain: "google.com" },
 ];
 
@@ -177,37 +180,39 @@ function oems(result: ParseResult): string[] {
 }
 
 function messageBlock(result: ParseResult, index: number, maxSpellings: number): string {
-  const lines = [`${index + 1}. ${result.input}`];
-  const makers = oems(result);
-  lines.push(
-    makers.length > 0
-      ? `   Likely: ${makers.join(" or ")} (from number format, unconfirmed)`
-      : `   ${NOT_DETERMINED}`,
-  );
+  const makers = oems(result).join(" or ");
+  const lines = [`${index + 1}. ${result.input}: likely ${makers} (from number format, unconfirmed)`];
   const others = spellings(result)
     .filter((s) => s !== result.input)
     .slice(0, maxSpellings);
-  if (others.length > 0) lines.push(`   Other spellings: ${others.join(", ")}`);
+  if (others.length > 0) lines.push(`   Also written: ${others.join(", ")}`);
   return lines.join("\n");
 }
 
 /**
- * The plain-text message the wa.me link pre-fills. There is no phone number: the user picks the
- * contact. Kept within WHATSAPP_LIMIT by trimming spellings first, then whole numbers off the end.
+ * The requirement, in plain text. The same string goes in the textarea, in both wa.me links and
+ * in the email body, so whatever the user reads is exactly what the supplier gets.
  *
- * Both the message and the back-link carry only the numbers outbound() passed, never the pasted
- * text. What a user pastes can hold a customer name, a phone number or a price, and none of that
- * may leave in a message to a supplier. Numbers trimmed out of the message for length still
- * appear in the link, because the link is how the reader gets back to the full page.
+ * Only the numbers outbound() passed are in it, and the back-link carries only those numbers:
+ * never the pasted text, the note, the city or the supplier's number. What a user pastes can
+ * hold a customer name, a phone number or a price, and none of that may leave in a message to a
+ * third party. Numbers trimmed out for length still appear in the link, because the link is how
+ * the reader gets back to the full page.
+ *
+ * Kept within WHATSAPP_LIMIT by trimming spellings first, then whole numbers off the end.
  */
-export function whatsappMessage(results: readonly ParseResult[]): string {
+export function requirementMessage(results: readonly ParseResult[], note = ""): string {
   const tokens = results.map((r) => r.input).join(" ");
-  const link = `Details: https://rohitrao.in/parts/?q=${encodeURIComponent(tokens)}`;
+  const tail = [
+    ...(note.trim() === "" ? [] : [`Note: ${note.trim()}`]),
+    "Please share availability, price and delivery time.",
+    `Details: https://rohitrao.in/parts/?q=${encodeURIComponent(tokens)}`,
+  ];
   const assemble = (count: number, maxSpellings: number): string => {
     const blocks = results.slice(0, count).map((r, i) => messageBlock(r, i, maxSpellings));
     const omitted = results.length - count;
     if (omitted > 0) blocks.push(`(+${omitted} more on the page)`);
-    return ["Part numbers:", ...blocks, link].join("\n\n");
+    return ["Hi, we have a requirement for:", ...blocks, ...tail].join("\n");
   };
 
   for (let maxSpellings = MAX_SPELLINGS; maxSpellings >= 0; maxSpellings--) {
@@ -221,8 +226,60 @@ export function whatsappMessage(results: readonly ParseResult[]): string {
   return assemble(1, 0);
 }
 
-export function whatsappUrl(results: readonly ParseResult[]): string {
-  return `https://wa.me/?text=${encodeURIComponent(whatsappMessage(results))}`;
+/** Roughly the length an email subject can be before clients start truncating it. */
+const SUBJECT_LIMIT = 80;
+
+/** "Requirement: " and the numbers, cut on a whole number rather than mid-digit. */
+export function emailSubject(results: readonly ParseResult[]): string {
+  const prefix = "Requirement: ";
+  const kept: string[] = [];
+  for (const result of results) {
+    const next = [...kept, result.input].join(", ");
+    if (prefix.length + next.length > SUBJECT_LIMIT) break;
+    kept.push(result.input);
+  }
+  if (kept.length === 0) return (prefix + results[0]!.input).slice(0, SUBJECT_LIMIT);
+  return prefix + kept.join(", ") + (kept.length < results.length ? ", ..." : "");
+}
+
+/**
+ * The supplier's number as wa.me wants it: digits only, no plus. Null means "not a number we can
+ * dial", which is an answer, not an error: the user is offered the contact picker instead.
+ *
+ * Everything but digits and a leading + is stripped first. A leading + means the user typed the
+ * country themselves. Otherwise the selected country supplies the code, and a leading trunk 0 is
+ * dropped. The number is used to build the link and nothing else: it is never logged or stored.
+ */
+export function normaliseWhatsapp(raw: string, country: Country): string | null {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits === "") return null;
+  const inRange = (value: string) => value.length >= 11 && value.length <= 15;
+  if (trimmed.startsWith("+")) return inRange(digits) ? digits : null;
+  if (country.dialCode === undefined) return null;
+  const local = digits.startsWith("0") ? digits.slice(1) : digits;
+  // India's mobile numbers are ten digits starting 6 to 9; anything else is a landline or a typo.
+  if (country.code === "IN" && !/^[6-9]\d{9}$/.test(local)) return null;
+  const full = country.dialCode + local;
+  return inRange(full) ? full : null;
+}
+
+/** The same digits, spaced after the dialling code, for a label a person can check at a glance. */
+export function formatWhatsapp(digits: string): string {
+  const codes = COUNTRIES.map((c) => c.dialCode)
+    .filter((c): c is string => c !== undefined)
+    .sort((a, b) => b.length - a.length);
+  const code = codes.find((c) => digits.startsWith(c));
+  return code === undefined ? `+${digits}` : `+${code} ${digits.slice(code.length)}`;
+}
+
+export function whatsappUrl(message: string, to = ""): string {
+  return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
+}
+
+/** encodeURIComponent never emits "+" for a space, so a mail client cannot misread the body. */
+export function mailtoUrl(subject: string, message: string): string {
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
 }
 
 const STYLE = `
@@ -287,6 +344,10 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
   color: inherit;
 }
 .whatsapp { display: block; text-align: center; font-weight: 700; margin: 1.25rem 0; }
+.send { margin-top: 2rem; }
+.send h2 { margin-bottom: .75rem; }
+.send label { display: block; margin-top: .75rem; font-weight: 600; }
+.send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
 .notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
 .note { font-size: .9rem; opacity: .85; }
 @media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
@@ -400,19 +461,74 @@ function renderCard(result: ParseResult, country: Country, city: string): string
 }
 
 function renderResults(results: readonly ParseResult[], country: Country, city: string): string {
-  const cards =
-    results.length > 0
-      ? results.map((r) => renderCard(r, country, city)).join("\n      ")
-      : `<section class="card">
+  if (results.length === 0) {
+    return `<section class="card">
         <p class="answer">Not determined: nothing in what you pasted looks like a part number.</p>
       </section>`;
+  }
+  return results.map((r) => renderCard(r, country, city)).join("\n      ");
+}
+
+const INVALID_NUMBER =
+  "That doesn't look like a WhatsApp number, so pick the contact in WhatsApp instead.";
+
+function hidden(name: string, value: string): string {
+  return `<input type="hidden" name="${name}" value="${escapeHtml(value)}">`;
+}
+
+/**
+ * Send the requirement: one message, four ways out. The message is shown in full before any of
+ * them, because the user is the one sending it and should read it first.
+ *
+ * The form is a GET back to this same page carrying what the user already typed, so preparing a
+ * message never loses the search. Nothing here is stored: the supplier's number and the note
+ * live in the URL of the user's own browser and in the links this builds, nowhere else.
+ */
+function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   const sending = outbound(results);
-  const action =
-    sending.length > 0
-      ? `<a class="whatsapp" href="${escapeHtml(whatsappUrl(sending))}">` +
-        `Send this to a supplier on WhatsApp</a>`
-      : `<p class="nothing">${NOTHING_TO_SEND}</p>`;
-  return `${cards}\n      ${action}`;
+  if (sending.length === 0) {
+    return `<section class="send">
+        <h2>Send the requirement</h2>
+        <p class="nothing">${NOTHING_TO_SEND}</p>
+      </section>`;
+  }
+
+  const { q, hint, country, city, to, note } = input;
+  const message = requirementMessage(sending, note);
+  const digits = to.trim() === "" ? null : normaliseWhatsapp(to, country);
+  const rows = Math.min(20, Math.max(6, message.split("\n").length + 1));
+
+  const parts = [
+    `<form method="GET" action="/parts/">
+          ${hidden("q", q)}
+          ${hidden("hint", hint)}
+          ${hidden("country", country.code)}
+          ${hidden("city", city)}
+          <label for="to">Supplier's WhatsApp number (optional)</label>
+          <input id="to" name="to" type="text" value="${escapeHtml(to)}" placeholder="Supplier's WhatsApp number (optional)">
+          <label for="note">Note to supplier, e.g. quantity (optional)</label>
+          <input id="note" name="note" type="text" value="${escapeHtml(note)}" placeholder="Note to supplier, e.g. quantity (optional)">
+          <button type="submit">Prepare message</button>
+        </form>`,
+    `<label for="message">Your message (copy it into any app)</label>`,
+    `<textarea id="message" rows="${rows}" readonly>${escapeHtml(message)}</textarea>`,
+  ];
+  if (digits !== null) {
+    parts.push(
+      `<a class="whatsapp" href="${escapeHtml(whatsappUrl(message, digits))}">` +
+        `Open WhatsApp chat with ${escapeHtml(formatWhatsapp(digits))}</a>`,
+    );
+  }
+  parts.push(link(whatsappUrl(message), "Or pick a contact in WhatsApp"));
+  parts.push(link(mailtoUrl(emailSubject(sending), message), "Send by email"));
+  if (to.trim() !== "" && digits === null) {
+    parts.push(`<p class="note">${INVALID_NUMBER}</p>`);
+  }
+
+  return `<section class="send">
+        <h2>Send the requirement</h2>
+        ${parts.join("\n        ")}
+      </section>`;
 }
 
 export interface PageInput {
@@ -421,6 +537,10 @@ export interface PageInput {
   country: Country;
   /** Narrows the supplier and Maps searches. Never stored, and never put in the back-link. */
   city: string;
+  /** The supplier's WhatsApp number, as typed. Used to build the link, and nothing else. */
+  to: string;
+  /** A line for the supplier, e.g. a quantity. Goes in the message, never in the back-link. */
+  note: string;
   /** Shown above the form, e.g. when the input was too long. Not user text. */
   notice?: string;
 }
@@ -454,6 +574,7 @@ export function renderPage(input: PageInput): string {
       );
     }
     sections.push(renderResults(results, country, city));
+    sections.push(renderSend(input, results));
   }
 
   return `<!doctype html>
