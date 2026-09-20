@@ -100,8 +100,8 @@ const DETAILS: Record<string, Record<string, unknown>> = {
   landline: {
     id: "landline",
     displayName: { text: "JCB Spares Co" },
-    internationalPhoneNumber: "+91 11 2345 6789",
-    nationalPhoneNumber: "011 2345 6789",
+    internationalPhoneNumber: "+91 80 2222 3333",
+    nationalPhoneNumber: "080 2222 3333",
     googleMapsUri: "https://maps.google.com/?cid=landline",
   },
 };
@@ -336,18 +336,47 @@ describe("contact details", () => {
     expect(textareas(html)[0]).toBe(message);
   });
 
-  it("offers a landline a call and the message to copy, and no wa.me link", async () => {
+  it("offers WhatsApp and a call for every number, mobile or not", async () => {
     stubFetch(detailsReply);
     const html = await (await signedIn(contactUrl)).text();
+    // +91 98… is an Indian mobile; +91 80… is a Bengaluru landline that fits the same shape.
+    // Neither is classified any more: both get both links, labelled for what they are.
+    const mobile = html.slice(html.indexOf("Cat Corner"), html.indexOf("JCB Spares Co"));
     const landline = html.slice(html.indexOf("JCB Spares Co"));
-    expect(landline).toContain('href="tel:+911123456789"');
-    expect(landline).not.toContain("wa.me");
-    expect(landline).toContain("<textarea");
-    // Scope "all": this shop's message carries both numbers.
+    expect(mobile).toContain("https://wa.me/919876543210?text=");
+    expect(mobile).toContain('href="tel:+919876543210"');
+    expect(landline).toContain("https://wa.me/918022223333?text=");
+    expect(landline).toContain('href="tel:+918022223333"');
+    for (const block of [mobile, landline]) {
+      expect(block).toContain("WhatsApp (if they use it)");
+      expect(block).toContain("<textarea");
+      expect(block).toContain("Send by email");
+    }
+    expect(html).not.toContain("may not be on WhatsApp");
+    // Scope "all": the landline's message carries both numbers.
     const message = textareas(html)[1]!;
     expect(message).toContain("1U3352");
     expect(message).toContain("40/300893");
     expect(message.startsWith("Hi JCB Spares Co,")).toBe(true);
+  });
+
+  it("offers no WhatsApp link when Google has no international number", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            id: "local",
+            displayName: { text: "Local Only" },
+            nationalPhoneNumber: "080 2222 3333",
+          }),
+          { status: 200 },
+        ),
+    );
+    const html = await (
+      await signedIn(`/parts/vendors/contact?q=${encodeURIComponent(Q)}&city=Bengaluru&v=local`)
+    ).text();
+    expect(html).toContain('href="tel:08022223333"');
+    expect(html).not.toContain("wa.me");
   });
 
   it("emails the same message, with the step 4 subject", async () => {

@@ -19,9 +19,6 @@ import { PlacesError, placeDetails, type PlaceContact, type PlacesFailure } from
 import { googleMapsBox, hidden, renderVendorDocument, vendorLink } from "./page";
 import { MAX_PICKS, SCOPE_ALL, scopedParts } from "./search";
 
-/** An Indian mobile: country code 91, then ten digits starting 6 to 9. */
-const INDIA_MOBILE = /^91[6-9]\d{9}$/;
-
 /** A plausible international number, so a mangled one never becomes a wa.me link. */
 const DIALLABLE = /^\d{8,15}$/;
 
@@ -30,10 +27,8 @@ export interface Phone {
   display: string;
   /** The tel: target, or null when there is no number. */
   tel: string | null;
-  /** Digits for wa.me, or null when this is not a number to open WhatsApp with. */
+  /** Digits for wa.me, or null when the number has no country code to dial internationally. */
   whatsapp: string | null;
-  /** The number has a country code but its shape does not prove it is a mobile. */
-  caution: boolean;
 }
 
 function digitsOf(value: string): string {
@@ -41,36 +36,32 @@ function digitsOf(value: string): string {
 }
 
 /**
- * What can be done with the number Google returned.
+ * What can be done with the number Google returned. Both things, whenever the number allows it.
  *
- * An Indian number is only offered for WhatsApp when it has the shape of an Indian mobile, which
- * is a rule worth trusting: landlines there never start 6 to 9 after the code. No other country
- * has a shape this code can rely on, so a number with a country code is offered with a warning
- * rather than either withheld or claimed. A number with no country code cannot be dialled
- * internationally at all, so it gets tel: and nothing else.
+ * There is no guess here about whether a number is a mobile. India's mobile shape - +91 then ten
+ * digits starting 6 to 9 - does not separate them: Bengaluru's own area code is 80, so half the
+ * landlines in the city Partfinder was written for satisfy it. Guessing wrong in one direction
+ * hides a working WhatsApp number, and in the other it labels a landline as a mobile, so the page
+ * offers both and says which is which. The only number that gets no WhatsApp link is one with no
+ * country code, which cannot be dialled internationally at all.
  */
 export function phoneFor(contact: PlaceContact): Phone {
   const international = contact.internationalPhone.trim();
   const national = contact.nationalPhone.trim();
   const display = international !== "" ? international : national;
-  if (display === "") return { display: "", tel: null, whatsapp: null, caution: false };
+  if (display === "") return { display: "", tel: null, whatsapp: null };
 
   if (!international.startsWith("+")) {
     const local = national.replace(/[^\d+]/g, "");
-    return { display, tel: local === "" ? null : local, whatsapp: null, caution: false };
+    return { display, tel: local === "" ? null : local, whatsapp: null };
   }
   const digits = digitsOf(international);
   const tel = `+${digits}`;
-  if (!DIALLABLE.test(digits)) return { display, tel, whatsapp: null, caution: false };
-  if (digits.startsWith("91")) {
-    return INDIA_MOBILE.test(digits)
-      ? { display, tel, whatsapp: digits, caution: false }
-      : { display, tel, whatsapp: null, caution: false };
-  }
-  return { display, tel, whatsapp: digits, caution: true };
+  return { display, tel, whatsapp: DIALLABLE.test(digits) ? digits : null };
 }
 
-export const MAY_NOT_BE_WHATSAPP = "This number may not be on WhatsApp.";
+/** Says the uncertainty out loud instead of resolving it. A shop may be on WhatsApp or may not. */
+export const WHATSAPP_LABEL = "WhatsApp (if they use it)";
 export const NO_PHONE = "Google lists no phone number for this shop.";
 export const DETAILS_FAILED = "Contact details didn't load for this shop.";
 
@@ -150,12 +141,10 @@ function renderVendorContact(vendor: PickedVendor, parts: readonly ParseResult[]
   if (phone.whatsapp !== null) {
     lines.push(
       `<a class="whatsapp" href="${escapeHtml(whatsappUrl(message, phone.whatsapp))}">` +
-        `WhatsApp ${escapeHtml(name)}</a>`,
+        `${escapeHtml(WHATSAPP_LABEL)}</a>`,
     );
-    if (phone.caution) lines.push(`<p class="note">${MAY_NOT_BE_WHATSAPP}</p>`);
-  } else if (phone.tel !== null) {
-    lines.push(vendorLink(`tel:${phone.tel}`, "Call"));
   }
+  if (phone.tel !== null) lines.push(vendorLink(`tel:${phone.tel}`, "Call"));
   lines.push(vendorLink(mailtoUrl(emailSubject(scoped), message), "Send by email"));
   return googleMapsBox(`<div class="vendor">
           ${lines.join("\n          ")}

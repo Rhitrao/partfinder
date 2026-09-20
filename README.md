@@ -45,7 +45,10 @@ shops listed for each of your brands, plus one search that names no brand, and m
 into one list. A shop listed for two of your brands says so, and sorts above one listed for one.
 Tick up to five, choose whether each is asked about all your parts or only its own brands', and
 `GET /parts/vendors/contact` fetches their phone numbers and websites and writes one message per
-shop, addressed to it by name, for WhatsApp, a phone call or email.
+shop, addressed to it by name. Every shop with a dialable number gets both "WhatsApp (if they use
+it)" and "Call", plus the message to copy and an email link. Partfinder does not guess which
+numbers are mobiles: India's mobile shape does not separate them, because Bengaluru's own area
+code is 80.
 
 Being listed by Google is not a claim that a shop has your part. The page says so, above the list.
 Nothing is stored: a place id travels in a URL and nowhere else, no page is scraped, and no vendor
