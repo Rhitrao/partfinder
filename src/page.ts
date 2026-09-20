@@ -395,6 +395,51 @@ button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
 .sphone { font-family: ui-monospace, monospace; margin: .35rem 0 .15rem; }
 .shop .whatsapp { margin: .4rem 0 0; }
 .shop .link { margin-top: .4rem; }
+.sfacts { font-size: .9rem; margin: .15rem 0; }
+.sask { font-size: .9rem; margin: .5rem 0 .25rem; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chip {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 1rem;
+  padding: .3rem .7rem;
+  font-size: .9rem;
+  text-decoration: none;
+  color: inherit;
+  min-height: 34px;
+}
+a.chip { min-height: 44px; padding: .6rem .9rem; }
+.actions { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
+.actions .link, .actions .whatsapp { margin: 0; min-height: 44px; }
+.select {
+  display: block;
+  border: 1px solid currentColor;
+  border-radius: .4rem;
+  padding: .6rem .8rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+.select input { width: auto; margin-right: .5rem; }
+.pin {
+  display: inline-block;
+  min-width: 1.6rem;
+  text-align: center;
+  border: 1px solid currentColor;
+  border-radius: .3rem;
+  margin-right: .4rem;
+}
+.number { font-size: 1.5rem; font-weight: 700; font-family: ui-monospace, monospace; margin: 0; }
+.astyped, .asknote { font-size: .85rem; opacity: .8; margin: .1rem 0; }
+.tag { display: inline-block; border: 1px solid currentColor; border-radius: .3rem;
+  padding: .1rem .4rem; font-size: .85rem; margin: .3rem 0; }
+.maker { font-weight: 600; margin: .35rem 0 .2rem; }
+.badge { font-size: .75rem; font-weight: 400; border: 1px solid currentColor;
+  border-radius: .3rem; padding: .1rem .35rem; opacity: .85; }
+.qty { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 .25rem; }
+.qtyinput { width: 5rem; min-height: 44px; }
+.update { margin-top: .5rem; min-height: 44px; }
+.unrecognised { font-size: .9rem; opacity: .85; }
+.check summary { cursor: pointer; font-size: .9rem; padding: .5rem 0; min-height: 44px; }
 .signin { font-weight: 600; }
 .map {
   height: 260px;

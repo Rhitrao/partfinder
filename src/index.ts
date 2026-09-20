@@ -20,7 +20,7 @@ import {
   pinsFor,
   renderMapBox,
   renderMapScripts,
-  renderSignIn,
+  renderLinkOuts,
   renderSuppliers,
 } from "./vendors/suppliers";
 
@@ -115,11 +115,13 @@ async function handlePage(request: Request, url: URL, env: Env): Promise<Respons
   const supplierCounts: Record<string, number> = {};
   const shared = sharedLocation(url.searchParams.get("near"));
   if (sending.length > 0) {
-    if (!(await isSignedIn(request, env))) {
-      suppliers = renderSignIn(q, city, country);
-    } else if (city.trim() !== "") {
-      const { groups } = groupByOem(sending);
-      if (groups.length > 0) {
+    const { groups } = groupByOem(sending);
+    if (!(await isSignedIn(request, env)) || city.trim() === "") {
+      // Signed out, or with no city: the link-outs, and nothing about signing in. The only way
+      // in is the footer link, which is where section 9 of the step prompt puts it.
+      if (groups.length > 0) suppliers = renderLinkOuts(groups, country, city);
+    } else {
+      {
         const answer = await findSuppliers(env.GOOGLE_PLACES_KEY, groups, country, city, shared);
         const listed = answer.suppliers.slice(0, MAX_LISTED);
         // The map is drawn only when there is a key to draw it with and a shop to pin. Without

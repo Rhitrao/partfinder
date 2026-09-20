@@ -36,12 +36,13 @@ describe("signed out", () => {
     expect(calls).toHaveLength(0);
     expect(html).not.toContain("maps.googleapis.com");
     expect(html).not.toContain("pf-pins");
-    expect(html).toContain("Sign in to see suppliers here");
-    expect(hrefs(html)).toContain(
-      "/parts/vendors/login?q=1u3352%2040%2F300893&city=Bengaluru&country=IN",
-    );
-    // The cards are still there; the signed-out link-outs arrive with the Suppliers section.
+    // Link-outs, one set per brand, and nothing about signing in outside the footer.
+    expect(html).toContain("Caterpillar parts shops on Google Maps");
+    expect(html).toContain("Search suppliers on Google");
     expect(html).toContain('class="card"');
+    const main = html.slice(0, html.indexOf("<footer"));
+    expect(main).not.toContain("Sign in");
+    expect(main).not.toContain("passcode");
   });
 
   it("keeps today's CSP and referrer policy", async () => {
@@ -96,7 +97,7 @@ describe("the passcode gate", () => {
     const calls = stubFetch(searchReply);
     const res = await get(`/parts/${SEARCH}`, { headers: { Cookie: await cookie("the-old-one") } });
     expect(calls).toHaveLength(0);
-    expect(await res.text()).toContain("Sign in to see suppliers here");
+    expect(await res.text()).toContain("Search suppliers on Google");
   });
 
   it("never sends a login anywhere but the page", async () => {
@@ -266,12 +267,8 @@ describe("the inline supplier search", () => {
     expect(html).toContain("Caterpillar parts shops on Google Maps");
   });
 
-  it("asks Google nothing without a city, or without a recognised number", async () => {
+  it("asks Google nothing without a recognised number", async () => {
     const calls = stubFetch(searchReply);
-    const noCity = await (await signedIn(`/parts/?q=${encodeURIComponent(Q)}`)).text();
-    expect(calls).toHaveLength(0);
-    expect(noCity).not.toContain("Suppliers near");
-
     const noParts = await (await signedIn("/parts/?q=hello%20there&city=Bengaluru")).text();
     expect(calls).toHaveLength(0);
     expect(noParts).not.toContain("Suppliers near");
@@ -359,5 +356,123 @@ describe("what a redirect carries", () => {
         "&v=leftover&scope_leftover=all&utm_source=somewhere",
     );
     expect(res.headers.get("Location")).toBe("/parts/?q=1u3352&city=Bengaluru&country=IN");
+  });
+});
+
+describe("what a supplier card offers", () => {
+  it("names the parts it was listed for, and who for", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const shared = html.slice(html.indexOf('id="pf-shop-1"'), html.indexOf('id="pf-shop-2"'));
+    expect(shared).toContain("Ask about:");
+    expect(shared).toContain("1U-3352 (listed for Caterpillar)");
+    expect(shared).toContain("40/300893 (listed for JCB)");
+    expect(shared).toContain("4.3 &#9733; (120)");
+    expect(shared).toContain("Open now");
+
+    const catOnly = html.slice(html.indexOf('id="pf-shop-2"'), html.indexOf('id="pf-shop-3"'));
+    expect(catOnly).toContain("1U-3352 (listed for Caterpillar)");
+    expect(catOnly).not.toContain("40/300893 (listed for");
+  });
+
+  it("says so plainly when only the multi-brand search found it", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const multi = html.slice(html.indexOf('id="pf-shop-3"'));
+    expect(multi).toContain("General earthmoving spares: ask about all parts");
+    expect(multi).not.toContain("listed for");
+  });
+
+  it("asks a part-matched shop about its parts, and offers all parts beside it", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const catOnly = html.slice(html.indexOf('id="pf-shop-2"'), html.indexOf('id="pf-shop-3"'));
+    const matched = whatsappMessage(catOnly, "WhatsApp \\(if they use it\\)")!;
+    expect(matched.startsWith("Hi Cat Corner,\nWe have a requirement for:")).toBe(true);
+    expect(matched).toContain("1. 1U-3352 (likely Caterpillar)");
+    expect(matched).not.toContain("40/300893");
+    // Without JavaScript there is no toggle, so the wider message is its own link.
+    const all = whatsappMessage(catOnly, "WhatsApp: all parts")!;
+    expect(all).toContain("1U-3352");
+    expect(all).toContain("40/300893");
+    // A shop listed for everything has nothing wider to ask.
+    const shared = html.slice(html.indexOf('id="pf-shop-1"'), html.indexOf('id="pf-shop-2"'));
+    expect(shared).not.toContain("WhatsApp: all parts");
+  });
+
+  it("carries the quantities into every message", async () => {
+    stubFetch(searchReply);
+    const html = await (
+      await signedIn(`/parts/?q=${encodeURIComponent("2 nos 1u3352 and 40/300893 x1")}&city=Bengaluru&country=IN`)
+    ).text();
+    const message = whatsappMessage(html, "WhatsApp \\(if they use it\\)")!;
+    expect(message).toContain("1. 1U-3352 (likely Caterpillar), qty 2");
+    expect(message).toContain("2. 40/300893 (likely JCB), qty 1");
+  });
+
+  it("offers Select, Call, Website and Map, and says when there is no WhatsApp number", async () => {
+    stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const shared = html.slice(html.indexOf('id="pf-shop-1"'), html.indexOf('id="pf-shop-2"'));
+    expect(shared).toContain('<input type="checkbox" class="pick" data-n="1"> Select');
+    expect(shared).toContain('href="tel:+919876543210"');
+    expect(shared).toContain(">Website<");
+    expect(shared).toContain(">Map<");
+
+    stubFetch((call) =>
+      isOriginCall(call)
+        ? new Response(JSON.stringify({ places: [{ location: CITY_CENTRE }] }), { status: 200 })
+        : new Response(
+            JSON.stringify({
+              places: [
+                place("local", "Local Only", {
+                  internationalPhoneNumber: undefined,
+                  nationalPhoneNumber: undefined,
+                  websiteUri: undefined,
+                }),
+              ],
+            }),
+            { status: 200 },
+          ),
+    );
+    const plain = await (await signedIn(`/parts/${SEARCH}`)).text();
+    const shops = plain.slice(plain.indexOf('class="suppliers"'), plain.indexOf('class="send"'));
+    expect(shops).toContain("No WhatsApp number listed");
+    expect(shops).not.toContain("wa.me");
+    expect(shops).not.toContain(">Website<");
+  });
+
+  it("renders a shop the demo key returned no rating or opening hours for", async () => {
+    stubFetch((call) =>
+      isOriginCall(call)
+        ? new Response(JSON.stringify({ places: [{ location: CITY_CENTRE }] }), { status: 200 })
+        : new Response(
+            JSON.stringify({
+              places: [
+                place("plain", "Plain Shop", {
+                  rating: undefined,
+                  userRatingCount: undefined,
+                  currentOpeningHours: undefined,
+                  shortFormattedAddress: undefined,
+                }),
+              ],
+            }),
+            { status: 200 },
+          ),
+    );
+    const html = await (await signedIn(`/parts/${SEARCH}`)).text();
+    expect(html).toContain("Plain Shop");
+    expect(html).not.toContain('class="srating"');
+    expect(html).not.toContain("Open now");
+    // It falls back to the long address rather than showing none.
+    expect(html).toContain("Bengaluru 560038");
+  });
+
+  it("offers the city prompt when there is none", async () => {
+    const calls = stubFetch(searchReply);
+    const html = await (await signedIn(`/parts/?q=${encodeURIComponent(Q)}`)).text();
+    expect(calls).toHaveLength(0);
+    expect(html).toContain("Add your city to see suppliers near you.");
+    expect(html).toContain("Caterpillar parts shops on Google Maps");
   });
 });

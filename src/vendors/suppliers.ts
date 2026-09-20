@@ -3,18 +3,24 @@
 // Everything here is rendered from one Text Search round. Nothing is stored, nothing is logged,
 // and a place id travels no further than the links on this page.
 
+import { findDealerLocator } from "../dealers";
 import {
   escapeHtml,
   mapsUrl,
+  partKey,
   requirementMessage,
   suppliersUrl,
   whatsappUrl,
   type Country,
 } from "../page";
 import type { ParseResult } from "../parse";
-import { NO_PHONE, WHATSAPP_LABEL, phoneFor } from "./phone";
-import type { SupplierFailure } from "./search";
-import { formatDistance, type BrandGroup, type Supplier } from "./search";
+import { WHATSAPP_LABEL, phoneFor } from "./phone";
+import {
+  formatDistance,
+  type BrandGroup,
+  type Supplier,
+  type SupplierFailure,
+} from "./search";
 
 /**
  * Google's attribution for Places results shown without a Google map, and for the map itself.
@@ -35,27 +41,12 @@ export function googleMapsBox(inner: string): string {
         </section>`;
 }
 
-function link(href: string, text: string, className = "link"): string {
-  return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
-}
-
 /** Above every listing, in the same words each time. A listing is not an answer about stock. */
 export function listingCaveat(city: string): string {
   return (
     `These are shops Google lists for these brands in ${city.trim()}. ` +
     `Being listed doesn't mean they have your part in stock. Ask them.`
   );
-}
-
-/** Shown to everyone who is not signed in, wherever the Suppliers section would have been. */
-export const SIGN_IN_PROMPT = "Sign in to see suppliers here";
-
-/** What the map box says until the script replaces it, and forever if the script never runs. */
-export const MAP_UNAVAILABLE = "Map unavailable. The list below has everything.";
-
-/** The box the map is drawn into. Its text is the no-JavaScript answer. */
-export function renderMapBox(): string {
-  return `<div class="map" id="pf-map">${MAP_UNAVAILABLE}</div>`;
 }
 
 /**
@@ -66,9 +57,18 @@ export function renderMapBox(): string {
  */
 export const SUPPLIERS_UNAVAILABLE = "Supplier list unavailable right now";
 
+/** What the map box says until the script replaces it, and forever if the script never runs. */
+export const MAP_UNAVAILABLE = "Map unavailable. The list below has everything.";
+
+/** The box the map is drawn into. Its text is the no-JavaScript answer. */
+export function renderMapBox(): string {
+  return `<div class="map" id="pf-map">${MAP_UNAVAILABLE}</div>`;
+}
+
 /**
- * The fallback under either message: step 4's own link-outs, one set per brand group. These fetch
- * nothing and need no key, so the section is still useful with Google's API shut off entirely.
+ * The link-outs: what the page offers when it cannot list shops itself. One set per brand, plus
+ * the manufacturer's own dealer locator where one has been confirmed. These fetch nothing and
+ * need no key, so the section is useful with Google's API shut off entirely.
  */
 export function renderFallback(
   groups: readonly BrandGroup[],
@@ -79,30 +79,15 @@ export function renderFallback(
   return groups
     .map((group) => {
       const first = group.results[0]!;
+      const locator = findDealerLocator(group.oem, country.code);
       return `<div class="group">
-        <h3>${escapeHtml(group.oem)}</h3>
-        ${link(suppliersUrl(first, country, city), `Find suppliers in ${country.name}`)}
-        ${link(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
-      </div>`;
+          <h3>${escapeHtml(group.oem)}</h3>
+          ${link(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
+          ${link(suppliersUrl(first, country, city), "Search suppliers on Google")}
+          ${locator ? link(locator.url, `Authorised ${group.oem} dealers`) : ""}
+        </div>`;
     })
-    .join("\n      ");
-}
-
-/** The passcode form, carrying enough to come back to this exact page afterwards. */
-export function signInUrl(q: string, city: string, country: Country): string {
-  return (
-    `/parts/vendors/login?q=${encodeURIComponent(q)}` +
-    `&city=${encodeURIComponent(city.trim())}&country=${encodeURIComponent(country.code)}`
-  );
-}
-
-/** The one line a signed-out visitor sees in place of the shops. */
-export function renderSignIn(q: string, city: string, country: Country): string {
-  return `<section class="suppliers">
-        <h2>Suppliers</h2>
-        <p class="signin"><a href="${escapeHtml(signInUrl(q, city, country))}">${SIGN_IN_PROMPT}</a>,
-        or use the Where-to-buy links on each card.</p>
-      </section>`;
+    .join("\n        ");
 }
 
 /** All the map is told about a shop: its number, its name and where it is. Nothing else. */
@@ -138,62 +123,20 @@ export function jsonForScript(value: unknown): string {
     .replace(/\u2029/g, "\\u2029");
 }
 
-/**
- * The pin data, the code that draws the map, and Google's loader. Everything carries the nonce.
- *
- * The data is a JSON block rather than anything interpolated into code, so a shop's name is never
- * parsed as JavaScript. initMap is defined before the loader runs, which is what &callback=initMap
- * needs; the loader is async, so the list is on screen whether or not the map ever arrives, and
- * every failure path leaves the box's own text in place.
- */
-export function renderMapScripts(pins: readonly Pin[], key: string, nonce: string): string {
-  const n = escapeHtml(nonce);
-  const loader =
-    "https://maps.googleapis.com/maps/api/js" +
-    `?key=${encodeURIComponent(key)}&callback=initMap&loading=async`;
-  return `
-    <script type="application/json" id="pf-pins" nonce="${n}">${jsonForScript(pins)}</script>
-    <script nonce="${n}">
-window.initMap = async function () {
-  var box = document.getElementById("pf-map");
-  var data = document.getElementById("pf-pins");
-  if (!box || !data) return;
-  var pins;
-  try { pins = JSON.parse(data.textContent || "[]"); } catch (e) { return; }
-  if (!pins.length) return;
-  try {
-    var maps = await google.maps.importLibrary("maps");
-    var markers = await google.maps.importLibrary("marker");
-    box.textContent = "";
-    var map = new maps.Map(box, {
-      mapId: "DEMO_MAP_ID",
-      zoom: 12,
-      center: { lat: pins[0].lat, lng: pins[0].lng }
-    });
-    var bounds = new google.maps.LatLngBounds();
-    pins.forEach(function (pin) {
-      var position = { lat: pin.lat, lng: pin.lng };
-      var glyph = new markers.PinElement({ glyph: String(pin.n) });
-      var marker = new markers.AdvancedMarkerElement({
-        map: map,
-        position: position,
-        title: pin.name,
-        content: glyph.element,
-        gmpClickable: true
-      });
-      marker.addListener("gmp-click", function () {
-        var row = document.getElementById("pf-shop-" + pin.n);
-        if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      bounds.extend(position);
-    });
-    map.fitBounds(bounds);
-  } catch (e) {
-    box.textContent = ${jsonForScript(MAP_UNAVAILABLE)};
-  }
-};
-    </script>
-    <script src="${escapeHtml(loader)}" async nonce="${n}"></script>`;
+export const NO_CITY = "Add your city to see suppliers near you.";
+
+/** Signed out, or with no city: the section is the link-outs, and says nothing about signing in. */
+export function renderLinkOuts(
+  groups: readonly BrandGroup[],
+  country: Country,
+  city: string,
+): string {
+  const where = city.trim();
+  return `<section class="suppliers">
+        <h2>Suppliers${where === "" ? "" : ` near ${escapeHtml(where)}`}</h2>
+        ${where === "" ? `<p class="warn">${NO_CITY}</p>` : ""}
+        ${renderFallback(groups, country, city)}
+      </section>`;
 }
 
 export interface SuppliersInput {
@@ -264,22 +207,162 @@ export function renderSuppliers(input: SuppliersInput): string {
       </section>`;
 }
 
-/** One shop. The number is what ties the card to its map pin. Enriched in the next commit. */
+/** "4.3 * (120)", or "" when the key's tier returned no rating. */
+function ratingLine(supplier: Supplier): string {
+  const { rating, ratingCount } = supplier.place;
+  if (rating === null) return "";
+  const count = ratingCount === null ? "" : ` (${ratingCount})`;
+  return `<span class="srating">${escapeHtml(rating.toFixed(1))} &#9733;${escapeHtml(count)}</span>`;
+}
+
+function openLine(supplier: Supplier): string {
+  const { openNow } = supplier.place;
+  if (openNow === null) return "";
+  return `<span class="sopen">${openNow ? "Open now" : "Closed now"}</span>`;
+}
+
+function link(href: string, text: string, className = "link"): string {
+  return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+}
+
+/** The parts one shop is listed for, in page order. */
+function matchedOf(supplier: Supplier, parts: readonly ParseResult[]): ParseResult[] {
+  return parts.filter((part) => supplier.matchedParts.includes(partKey(part)));
+}
+
+/**
+ * One shop, and everything needed to ask it.
+ *
+ * The number ties the card to its map pin. "Ask about" names the parts this shop was listed for,
+ * and each brand beside them, because "listed for Caterpillar" is the whole of what Google told
+ * us. A shop only the multi-brand search found says that instead, rather than claiming a brand.
+ *
+ * The WhatsApp link is a plain href with the message already in it, so it works with no
+ * JavaScript at all. A shop listed for some of the parts but not all gets a second link for every
+ * part, because without JavaScript there is no toggle to switch between them.
+ */
 function renderShop(supplier: Supplier, number: number, input: SuppliersInput): string {
-  const { place, distanceKm } = supplier;
+  const { place, distanceKm, matchedGroups, multiBrandOnly } = supplier;
+  const { parts, quantities, note, originLabel } = input;
   const name = place.name === "" ? "Unnamed listing" : place.name;
+  const phone = phoneFor(place);
+  const matched = matchedOf(supplier, parts);
+  const asking = matched.length > 0 ? matched : parts;
+  const message = requirementMessage(asking, { name, note, quantities });
+  const everything = requirementMessage(parts, { name, note, quantities });
+
   const lines = [
     `<p class="sname"><span class="pin">${number}</span> ${escapeHtml(name)}</p>`,
   ];
+  const facts: string[] = [];
   if (distanceKm !== null) {
-    lines.push(
-      `<p class="sdist">${escapeHtml(formatDistance(distanceKm))} from ` +
-        `${escapeHtml(input.originLabel)}</p>`,
+    facts.push(
+      `<span class="sdist">${escapeHtml(formatDistance(distanceKm))} from ` +
+        `${escapeHtml(originLabel)}</span>`,
     );
   }
+  const rated = ratingLine(supplier);
+  if (rated !== "") facts.push(rated);
+  const open = openLine(supplier);
+  if (open !== "") facts.push(open);
+  if (facts.length > 0) lines.push(`<p class="sfacts">${facts.join(" &middot; ")}</p>`);
+
   const address = place.shortAddress === "" ? place.address : place.shortAddress;
   if (address !== "") lines.push(`<p class="saddr">${escapeHtml(address)}</p>`);
+
+  if (multiBrandOnly) {
+    lines.push(`<p class="sask">General earthmoving spares: ask about all parts</p>`);
+  } else {
+    const chips = matched
+      .map((part) => {
+        const oem = part.candidates[0]?.oem ?? "";
+        const brand = matchedGroups.includes(oem) ? oem : matchedGroups[0] ?? oem;
+        return `<span class="chip">${escapeHtml(partKey(part))} (listed for ${escapeHtml(brand)})</span>`;
+      })
+      .join("\n              ");
+    lines.push(`<p class="sask">Ask about:</p>
+            <div class="chips">
+              ${chips}
+            </div>`);
+  }
+
+  const actions = [
+    `<label class="select"><input type="checkbox" class="pick" data-n="${number}"> Select</label>`,
+  ];
+  if (phone.whatsapp !== null) {
+    actions.push(link(whatsappUrl(message, phone.whatsapp), WHATSAPP_LABEL, "whatsapp"));
+  }
+  if (phone.tel !== null) actions.push(link(`tel:${phone.tel}`, "Call"));
+  else actions.push(`<p class="note">No WhatsApp number listed</p>`);
+  if (place.website !== "") actions.push(link(place.website, "Website"));
+  if (place.mapsUri !== "") actions.push(link(place.mapsUri, "Map"));
+  if (phone.whatsapp !== null && matched.length > 0 && matched.length < parts.length) {
+    // No JavaScript means no toggle, so the wider message is its own link.
+    actions.push(link(whatsappUrl(everything, phone.whatsapp), "WhatsApp: all parts", "noscript-all"));
+  }
+  lines.push(`<div class="actions">
+            ${actions.join("\n            ")}
+          </div>`);
+
   return `<li class="shop" id="pf-shop-${number}">
             ${lines.join("\n            ")}
           </li>`;
+}
+
+/**
+ * The pin data, the code that draws the map, and Google's loader. Everything carries the nonce.
+ *
+ * The data is a JSON block rather than anything interpolated into code, so a shop's name is never
+ * parsed as JavaScript. initMap is defined before the loader runs, which is what &callback=initMap
+ * needs; the loader is async, so the list is on screen whether or not the map ever arrives, and
+ * every failure path leaves the box's own text in place.
+ */
+export function renderMapScripts(pins: readonly Pin[], key: string, nonce: string): string {
+  const n = escapeHtml(nonce);
+  const loader =
+    "https://maps.googleapis.com/maps/api/js" +
+    `?key=${encodeURIComponent(key)}&callback=initMap&loading=async`;
+  return `
+    <script type="application/json" id="pf-pins" nonce="${n}">${jsonForScript(pins)}</script>
+    <script nonce="${n}">
+window.initMap = async function () {
+  var box = document.getElementById("pf-map");
+  var data = document.getElementById("pf-pins");
+  if (!box || !data) return;
+  var pins;
+  try { pins = JSON.parse(data.textContent || "[]"); } catch (e) { return; }
+  if (!pins.length) return;
+  try {
+    var maps = await google.maps.importLibrary("maps");
+    var markers = await google.maps.importLibrary("marker");
+    box.textContent = "";
+    var map = new maps.Map(box, {
+      mapId: "DEMO_MAP_ID",
+      zoom: 12,
+      center: { lat: pins[0].lat, lng: pins[0].lng }
+    });
+    var bounds = new google.maps.LatLngBounds();
+    pins.forEach(function (pin) {
+      var position = { lat: pin.lat, lng: pin.lng };
+      var glyph = new markers.PinElement({ glyph: String(pin.n) });
+      var marker = new markers.AdvancedMarkerElement({
+        map: map,
+        position: position,
+        title: pin.name,
+        content: glyph.element,
+        gmpClickable: true
+      });
+      marker.addListener("gmp-click", function () {
+        var row = document.getElementById("pf-shop-" + pin.n);
+        if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      bounds.extend(position);
+    });
+    map.fitBounds(bounds);
+  } catch (e) {
+    box.textContent = ${jsonForScript(MAP_UNAVAILABLE)};
+  }
+};
+    </script>
+    <script src="${escapeHtml(loader)}" async nonce="${n}"></script>`;
 }
