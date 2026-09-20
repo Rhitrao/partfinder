@@ -4,6 +4,14 @@
 // page. Nothing the user types here is stored or logged.
 
 import { COUNTRIES, escapeHtml, renderDocument, type Country } from "../page";
+import {
+  MAX_PICKS,
+  SCOPE_ALL,
+  defaultsToAllParts,
+  scopeOnly,
+  type BrandGroup,
+  type Vendor,
+} from "./search";
 
 /** Rules only the vendor pages need, so the public page does not carry them. */
 export const VENDOR_STYLE = `
@@ -12,6 +20,18 @@ export const VENDOR_STYLE = `
 .warn { font-weight: 600; }
 .back { font-size: .9rem; margin-top: 2rem; }
 .back a { color: inherit; }
+.caveat { font-weight: 600; }
+.vendors { list-style: none; margin: 1rem 0 0; padding: 0; }
+.vendor { border: 1px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1rem 0; }
+.vname { font-weight: 700; margin: 0; }
+.vaddr, .vfound, .vcount { font-size: .9rem; margin: .15rem 0; opacity: .85; }
+.pick { display: block; margin-top: .6rem; font-weight: 600; }
+.pick input, .scope input { width: auto; margin-right: .4rem; }
+.scope { border: 0; padding: .4rem 0 0; margin: 0; }
+.scope legend { font-size: .85rem; opacity: .85; padding: 0; }
+.scope label { display: block; font-weight: 400; font-size: .95rem; }
+.attribution { font-size: .9rem; margin-top: 1rem; opacity: .85; }
+.pickhint { font-size: .9rem; opacity: .85; }
 `;
 
 /** The whole vendor document: the shared shell, plus the vendor rules. */
@@ -61,6 +81,12 @@ export interface VendorSearchInput {
 
 export const CITY_REQUIRED = "Enter a city, so the search has somewhere to look.";
 
+export const NOTHING_TO_SEARCH =
+  "Nothing to search for: no part number here was recognised, so there is no brand to look up.";
+
+/** Never Google's own words. A page says what the user can do, not what went wrong at Google. */
+export const UNAVAILABLE = "Vendor search isn't available right now.";
+
 function renderSearchForm(input: VendorSearchInput): string {
   const { q, city, country } = input;
   const options = COUNTRIES.map(
@@ -98,4 +124,129 @@ export function renderVendorSearch(input: VendorSearchInput): string {
       vendor list and vets nobody.</p>
       ${sections.join("\n      ")}
     </main>`);
+}
+
+/** Above every vendor list, in the same words each time. A listing is not an answer about stock. */
+export function listingCaveat(city: string): string {
+  return (
+    `These are shops Google lists for these brands in ${city.trim()}. ` +
+    `Being listed doesn't mean they have your part in stock. Ask them.`
+  );
+}
+
+/**
+ * Google's attribution for Places results.
+ *
+ * The Maps Platform terms require the attribution Google specifies in its documentation to be
+ * shown, unmodified, wherever its content appears. The Places API policies page, which is where
+ * the exact wording lives, could not be opened from the machine this was written on
+ * (developers.google.com is refused by the egress proxy), so this is the fallback the step prompt
+ * asked for. It is flagged in the step report and must be checked against the policies page
+ * before this reaches anyone but its author.
+ */
+export const ATTRIBUTION = "Listings from Google Maps";
+
+/** "Caterpillar", "Caterpillar and JCB", "Caterpillar, JCB and Komatsu". */
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function radio(name: string, value: string, label: string, checked: boolean): string {
+  return (
+    `<label><input type="radio" name="${escapeHtml(name)}" value="${escapeHtml(value)}"` +
+    `${checked ? " checked" : ""}> ${escapeHtml(label)}</label>`
+  );
+}
+
+function renderVendor(vendor: Vendor, groupCount: number): string {
+  const { place, brands } = vendor;
+  const field = `scope_${place.id}`;
+  const allParts = defaultsToAllParts(vendor, groupCount);
+  const lines = [
+    `<p class="vname">${escapeHtml(place.name === "" ? "Unnamed listing" : place.name)}</p>`,
+  ];
+  if (place.address !== "") lines.push(`<p class="vaddr">${escapeHtml(place.address)}</p>`);
+  lines.push(
+    brands.length > 0
+      ? `<p class="vfound">Found for: ${escapeHtml(brands.join(", "))}</p>`
+      : `<p class="vfound">Found by the multi-brand search, not by a brand name.</p>`,
+  );
+  // "0 of your 2 brands" adds nothing to the line above it, so only branded rows get a count.
+  if (groupCount > 1 && brands.length > 0) {
+    lines.push(
+      `<p class="vcount">Appeared for ${brands.length} of your ${groupCount} brands</p>`,
+    );
+  }
+  if (place.mapsUri !== "") {
+    lines.push(`<a class="link" href="${escapeHtml(place.mapsUri)}">Open in Google Maps</a>`);
+  }
+  lines.push(
+    `<label class="pick"><input type="checkbox" name="v" value="${escapeHtml(place.id)}"> ` +
+      `Ask this shop</label>`,
+  );
+  if (brands.length === 0) {
+    // No brand was ever tied to this shop, so "only its brands" would name nothing.
+    lines.push(`<input type="hidden" name="${escapeHtml(field)}" value="${SCOPE_ALL}">`);
+  } else {
+    lines.push(
+      `<fieldset class="scope">
+            <legend>Which parts to ask about</legend>
+            ${radio(field, SCOPE_ALL, "All parts", allParts)}
+            ${radio(field, scopeOnly(vendor), `Only ${nameList(brands)}'s parts`, !allParts)}
+          </fieldset>`,
+    );
+  }
+  return `<li class="vendor">
+          ${lines.join("\n          ")}
+        </li>`;
+}
+
+export interface VendorListInput {
+  vendors: readonly Vendor[];
+  groups: readonly BrandGroup[];
+  /** Manufacturers past the group cap, named rather than hidden. */
+  notSearched: readonly string[];
+  /** Vendors found beyond the ones listed. */
+  omitted: number;
+  q: string;
+  city: string;
+  country: Country;
+}
+
+export const NO_VENDORS = "Google listed no shops for these brands in this city.";
+
+/** The vendor list: one form, one row per shop, and Google's attribution under it. */
+export function renderVendorList(input: VendorListInput): string {
+  const { vendors, groups, notSearched, omitted, q, city, country } = input;
+  const parts = [`<p class="caveat">${escapeHtml(listingCaveat(city))}</p>`];
+  if (notSearched.length > 0) {
+    parts.push(
+      `<p class="warn">Searched for ${escapeHtml(nameList(groups.map((g) => g.oem)))} only. ` +
+        `Not searched for: ${escapeHtml(nameList([...notSearched]))}.</p>`,
+    );
+  }
+  if (vendors.length === 0) {
+    parts.push(`<p class="nothing">${NO_VENDORS}</p>`);
+    parts.push(`<p class="attribution">${escapeHtml(ATTRIBUTION)}</p>`);
+    return parts.join("\n      ");
+  }
+  const rows = vendors.map((vendor) => renderVendor(vendor, groups.length)).join("\n        ");
+  if (omitted > 0) {
+    parts.push(
+      `<p class="note">Showing the first ${vendors.length}. ${omitted} more were left out.</p>`,
+    );
+  }
+  parts.push(`<form method="GET" action="/parts/vendors/contact">
+        ${hidden("q", q)}
+        ${hidden("city", city)}
+        ${hidden("country", country.code)}
+        <ol class="vendors">
+        ${rows}
+        </ol>
+        <p class="pickhint">Pick up to ${MAX_PICKS}.</p>
+        <button type="submit">Get contact details</button>
+      </form>`);
+  parts.push(`<p class="attribution">${escapeHtml(ATTRIBUTION)}</p>`);
+  return parts.join("\n      ");
 }

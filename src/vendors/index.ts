@@ -7,7 +7,16 @@ import type { Env } from "../env";
 import { VENDOR_PAGE_HEADERS, VENDOR_REDIRECT_HEADERS } from "../headers";
 import { MAX_QUERY_LENGTH, resolveCountry } from "../page";
 import { checkPasscode, clearCookie, isSignedIn, setCookie } from "./auth";
-import { CITY_REQUIRED, WRONG_PASSCODE, renderGate, renderVendorSearch } from "./page";
+import {
+  CITY_REQUIRED,
+  NOTHING_TO_SEARCH,
+  UNAVAILABLE,
+  WRONG_PASSCODE,
+  renderGate,
+  renderVendorList,
+  renderVendorSearch,
+} from "./page";
+import { MAX_LISTED, findVendors, groupByOem, partsFor } from "./search";
 
 export const VENDORS_PATH = "/parts/vendors/";
 const LOGIN_PATH = "/parts/vendors/login";
@@ -98,8 +107,13 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   return redirect(next, { "Set-Cookie": setCookie(token) });
 }
 
-/** The vendor search page. Text Search is wired up in the next commit. */
-function handleSearch(url: URL): Response {
+/**
+ * The vendor search page: the form, then at most four Text Search calls and the merged list.
+ *
+ * Nothing is fetched until there is a city and at least one recognised part number, so an empty
+ * or half-filled form costs no Google call at all.
+ */
+async function handleSearch(url: URL, env: Env): Promise<Response> {
   const q = url.searchParams.get("q") ?? "";
   const city = url.searchParams.get("city") ?? "";
   const country = resolveCountry(url.searchParams.get("country"));
@@ -114,9 +128,34 @@ function handleSearch(url: URL): Response {
       400,
     );
   }
-  const missingCity = city.trim() === "";
+  if (city.trim() === "") {
+    return html(renderVendorSearch({ q, city, country, notice: CITY_REQUIRED }));
+  }
+  const { groups, notSearched } = groupByOem(partsFor(q));
+  if (groups.length === 0) {
+    return html(renderVendorSearch({ q, city, country, notice: NOTHING_TO_SEARCH }));
+  }
+
+  const { vendors, failure } = await findVendors(env.GOOGLE_PLACES_KEY, groups, country, city);
+  if (failure !== null) {
+    return html(renderVendorSearch({ q, city, country, notice: UNAVAILABLE }));
+  }
+  const listed = vendors.slice(0, MAX_LISTED);
   return html(
-    renderVendorSearch({ q, city, country, ...(missingCity ? { notice: CITY_REQUIRED } : {}) }),
+    renderVendorSearch({
+      q,
+      city,
+      country,
+      body: renderVendorList({
+        vendors: listed,
+        groups,
+        notSearched,
+        omitted: vendors.length - listed.length,
+        q,
+        city,
+        country,
+      }),
+    }),
   );
 }
 
@@ -149,5 +188,5 @@ export async function handleVendors(
   if (path !== VENDORS_PATH && path !== CONTACT_PATH) return null;
 
   if (!(await isSignedIn(request, env))) return html(renderGate(nextFor(url)));
-  return handleSearch(url);
+  return handleSearch(url, env);
 }

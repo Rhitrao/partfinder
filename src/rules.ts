@@ -27,12 +27,19 @@ export interface FormatRule {
   splitBodyLength?: [number, number];
   /** Warning attached to every candidate this rule produces. */
   warning?: string;
+  /**
+   * What to type into a shop search when the brand does not matter: the trade this manufacturer's
+   * parts belong to. Every current rule is earthmoving, so every value is the same today; it is a
+   * field rather than a constant because the next rule added may not be.
+   */
+  genericVendorQuery: string;
 }
 
 export const RULES: readonly FormatRule[] = [
   {
     id: "cat-letter",
     oem: "Caterpillar",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d[A-Z])(\d{4})$/,
     canonical: "$1-$2",
@@ -44,6 +51,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "cat-numeric",
     oem: "Caterpillar",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d{3})(\d{4})$/,
     canonical: "$1-$2",
@@ -55,6 +63,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "komatsu-325",
     oem: "Komatsu",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d{3}|\d{2}[A-Z])(\d{2})(\d{5})$/,
     canonical: "$1-$2-$3",
@@ -66,6 +75,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "komatsu-424",
     oem: "Komatsu",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d{4})(\d{2})(\d{4})$/,
     canonical: "$1-$2-$3",
@@ -77,6 +87,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "jcb-slash",
     oem: "JCB",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "typed",
     regex: /^(\d{2,3})[/\\]([0-9A-Z]{4,6})$/,
     canonical: "$1/$2",
@@ -88,6 +99,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "jcb-dash",
     oem: "JCB",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "typed",
     regex: /^(\d{2,3})-([0-9A-Z]{4,6})$/,
     canonical: "$1/$2",
@@ -99,6 +111,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "jcb-compact",
     oem: "JCB",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d{8,9})$/,
     canonical: "$1/$2",
@@ -113,6 +126,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "kobelco",
     oem: "Kobelco",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^([A-Z]{2}\d{2}[A-Z]\d{5}[A-Z]\d{1,3})$/,
     canonical: "$1",
@@ -124,6 +138,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "tata-hitachi",
     oem: "Tata Hitachi",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "typed",
     regex: /^(T[A-E]\d{5})(\/\d{1,2})?$/,
     canonical: "$1$2",
@@ -135,6 +150,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "tata-hitachi-6",
     oem: "Tata Hitachi",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(T[A-E]\d{6})$/,
     canonical: "$1",
@@ -147,6 +163,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "hitachi-7",
     oem: "Hitachi",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d{7})$/,
     canonical: "$1",
@@ -158,6 +175,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "volvo-voe",
     oem: "Volvo CE",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^VOE(\d{8})$/,
     canonical: "VOE$1",
@@ -169,6 +187,7 @@ export const RULES: readonly FormatRule[] = [
   {
     id: "volvo-8",
     oem: "Volvo CE",
+    genericVendorQuery: "earthmoving spare parts",
     matchOn: "compact",
     regex: /^(\d{8})$/,
     canonical: "$1",
@@ -179,6 +198,14 @@ export const RULES: readonly FormatRule[] = [
     requiresHint: true,
   },
 ];
+
+/**
+ * The shop search to run for a manufacturer when no brand is named, or undefined when no rule
+ * knows that manufacturer.
+ */
+export function genericVendorQueryFor(oem: string, rules: readonly FormatRule[] = RULES): string | undefined {
+  return rules.find((r) => r.oem === oem)?.genericVendorQuery;
+}
 
 /** Known suffixes, longest first so WTL is tried before TL. Meanings live in the taxonomy, not here.
  * Only rules with `suffixes: true` accept them. */

@@ -286,6 +286,21 @@ export function mailtoUrl(subject: string, message: string): string {
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
 }
 
+export const FIND_VENDORS = "Find vendors for these parts";
+
+/**
+ * The way in to /parts/vendors. It carries only the numbers outbound() passed, exactly as the
+ * WhatsApp message and its back-link do: never the pasted text, which can hold a customer name or
+ * a price. The city and country are the user's own settings, and the vendor page needs both.
+ */
+export function vendorsUrl(sending: readonly ParseResult[], country: Country, city: string): string {
+  const tokens = sending.map((r) => r.input).join(" ");
+  return (
+    `/parts/vendors/?q=${encodeURIComponent(tokens)}` +
+    `&city=${encodeURIComponent(city.trim())}&country=${encodeURIComponent(country.code)}`
+  );
+}
+
 const STYLE = `
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -528,6 +543,7 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   if (to.trim() !== "" && digits === null) {
     parts.push(`<p class="note">${INVALID_NUMBER}</p>`);
   }
+  parts.push(link(vendorsUrl(sending, country, city), FIND_VENDORS));
 
   return `<section class="send">
         <h2>Send the requirement</h2>
