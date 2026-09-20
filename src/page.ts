@@ -397,6 +397,24 @@ a.chip { min-height: 44px; padding: .6rem .9rem; }
 .filter { cursor: pointer; }
 .filter[aria-pressed="true"] { font-weight: 700; outline: 2px solid currentColor; }
 .locate { margin-top: .5rem; min-height: 44px; }
+.status { font-weight: 600; margin: .75rem 0 0; }
+.ghosts { list-style: none; margin: 1rem 0 0; padding: 0; }
+.ghosts[hidden] { display: none; }
+.ghost { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
+.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.ghostbar {
+  display: block;
+  height: 1rem;
+  margin: .4rem 0;
+  border-radius: .3rem;
+  background: currentColor;
+  opacity: .15;
+}
+.ghostbar.short { width: 45%; }
+.turnstile:empty { display: none; }
+.elsewhere { margin-top: 1rem; }
+.elsewhere summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
+.retry { margin-top: .5rem; min-height: 44px; }
 .shop.here { outline: 3px solid currentColor; outline-offset: 3px; }
 .sendbar {
   position: fixed;

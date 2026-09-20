@@ -8,7 +8,7 @@
 
 import { readCity, readCountry, setCity, setCountry } from "./cookies";
 import type { Env } from "./env";
-import { PAGE_HEADERS } from "./headers";
+import { PAGE_HEADERS, newNonce, supplierPageHeaders } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
@@ -16,7 +16,7 @@ import { extractHints, extractTokens, parse } from "./parse";
 import { MAX_QUERY_LENGTH, outbound, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors";
 import { groupByOem } from "./vendors/search";
-import { renderLinkOuts } from "./vendors/suppliers";
+import { renderLinkOuts, renderPending } from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -55,7 +55,7 @@ export function sharedLocation(raw: string | null): { lat: number; lng: number }
  * POST /parts/api/suppliers, so rendering this page never reaches Google and never reaches
  * Cloudflare's siteverify: a crawler, a bot or a WhatsApp link preview costs nothing.
  */
-function handlePage(request: Request, url: URL): Response {
+function handlePage(request: Request, url: URL, env: Env): Response {
   const q = url.searchParams.get("q") ?? "";
   const hint = url.searchParams.get("hint") ?? "";
   const typedCity = url.searchParams.get("city");
@@ -100,9 +100,31 @@ function handlePage(request: Request, url: URL): Response {
   if (typedCountry !== null && typedCountry.trim() !== "") cookies.push(setCountry(country.code));
 
   let suppliers: string | undefined;
+  let nonce: string | undefined;
+  // "Other ways to send" is the only way out when there is no Suppliers section, so it opens
+  // then, and stays collapsed when the section is there to be used instead.
+  let sendOpen = true;
+  const siteKey = env.TURNSTILE_SITE_KEY ?? "";
   if (sending.length > 0) {
     const { groups } = groupByOem(sending);
-    if (groups.length > 0) suppliers = renderLinkOuts(groups, country, city);
+    if (groups.length > 0) {
+      // Three things have to hold before the page promises a list: a city to search in, a brand
+      // to search for, and a site key, because without one no token can be minted and the
+      // endpoint would refuse every request the script made.
+      if (city.trim() !== "" && siteKey !== "") {
+        nonce = newNonce();
+        suppliers = renderPending({
+          groups,
+          country,
+          city,
+          siteKey,
+          map: (env.GOOGLE_MAPS_BROWSER_KEY ?? "") !== "",
+        });
+        sendOpen = false;
+      } else {
+        suppliers = renderLinkOuts(groups, country, city);
+      }
+    }
   }
 
   const html = renderPage({
@@ -114,10 +136,12 @@ function handlePage(request: Request, url: URL): Response {
     country,
     parsed,
     typedQuantities,
-    sendOpen: true,
+    sendOpen,
     ...(suppliers === undefined ? {} : { suppliers }),
+    ...(nonce === undefined ? {} : { nonce }),
   });
-  const headers = new Headers(PAGE_HEADERS);
+  // Only a page with a Suppliers section runs a script, and only it relaxes the CSP for one.
+  const headers = new Headers(nonce === undefined ? PAGE_HEADERS : supplierPageHeaders(nonce));
   for (const cookie of cookies) headers.append("Set-Cookie", cookie);
   return new Response(html, { status: 200, headers });
 }
@@ -205,7 +229,7 @@ export default {
     }
     if (url.pathname === "/parts/") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
-      return handlePage(request, url);
+      return handlePage(request, url, env);
     }
     if (url.pathname === "/parts") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });

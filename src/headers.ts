@@ -25,12 +25,14 @@ export function newNonce(): string {
 }
 
 /**
- * Headers for the one kind of page that runs a script: /parts/ with a map on it.
+ * Headers for the one kind of page that runs a script: /parts/ with a Suppliers section on it.
  *
  * The CSP is Google's own strict policy from the Maps JavaScript "Content Security Policy guide",
- * with our default-src 'none', form-action, base-uri and manifest-src kept. Our own <style>
- * carries the same nonce, because a nonce in style-src makes the browser ignore 'unsafe-inline'
- * and an unnonced <style> would simply not apply.
+ * with our default-src 'none', form-action, base-uri and manifest-src kept, plus Cloudflare's
+ * challenges host in frame-src and connect-src: Turnstile draws its challenge in an iframe and
+ * talks to that host, and the widget is what stands between a bot and our Google allowance. Our
+ * own <style> carries the same nonce, because a nonce in style-src makes the browser ignore
+ * 'unsafe-inline' and an unnonced <style> would simply not apply.
  *
  * Referrer-Policy is the one header that differs from every other page, and it is a deliberate
  * trade. GOOGLE_MAPS_BROWSER_KEY is restricted by HTTP referrer, so a request carrying no referrer
@@ -39,7 +41,7 @@ export function newNonce(): string {
  * leaves in a Referer header - which no-referrer-when-downgrade or unsafe-url would do. See the
  * README: the key's restriction has to be the origin, because no modern browser sends the path.
  */
-export function mapPageHeaders(nonce: string): Record<string, string> {
+export function supplierPageHeaders(nonce: string): Record<string, string> {
   return {
     "Content-Type": "text/html; charset=utf-8",
     "X-Robots-Tag": "noindex",
@@ -48,8 +50,9 @@ export function mapPageHeaders(nonce: string): Record<string, string> {
       `script-src 'nonce-${nonce}' 'strict-dynamic' https: 'unsafe-eval' blob:`,
       "img-src 'self' https://*.googleapis.com https://*.gstatic.com *.google.com " +
         "*.googleusercontent.com data:",
-      "frame-src *.google.com",
-      "connect-src 'self' https://*.googleapis.com *.google.com https://*.gstatic.com data: blob:",
+      "frame-src *.google.com https://challenges.cloudflare.com",
+      "connect-src 'self' https://*.googleapis.com *.google.com https://*.gstatic.com " +
+        "https://challenges.cloudflare.com data: blob:",
       "font-src https://fonts.gstatic.com",
       `style-src 'nonce-${nonce}' https://fonts.googleapis.com`,
       "worker-src blob:",

@@ -132,6 +132,75 @@ export function renderLinkOuts(
       </section>`;
 }
 
+/** What the status line says while the page's script is fetching the list. */
+export const FINDING = "Finding suppliers\u2026";
+
+/** What a browser with no JavaScript is told, since the list only ever arrives by fetch. */
+export const NO_SCRIPT = "Turn on JavaScript to see suppliers here.";
+
+/**
+ * "Use my location" is rendered here rather than by the script, so the section is complete in the
+ * HTML, and hidden until the script unhides it: without JavaScript there is nothing behind it.
+ */
+const LOCATE_BUTTON =
+  `<button type="button" class="locate" id="pf-locate-button" hidden>Use my location</button>`;
+
+/** Grey rows in the shape of the cards that will replace them. Decoration, so hidden from AT. */
+function renderGhosts(): string {
+  const row = `<li class="ghost">
+              <span class="ghostbar"></span>
+              <span class="ghostbar short"></span>
+            </li>`;
+  return `<ol class="ghosts" id="pf-ghosts" aria-hidden="true">
+            ${[row, row, row].join("\n            ")}
+          </ol>`;
+}
+
+export interface PendingInput {
+  groups: readonly BrandGroup[];
+  country: Country;
+  city: string;
+  /** Public by design: Turnstile reads it off the widget's own element. */
+  siteKey: string;
+  /** Whether to draw the map box at all. Without a browser key nothing can fill it. */
+  map: boolean;
+}
+
+/**
+ * The Suppliers section as the server renders it: a heading, a status line, three grey
+ * placeholders, an empty list, the Turnstile widget and the way out if none of it works.
+ *
+ * Nothing here has been fetched. The section is a promise the page's script keeps by posting to
+ * /parts/api/suppliers with a Turnstile token; until then, and forever without JavaScript, the
+ * link-outs under "Search on Google instead" are the answer. Google's attribution box is drawn
+ * now rather than with the cards, so the cards can never appear without it.
+ */
+export function renderPending(input: PendingInput): string {
+  const { groups, country, city, siteKey, map } = input;
+  const where = city.trim();
+  const inner = [
+    ...(map ? [renderMapBox()] : []),
+    renderGhosts(),
+    `<div id="pf-list"></div>`,
+  ];
+  return `<section class="suppliers">
+        <h2>Suppliers near ${escapeHtml(where)}</h2>
+        <p class="status" id="pf-status" aria-live="polite">${escapeHtml(FINDING)}</p>
+        ${googleMapsBox(inner.join("\n          "))}
+        <div class="turnstile" id="pf-turnstile" data-sitekey="${escapeHtml(siteKey)}"
+          data-appearance="interaction-only"></div>
+        <div id="pf-locate">${LOCATE_BUTTON}</div>
+        <noscript>
+          <p class="warn">${escapeHtml(NO_SCRIPT)}</p>
+          ${renderFallback(groups, country, city)}
+        </noscript>
+        <details class="elsewhere" id="pf-elsewhere">
+          <summary>Search on Google instead</summary>
+          ${renderFallback(groups, country, city)}
+        </details>
+      </section>`;
+}
+
 export interface SuppliersInput {
   suppliers: readonly Supplier[];
   groups: readonly BrandGroup[];
