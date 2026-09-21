@@ -483,3 +483,108 @@ describe("tokens", () => {
     expect(app.status()).toBe(VERIFY_FAILED);
   });
 });
+
+/**
+ * Step 9: the two things the step 8c review found and did not fix.
+ *
+ * Neither was token reuse, so neither showed up as a duplicate. One threw a token away along
+ * with what the user had just asked for; the other spent the Google allowance on an empty room.
+ */
+describe("a search that overtakes another", () => {
+  const position = { coords: { latitude: 12.97159, longitude: 77.59457 } };
+
+  async function midFlight() {
+    const app = await boot({ geolocation: { getCurrentPosition: (ok) => ok(position) } });
+    app.turnstile();
+    app.reply(ANSWER);
+    app.solve();
+    // The first round is in flight: its fetch has been made and nothing has answered yet.
+    expect(app.calls).toHaveLength(1);
+    // The user taps "Use my location" while the status still says "Finding suppliers…".
+    app.byId("pf-locate-button")!.fire("click");
+    app.solve();
+    await app.settle();
+    return app;
+  }
+
+  it("abandons the first round and sends the second with the location", async () => {
+    const app = await midFlight();
+    expect(app.calls).toHaveLength(2);
+    expect(app.calls[0]!.signal!.aborted, "the first round was aborted").toBe(true);
+    expect(app.calls[1]!.signal!.aborted).toBe(false);
+    expect(app.calls[0]!.body.near).toBeUndefined();
+    expect(app.calls[1]!.body.near).toBe("12.972,77.595");
+  });
+
+  it("makes the dropped token impossible: every one minted was sent", async () => {
+    const app = await midFlight();
+    const sent = app.calls.map((call) => call.body.token);
+    // Before step 9 the second token was minted and thrown away by a `running` guard, and the
+    // list that arrived was measured from the city centre.
+    expect(sent).toEqual(app.minted);
+    expect(new Set(sent).size).toBe(sent.length);
+  });
+
+  it("says nothing about the round it abandoned", async () => {
+    const app = await midFlight();
+    // The abort is the script's own doing. Reporting it would flash "unavailable" over a round
+    // that is about to succeed.
+    expect(app.status()).toBe("2 suppliers found");
+    expect(app.byId("pf-retry")).toBeNull();
+  });
+});
+
+describe("a token expiring", () => {
+  it("starts no search when nobody asked for one", async () => {
+    const app = await boot();
+    const widget = app.turnstile();
+    app.reply(ANSWER);
+    app.solve();
+    await app.settle();
+    expect(app.calls).toHaveLength(1);
+
+    // Five minutes later, on a tab nobody is looking at.
+    const before = app.resets;
+    expect(() => widget.expired()).not.toThrow();
+    expect(app.resets, "the widget was not reset").toBe(before);
+    expect(app.calls, "and nothing was fetched").toHaveLength(1);
+  });
+
+  it("resets once when a search is still wanted, and that search happens", async () => {
+    const app = await boot();
+    const widget = app.turnstile();
+    // Nothing has answered yet, so the first render's search is still outstanding.
+    app.reply(ANSWER);
+    expect(() => widget.expired()).not.toThrow();
+    expect(app.resets).toBe(1);
+    expect(app.calls).toHaveLength(0);
+
+    app.solve();
+    await app.settle();
+    expect(app.calls).toHaveLength(1);
+    expect(app.status()).toBe("2 suppliers found");
+  });
+
+  it("still wants one after a round that failed, because nothing was shown", async () => {
+    const app = await boot();
+    const widget = app.turnstile();
+    app.reply({ error: "verify", codes: ["timeout-or-duplicate"] });
+    app.solve();
+    await app.settle();
+    expect(app.status()).toBe(VERIFY_FAILED);
+
+    // The flag clears when results are shown, and a refusal is not results. The user is looking
+    // at a failure with a Retry beside it, so a token going stale under them is worth replacing.
+    expect(() => widget.expired()).not.toThrow();
+    expect(app.resets).toBe(1);
+
+    // And once a round does succeed, expiry goes quiet again.
+    app.reply(ANSWER);
+    app.solve();
+    await app.settle();
+    expect(app.status()).toBe("2 suppliers found");
+    const settled = app.resets;
+    widget.expired();
+    expect(app.resets).toBe(settled);
+  });
+});

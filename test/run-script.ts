@@ -12,6 +12,8 @@ export interface FetchCall {
   url: string;
   method: string;
   body: Record<string, unknown>;
+  /** The AbortSignal the script passed, so a test can see which rounds it abandoned. */
+  signal: AbortSignal | null;
 }
 
 /** What Turnstile was asked to render, and the callbacks it was given. */
@@ -91,6 +93,7 @@ export function runScript(html: string, script: string, options: RunOptions = {}
       url,
       method: String(init.method ?? "GET"),
       body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>,
+      signal: (init.signal as AbortSignal | undefined) ?? null,
     });
     if (reject) return Promise.reject(new Error("network"));
     return Promise.resolve({ json: () => Promise.resolve(pending) });
