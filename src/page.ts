@@ -465,7 +465,9 @@ details > summary {
 .check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
 .check > .link { display: flex; margin-top: var(--s8); }
 h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
-.fitment { margin: var(--s8) 0 var(--s12); }
+.fitline { font-size: 14px; margin: var(--s12) 0 var(--s4); }
+.fitline.none { color: var(--muted); }
+.fitment { margin: 0 0 var(--s12); }
 .fitment summary { font-size: 14px; font-weight: 600; }
 .fitgroup h4 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .machines { font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0; }
@@ -879,16 +881,44 @@ function hintUrl(input: PageInput, oem: string): string {
  * internally; the spellings themselves are never shown - that is the parser's business.
  */
 function renderCheck(result: ParseResult, country: Country): string {
-  // Only where an entry exists. A part nobody has looked up shows nothing here, because the
-  // alternative is a list Partfinder made up about somebody's machine.
-  const fitment = findFitment(partKey(result));
   return `<details class="check">
           <summary>Check this part</summary>
-          ${fitment === undefined ? "" : renderFitment(fitment)}
           ${link(imagesUrl(result, country), "See images")}
           ${link(fitsUrl(result, country), "Which machines it fits")}
           ${link(searchUrl(result, country), "Search Google")}
         </details>`;
+}
+
+/** How many machines a card names before "and the rest" takes over. */
+const FITMENT_PREVIEW = 4;
+
+export const NO_FITMENT = "Fitment not in our list yet";
+
+/**
+ * What this part fits, on the card itself rather than folded away.
+ *
+ * It was inside "Check this part", which is where things go when they are for the moment of
+ * doubt. This is not one of those: what a part fits is most of what the buyer is being asked on
+ * the phone, and a collapsed <details> with three link-outs in it is not where anybody looks for
+ * it. So the first four machines and the count are on the card, and the full grouped list, the
+ * note and the sources are one tap behind "See all".
+ *
+ * Every other card says so and offers the search. Saying nothing would read as "no", and a
+ * missing entry means nobody has looked yet - which is a different thing, and the buyer can look.
+ */
+function renderFitmentLine(result: ParseResult, country: Country): string {
+  const fitment = findFitment(partKey(result));
+  if (fitment === undefined) {
+    return `<p class="fitline none">${NO_FITMENT} &middot; ` +
+      `${anchor(fitsUrl(result, country), "Check on Google", "link inline")}</p>`;
+  }
+  const machines = fitment.machines.flatMap((group) => group.machines);
+  const count = machines.length;
+  const preview = machines.slice(0, FITMENT_PREVIEW).join(", ");
+  const more = count > FITMENT_PREVIEW ? "\u2026" : "";
+  return `<p class="fitline">Fits ${count} machine${count === 1 ? "" : "s"}, incl.
+            ${escapeHtml(preview)}${more}</p>
+          ${renderFitment(fitment)}`;
 }
 
 /**
@@ -917,7 +947,7 @@ function renderFitment(fitment: Fitment): string {
     .join(", ");
   const label = fitment.sources.length === 1 ? "Source" : "Sources";
   return `<details class="fitment">
-            <summary>Commonly fitted to (${count} machine${count === 1 ? "" : "s"})</summary>
+            <summary>See all ${count} machine${count === 1 ? "" : "s"}</summary>
             ${groups}
             <p class="fitnote">${escapeHtml(fitment.note)}
               ${label}: ${sources}, checked ${escapeHtml(fitment.checkedOn)}.</p>
@@ -986,6 +1016,7 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
               placeholder="Qty" aria-label="Quantity for ${escapeHtml(number)}">
           </p>`);
 
+  lines.push(renderFitmentLine(result, input.country));
   lines.push(renderCheck(result, input.country));
 
   return `<section class="card">
