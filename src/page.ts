@@ -184,13 +184,17 @@ export interface MessageOptions {
  * No spellings. A supplier reading "1U-3352" does not need to be told it is also written 1U3352.
  */
 /**
- * One part, as a supplier reads it. Three shapes, because there are three kinds of card.
+ * One part, as a supplier reads it.
  *
- * A placed number names its likely makers. A number nobody placed goes on its own, with the
- * words the message carried around it in brackets when there were any - "24370-2E000 (CVVT)"
- * tells a supplier far more than the number alone, and it is the customer's own word for the
- * thing, not a guess. A described part reads as a sentence, because that is what it is:
- * "Pin pivot for EX200 (Hitachi or Tata Hitachi)".
+ * A number is followed by whatever the customer called it and then by its likely makers:
+ * "24370-2E000 CVVT (likely Hyundai / Kia or Toyota)". The word is the customer's own, not a
+ * guess about the part, and it is worth more to a supplier than either half alone - a
+ * counterman who does not stock that number may well know the CVVT sensor for it. Every card
+ * gets it, placed or not; a card with no words left reads exactly as it did before.
+ *
+ * A described part is the exception, and only because it would be saying the same thing twice:
+ * its name is already those words. It reads as the sentence it is instead: "Pin pivot for EX200
+ * (Hitachi or Tata Hitachi)".
  *
  * No spellings anywhere. A supplier reading "1U-3352" does not need to be told it is also
  * written 1U3352.
@@ -203,10 +207,11 @@ export function describeForMessage(result: ParseResult): string {
     const who = brands.length === 0 ? "" : ` (${brands.join(" or ")})`;
     return `${title}${where}${who}`;
   }
-  const makers = [...new Set(result.candidates.map((c) => c.oem))];
-  if (makers.length > 0) return `${partKey(result)} (likely ${makers.join(" or ")})`;
   const words = (result.words ?? []).join(" ").toUpperCase();
-  return words === "" ? partKey(result) : `${partKey(result)} (${words})`;
+  const called = words === "" ? "" : ` ${words}`;
+  const makers = [...new Set(result.candidates.map((c) => c.oem))];
+  const who = makers.length === 0 ? "" : ` (likely ${makers.join(" or ")})`;
+  return `${partKey(result)}${called}${who}`;
 }
 
 export function requirementMessage(

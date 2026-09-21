@@ -138,7 +138,7 @@ describe("a number no rule places", () => {
 
   it("carries the words the message had around it into the message", async () => {
     const html = await page("9ZZ123456 CVVT sensor");
-    expect(message(html)).toContain("1. 9ZZ123456 (CVVT SENSOR)");
+    expect(message(html)).toContain("1. 9ZZ123456 CVVT SENSOR");
   });
 
   it("keeps the three link-outs every other card has", async () => {
@@ -155,6 +155,33 @@ describe("a number no rule places", () => {
     const html = await page("12345");
     expect(html).toContain("Not recognised: 12345");
     expect(titles(html)).toEqual([]);
+  });
+});
+
+describe("what the customer called it", () => {
+  it("rides on a placed number's line too, before the makers", async () => {
+    const html = await page("24370-2E000 CVVT qty 2");
+    // The word is the customer's own, and a counterman who does not stock that number may still
+    // know the CVVT sensor for it.
+    expect(message(html)).toContain("1. 24370-2E000 CVVT (likely Hyundai / Kia or Toyota)");
+  });
+
+  it("leaves a card with no words exactly as it read before", async () => {
+    expect(message(await page("1u3352"))).toContain("1. 1U-3352 (likely Caterpillar)");
+    expect(message(await page("9ZZ123456"))).toContain("1. 9ZZ123456");
+    expect(message(await page("9ZZ123456"))).not.toContain("(");
+  });
+
+  it("says nothing twice on a described part, whose name is already those words", async () => {
+    const outgoing = message(await page("need 2 nos ex200 pin pivot urgent"));
+    expect(outgoing).toContain("1. Pin pivot for EX200 (Hitachi or Tata Hitachi), qty 2");
+    expect(outgoing).not.toContain("PIN PIVOT");
+  });
+
+  it("goes on every card, because the words belong to the message and not to one number", async () => {
+    const outgoing = message(await page("1u3352 40/300893 CVVT"));
+    expect(outgoing).toContain("1. 1U-3352 CVVT (likely Caterpillar)");
+    expect(outgoing).toContain("2. 40/300893 CVVT (likely JCB)");
   });
 });
 
