@@ -3,6 +3,7 @@
 // suffix and alternate spellings are all returned.
 
 import { HINT_WORDS } from "./hints";
+import { MAX_NAME_WORDS, isStopword } from "./words";
 import { RULES, SUFFIXES, UNCONFIRMED_SUFFIXES, oemsOf, type FormatRule, type Strength } from "./rules";
 
 export interface Candidate {
@@ -25,6 +26,10 @@ export interface ParseResult {
   compact: string;
   candidates: Candidate[];
   reason?: string;
+  /** Set when this card is a part the message described rather than numbered. */
+  described?: DescribedPart;
+  /** The descriptive words the message carried, for the card's queries and its message line. */
+  words?: string[];
   /**
    * A token that reads as a part number but that no rule places.
    *
@@ -183,6 +188,98 @@ export function extractHints(text: string): string[] {
     for (const hint of HINT_WORDS[row]?.hints ?? []) if (!found.includes(hint)) found.push(hint);
   }
   return found;
+}
+
+/**
+ * A part described rather than numbered: "pin pivot for EX200".
+ *
+ * Half the messages a parts buyer gets name no number at all. The customer knows the machine and
+ * what the thing is called, and that is enough to search with and more than enough to forward to
+ * a supplier. Before step 9 such a message produced an empty page.
+ */
+export interface DescribedPart {
+  /** The model word, uppercased: "EX200". Empty when the message named a brand but no model. */
+  machine: string;
+  /** The manufacturers the machine or brand word hints at. */
+  brands: string[];
+  /** At most five words, lowercased, in the order they were typed. */
+  name: string;
+}
+
+/**
+ * The words in a message that are not doing another job.
+ *
+ * Everything with a job is taken out first: prices, part-number tokens, phone numbers, brand and
+ * model words, bare digit runs, and the stopwords in src/words.ts. What is left is what the
+ * customer called the thing.
+ *
+ * One rule here is not on that list. The word immediately before a phone number is dropped as
+ * well, because in these messages that is a person - "Ramesh 9876543210" - and a customer's name
+ * has no business in a card, a search or a message to a third party. It costs a real word only
+ * when a part name ends immediately before a bare ten-digit run, which is not a thing people
+ * write.
+ */
+export function descriptiveWords(text: string): string[] {
+  const tokens = rawTokens(withoutPrices(text)).map((t) => t.text).filter((t) => t !== "");
+  const partTokens = new Set(extractTokens(text));
+  const drop = new Set<number>();
+  tokens.forEach((token, at) => {
+    if (PHONE_SHAPED.test(token)) {
+      drop.add(at);
+      // Whoever is named right before a number is a contact, not a part.
+      drop.add(at - 1);
+    }
+  });
+  const words: string[] = [];
+  tokens.forEach((token, at) => {
+    if (drop.has(at)) return;
+    if (partTokens.has(token)) return;
+    if (isHintToken(token)) return;
+    if (!/[A-Z]/.test(token)) return;
+    if (isStopword(token)) return;
+    words.push(token.toLowerCase());
+  });
+  return words;
+}
+
+/**
+ * The one part a message describes, or null when it describes none.
+ *
+ * Null in three cases, and each is deliberate. No brand or model word: there is nothing to say
+ * the words are about a machine at all, and "please send urgently" is not a part. Any
+ * part-number token: the numbers are the parts, and the machine word is only a hint that
+ * re-ranks them - a message with both does not also describe a third thing. And no words left
+ * after the padding is removed: a bare "EX200" names a machine, not a part on it.
+ *
+ * Phone-shaped tokens do not count as part numbers for the second test. "Ramesh 9876543210
+ * EX200 pivot pin" describes a part; the number in it is a person's.
+ */
+export function describedPart(text: string): DescribedPart | null {
+  const brands = extractHints(text);
+  if (brands.length === 0) return null;
+  const numbers = extractTokens(text).filter((token) => !PHONE_SHAPED.test(token));
+  if (numbers.length > 0) return null;
+  const words = descriptiveWords(text);
+  if (words.length === 0) return null;
+  const model = rawTokens(text)
+    .map((t) => t.text)
+    .find((token) => MODEL_PATTERNS.some(({ pattern }) => pattern.test(token)));
+  return {
+    machine: model ?? "",
+    brands,
+    name: words.slice(0, MAX_NAME_WORDS).join(" "),
+  };
+}
+
+/** A described part as a card: the same shape as a number's, with no candidates to rank. */
+export function describedResult(part: DescribedPart): ParseResult {
+  const input = describedInput(part);
+  return { input, compact: compact(input.toUpperCase()), candidates: [], described: part };
+}
+
+/** What a described part is called in a query, a card title's URL and the back-link. */
+export function describedInput(part: DescribedPart): string {
+  return [part.machine, part.name].filter((piece) => piece !== "").join(" ");
 }
 
 /** Remove spaces, dashes, dots, slashes and backslashes. */

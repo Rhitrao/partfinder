@@ -204,6 +204,10 @@ h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
   word-break: break-all;
 }
 .maker { font-weight: 600; margin: var(--s8) 0 var(--s4); }
+.maker.described, .maker.unplaced { font-weight: 500; color: var(--muted); }
+/* A name, not a number: the same size, but set in the page's own face. */
+.card .number:not(.plain) { font-family: var(--mono); }
+.number.plain { font-family: var(--font); }
 .badge {
   font-size: 12px;
   font-weight: 500;
