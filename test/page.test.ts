@@ -57,7 +57,8 @@ describe("GET /parts/ with no q", () => {
     expect(html).toContain("Paste a WhatsApp message or part numbers");
     expect(html).toContain("autofocus");
     expect(html).toContain('name="city"');
-    expect(html).toContain("e.g. Bengaluru");
+    // The city is optional since step 9: empty means all of India, not nothing.
+    expect(html).toContain("Optional, leave empty for all of India");
     expect(html).toContain("Find parts &amp; suppliers");
   });
 

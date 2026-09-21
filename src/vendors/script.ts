@@ -17,6 +17,8 @@ import { FINDING, MAP_UNAVAILABLE, SUPPLIERS_UNAVAILABLE, jsonForScript } from "
 /** What the script is told before it fetches anything: the part keys, for the filter chips. */
 export interface PageData {
   parts: string[];
+  /** "india" or "near": what the page was rendered for, echoed back with every request. */
+  scope: string;
 }
 
 /** Every string this script can end up showing, handed to it rather than written into it. */
@@ -68,6 +70,9 @@ export const CLIENT_SCRIPT = String.raw`
   var data;
   try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
   var parts = data.parts || [];
+  // Near a city or all of India, as the server decided when it rendered this page. The endpoint
+  // derives it again from the city and this flag; nothing is stored on either side.
+  var scope = data.scope || "";
   // Every constant this script shows or waits on arrives in that same block rather than being
   // written into the script body. A property that is missing reads as undefined; a bare name
   // that is missing throws, which is how this script spent a week not running at all. It is
@@ -162,6 +167,7 @@ export const CLIENT_SCRIPT = String.raw`
       city: field("city"),
       country: field("country"),
       note: field("note"),
+      scope: scope,
       qty: quantities()
     };
     if (near) payload.near = near;

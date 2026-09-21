@@ -18,7 +18,8 @@ import { MAX_QUERY_LENGTH, partKey, readQuery, renderPage, resolveCountry } from
 import { handleVendors } from "./vendors/index";
 import { handleSupplierApi } from "./vendors/api";
 import { renderScripts } from "./vendors/script";
-import { NOT_CONFIGURED, NO_CITY, renderLinkOuts, renderPending } from "./vendors/suppliers";
+import { resolveScope } from "./vendors/search";
+import { NOT_CONFIGURED, renderLinkOuts, renderPending } from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -68,11 +69,10 @@ function handlePage(request: Request, url: URL, env: Env): Response {
   const parsed = readQuery(q, hint);
   // One decision, made in src/health.ts, so that GET /parts/api/health can report exactly what
   // this page would do rather than its own guess at it.
-  const gate = supplierGate({
-    results: parsed.results,
-    city,
-    siteKey: env.TURNSTILE_SITE_KEY ?? "",
-  });
+  const gate = supplierGate({ results: parsed.results, siteKey: env.TURNSTILE_SITE_KEY ?? "" });
+  // Near the city the buyer typed, or the whole country when they typed none. Derived here and
+  // sent to nobody: no cookie, no record, nothing but this render and the request the page makes.
+  const scope = resolveScope(city, url.searchParams.get("scope") ?? "");
   const { sending, groups } = gate;
   // Quantities the user typed on a card, one field per part key, capped like everything else.
   const typedQuantities: Record<string, number> = {};
@@ -105,23 +105,24 @@ function handlePage(request: Request, url: URL, env: Env): Response {
         groups,
         country,
         city,
+        scope,
+        query: pageQuery(q, hint, city, country.code, scope),
         siteKey: env.TURNSTILE_SITE_KEY ?? "",
         map: (env.GOOGLE_MAPS_BROWSER_KEY ?? "") !== "",
       });
       // The script is told the part keys and nothing else. Everything about a shop arrives
       // from the endpoint, already escaped and with its messages already written.
       tail = renderScripts(
-        { parts: sending.map(partKey) },
+        { parts: sending.map(partKey), scope },
         env.GOOGLE_MAPS_BROWSER_KEY,
         nonce,
       );
       sendOpen = false;
     } else {
-      // Never silently. A missing city is the user's to fix and says so; anything else that
-      // stops the search is ours, and the page says that much rather than showing the link-outs
-      // bare, which is what a working page with nothing nearby would look like.
-      const notice = gate.blockers.includes("no_city") ? NO_CITY : NOT_CONFIGURED;
-      suppliers = renderLinkOuts(groups, country, city, notice);
+      // Never silently. Nothing but the configuration can stop the search now - a missing city
+      // means All India rather than nothing - so the page says that much rather than showing the
+      // link-outs bare, which is what a working page with nothing nearby would look like.
+      suppliers = renderLinkOuts(groups, country, city, NOT_CONFIGURED);
     }
   }
 
@@ -143,6 +144,22 @@ function handlePage(request: Request, url: URL, env: Env): Response {
   const headers = new Headers(nonce === undefined ? PAGE_HEADERS : supplierPageHeaders(nonce));
   for (const cookie of cookies) headers.append("Set-Cookie", cookie);
   return new Response(html, { status: 200, headers });
+}
+
+/** The parameters a scope chip has to carry to land on the same page it was rendered beside. */
+function pageQuery(
+  q: string,
+  hint: string,
+  city: string,
+  country: string,
+  scope: string,
+): Record<string, string> {
+  const query: Record<string, string> = { q };
+  if (hint !== "") query.hint = hint;
+  if (city.trim() !== "") query.city = city.trim();
+  query.country = country;
+  if (scope === "india") query.scope = "india";
+  return query;
 }
 
 function handleParse(url: URL): Response {

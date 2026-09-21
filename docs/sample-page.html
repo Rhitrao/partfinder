@@ -326,7 +326,12 @@ a.chip, button.chip { min-height: var(--tap); }
   cursor: pointer;
 }
 .select input { width: auto; min-height: 0; margin: 0; }
-.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.filters, .scopes { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.scopes .chip[aria-pressed="true"] {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+}
 .filters:empty { display: none; }
 .filter { cursor: pointer; background: var(--bg); }
 .filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
@@ -482,7 +487,8 @@ body {
       <textarea id="q" name="q" rows="5" autofocus
         placeholder="Paste a WhatsApp message or part numbers">need 1u3352 and 40/300893 for JCB 3CX</textarea>
       <label for="city">City</label>
-      <input id="city" name="city" type="text" value="Bengaluru" placeholder="e.g. Bengaluru"
+      <input id="city" name="city" type="text" value="Bengaluru"
+        placeholder="Optional, leave empty for all of India"
         autocomplete="address-level2">
       <button type="submit" class="primary">Find parts &amp; suppliers</button>
       <details class="more">
@@ -565,6 +571,10 @@ body {
         <div class="suphead">
           <h2>Suppliers near Bengaluru</h2>
           <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+        </div>
+        <div class="scopes">
+          <a class="chip filter" href="/parts/?q=need+1u3352+and+40%2F300893+for+JCB+3CX&amp;city=Bengaluru&amp;country=IN" aria-pressed="true">Near Bengaluru</a>
+          <a class="chip filter" href="/parts/?q=need+1u3352+and+40%2F300893+for+JCB+3CX&amp;city=Bengaluru&amp;country=IN&amp;scope=india" aria-pressed="false">All India</a>
         </div>
         <section class="gmaps" aria-label="Google Maps">
           <div class="map" id="pf-map">Map unavailable. The list below has everything.</div>
@@ -668,7 +678,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     <footer class="footer">
       <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
     </footer>
-    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"],"text":{"finding":"Finding suppliers…","unavailable":"Supplier list unavailable right now","verify":"Couldn't verify this browser.","mapUnavailable":"Map unavailable. The list below has everything.","queueHint":"WhatsApp opens one chat at a time. Tap each supplier in turn."},"timeoutMs":15000}</script>
+    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"],"scope":"near","text":{"finding":"Finding suppliers…","unavailable":"Supplier list unavailable right now","verify":"Couldn't verify this browser.","mapUnavailable":"Map unavailable. The list below has everything.","queueHint":"WhatsApp opens one chat at a time. Tap each supplier in turn."},"timeoutMs":15000}</script>
     <script nonce="sample-nonce">
 (function () {
   "use strict";
@@ -677,6 +687,9 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   var data;
   try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
   var parts = data.parts || [];
+  // Near a city or all of India, as the server decided when it rendered this page. The endpoint
+  // derives it again from the city and this flag; nothing is stored on either side.
+  var scope = data.scope || "";
   // Every constant this script shows or waits on arrives in that same block rather than being
   // written into the script body. A property that is missing reads as undefined; a bare name
   // that is missing throws, which is how this script spent a week not running at all. It is
@@ -771,6 +784,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       city: field("city"),
       country: field("country"),
       note: field("note"),
+      scope: scope,
       qty: quantities()
     };
     if (near) payload.near = near;

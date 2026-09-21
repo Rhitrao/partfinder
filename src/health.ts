@@ -22,7 +22,7 @@ import { groupByOem, type BrandGroup } from "./vendors/search";
  * Why the live Suppliers section - the status line, the placeholders, the Turnstile container
  * and the script - would not render. One code per condition, in the order handlePage checks them.
  */
-export type SupplierBlocker = "no_parts" | "no_brand" | "no_city" | "no_site_key";
+export type SupplierBlocker = "no_parts" | "no_brand" | "no_site_key";
 
 /**
  * Plain words for each code, for the health endpoint. The page never shows one of these: a
@@ -33,8 +33,6 @@ export const BLOCKER_REASONS: Record<SupplierBlocker, string> = {
     "The query holds no number Partfinder recognises, so there is nothing to search for.",
   no_brand:
     "No manufacturer was read from those numbers, so there is no brand to search Google for.",
-  no_city:
-    "No city was given, so there is nowhere to search near.",
   no_site_key:
     "TURNSTILE_SITE_KEY is missing or empty, so the page cannot mint a token and the supplier " +
     "endpoint would refuse every request the page's script made.",
@@ -54,7 +52,6 @@ export interface SupplierGate {
 
 export interface GateInput {
   results: readonly ParseResult[];
-  city: string;
   /** TURNSTILE_SITE_KEY as the Worker read it, or "" when the binding never arrived. */
   siteKey: string;
 }
@@ -64,8 +61,9 @@ export interface GateInput {
  *
  * handlePage and /parts/api/health both call this, so the endpoint cannot report a render the
  * page would not do. Everything it needs is passed in: it reads no environment and fetches
- * nothing. The country setting is deliberately not an input - it picks the search region and the
- * order sources are tried in, and never decides whether the section appears.
+ * nothing. Neither the country nor the city is an input. The country picks the search region;
+ * the city picks the scope, and since step 9 an empty one means All India rather than nothing at
+ * all. Neither decides whether the section appears.
  */
 export function supplierGate(input: GateInput): SupplierGate {
   const sending = outbound(input.results);
@@ -73,7 +71,6 @@ export function supplierGate(input: GateInput): SupplierGate {
   const blockers: SupplierBlocker[] = [];
   if (sending.length === 0) blockers.push("no_parts");
   else if (groups.length === 0) blockers.push("no_brand");
-  if (input.city.trim() === "") blockers.push("no_city");
   if (input.siteKey === "") blockers.push("no_site_key");
   return { sending, groups, blockers, render: blockers.length === 0 };
 }
@@ -120,11 +117,7 @@ export function handleHealth(request: Request, env: Env): Response {
   }
   const hints = [...extractHints(HEALTH_SAMPLE.q)];
   const results = extractTokens(HEALTH_SAMPLE.q).map((token) => parse(token, hints));
-  const gate = supplierGate({
-    results,
-    city: HEALTH_SAMPLE.city,
-    siteKey: env.TURNSTILE_SITE_KEY ?? "",
-  });
+  const gate = supplierGate({ results, siteKey: env.TURNSTILE_SITE_KEY ?? "" });
   // ok says the Worker is running and this route reached it. It is not a verdict on the
   // configuration: that is what the two blocks below are for.
   const body = {

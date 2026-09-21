@@ -596,7 +596,12 @@ a.chip, button.chip { min-height: var(--tap); }
   cursor: pointer;
 }
 .select input { width: auto; min-height: 0; margin: 0; }
-.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.filters, .scopes { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.scopes .chip[aria-pressed="true"] {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+}
 .filters:empty { display: none; }
 .filter { cursor: pointer; background: var(--bg); }
 .filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
@@ -763,7 +768,8 @@ function renderAsk(q: string, hint: string, country: Country, city: string, note
       <textarea id="q" name="q" rows="5" autofocus
         placeholder="Paste a WhatsApp message or part numbers">${escapeHtml(q)}</textarea>
       <label for="city">City</label>
-      <input id="city" name="city" type="text" value="${escapeHtml(city)}" placeholder="e.g. Bengaluru"
+      <input id="city" name="city" type="text" value="${escapeHtml(city)}"
+        placeholder="Optional, leave empty for all of India"
         autocomplete="address-level2">
       <button type="submit" class="primary">Find parts &amp; suppliers</button>
       <details class="more">

@@ -33,6 +33,7 @@ const inlineScript = (html: string) =>
 const pageData = (html: string) =>
   JSON.parse(html.match(/id="pf-data"[^>]*>([\s\S]*?)<\/script>/)![1]!) as {
     parts: string[];
+    scope: string;
     text: Record<string, string>;
     timeoutMs: number;
   };
@@ -100,18 +101,20 @@ describe("a page with a city", () => {
 });
 
 describe("a page with no city", () => {
-  it("asks for one, runs no script, and keeps today's CSP", async () => {
+  it("searches all of India instead of asking for one", async () => {
+    // Until step 9 an empty city stopped the page with "Add your city". There is a better
+    // answer: search the whole country, which is what a buyer wants for a part nobody local has.
     const calls = stubFetch(searchReply);
     const res = await get(`/parts/?q=${encodeURIComponent(Q)}`);
     const html = await res.text();
     expect(calls).toHaveLength(0);
-    expect(html).toContain("Add your city to see suppliers near you.");
-    expect(html.toLowerCase()).not.toContain("<script");
-    expect(res.headers.get("Content-Security-Policy")).toBe(
-      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; " +
-        "form-action 'self'; base-uri 'none'",
-    );
-    expect(html).toContain("Caterpillar parts shops on Google Maps");
+    expect(html).not.toContain("Add your city to see suppliers near you.");
+    expect(html).toContain("<h2>Suppliers in India</h2>");
+    expect(html).toContain("Finding suppliers");
+    // One chip, because there is no city to be near.
+    expect(html).toContain(">All India<");
+    expect(html).not.toContain(">Near ");
+    expect(res.headers.get("Content-Security-Policy")).toContain("nonce-");
   });
 
   it("does the same with no site key, because no token could be minted", async () => {
@@ -165,10 +168,15 @@ describe("a page whose supplier search is not configured", () => {
     }
   });
 
-  it("says nothing of the sort when the city is the thing that is missing", async () => {
-    const html = unescapeHtml(await (await get(`/parts/?q=${encodeURIComponent(Q)}`)).text());
-    expect(html).toContain("Add your city to see suppliers near you.");
-    expect(html).not.toContain(NOT_CONFIGURED);
+  it("says it even with no city, because a missing city is no longer a blocker", async () => {
+    const { TURNSTILE_SITE_KEY: _absent, ...rest } = env;
+    const res = await worker.fetch(
+      new Request(`https://rohitrao.in/parts/?q=${encodeURIComponent(Q)}`),
+      rest as never,
+    );
+    const html = unescapeHtml(await res.text());
+    expect(html).toContain(NOT_CONFIGURED);
+    expect(html).not.toContain("Add your city to see suppliers near you.");
   });
 
   it("runs no script for a query with nothing recognised in it", async () => {
@@ -307,7 +315,8 @@ describe("the client script", () => {
     stubFetch(searchReply);
     const html = await (await get(`/parts/${SEARCH}`)).text();
     const block = pageData(html);
-    expect(Object.keys(block).sort()).toEqual(["parts", "text", "timeoutMs"]);
+    expect(Object.keys(block).sort()).toEqual(["parts", "scope", "text", "timeoutMs"]);
+    expect(block.scope).toBe("near");
     expect(block.parts).toEqual(["1U-3352", "40/300893"]);
     // Still nothing the user typed: not the query, not the city, not a note or a number.
     const json = JSON.stringify(block);
