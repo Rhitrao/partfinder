@@ -19,6 +19,31 @@ export interface PageData {
   parts: string[];
 }
 
+/** Every string this script can end up showing, handed to it rather than written into it. */
+export interface ScriptText {
+  finding: string;
+  unavailable: string;
+  verify: string;
+  mapUnavailable: string;
+  queueHint: string;
+}
+
+/**
+ * The whole of the #pf-data block: the page's data, plus every constant the script uses.
+ *
+ * The script is a constant string, emitted byte for byte, and nothing is substituted into it.
+ * That is the point. Until step 7c the constants were spliced in by name, one
+ * String.prototype.replace per name - and a string pattern replaces only the first occurrence.
+ * Every name used twice kept its placeholder, and the browser threw ReferenceError the moment
+ * that line ran. Nothing on the server could see it: a script with an undefined name in it still
+ * parses, and parsing was all anything checked.
+ */
+export interface ScriptData extends PageData {
+  text: ScriptText;
+  /** How long the whole fetch round has, in milliseconds. */
+  timeoutMs: number;
+}
+
 /** Turnstile could not mint a token, or would not accept the one it minted. */
 export const VERIFY_FAILED = "Couldn't verify this browser.";
 
@@ -31,7 +56,11 @@ export const FETCH_TIMEOUT_MS = 15000;
 export const TURNSTILE_SRC =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=pfTurnstile";
 
-const SCRIPT = String.raw`
+/**
+ * The script, exactly as the browser receives it. Exported so a test can execute it, and so a
+ * test can assert the page emits it unchanged.
+ */
+export const CLIENT_SCRIPT = String.raw`
 (function () {
   "use strict";
   var el = document.getElementById("pf-data");
@@ -39,6 +68,12 @@ const SCRIPT = String.raw`
   var data;
   try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
   var parts = data.parts || [];
+  // Every constant this script shows or waits on arrives in that same block rather than being
+  // written into the script body. A property that is missing reads as undefined; a bare name
+  // that is missing throws, which is how this script spent a week not running at all. It is
+  // "words" rather than "text" because make() already takes a parameter by that name.
+  var words = data.text || {};
+  var timeoutMs = data.timeoutMs;
 
   var status = document.getElementById("pf-status");
   var ghosts = document.getElementById("pf-ghosts");
@@ -86,7 +121,7 @@ const SCRIPT = String.raw`
   function again() {
     clearRetry();
     if (!window.turnstile || widgetId === null) return;
-    say(FINDING_TEXT);
+    say(words.finding);
     window.turnstile.reset(widgetId);
   }
 
@@ -112,7 +147,7 @@ const SCRIPT = String.raw`
     if (running) return;
     running = true;
     clearRetry();
-    say(FINDING_TEXT);
+    say(words.finding);
     var payload = {
       token: token,
       q: field("q"),
@@ -124,7 +159,7 @@ const SCRIPT = String.raw`
     if (near) payload.near = near;
 
     var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT);
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
     var done = function () { clearTimeout(timer); running = false; };
 
     fetch("/parts/api/suppliers", {
@@ -141,19 +176,19 @@ const SCRIPT = String.raw`
       handle(body);
     }).catch(function () {
       done();
-      fail(UNAVAILABLE_TEXT, true);
+      fail(words.unavailable, true);
     });
   }
 
   function handle(body) {
-    if (!body || typeof body !== "object") return fail(UNAVAILABLE_TEXT, true);
-    if (body.error === "verify") return fail(VERIFY_TEXT, true);
+    if (!body || typeof body !== "object") return fail(words.unavailable, true);
+    if (body.error === "verify") return fail(words.verify, true);
     if (body.error === "city") {
       say("Couldn't find " + field("city").trim() + ". Check the spelling.");
       openElsewhere();
       return;
     }
-    if (typeof body.html !== "string") return fail(UNAVAILABLE_TEXT, false);
+    if (typeof body.html !== "string") return fail(words.unavailable, false);
     show(body);
   }
 
@@ -184,7 +219,7 @@ const SCRIPT = String.raw`
       sitekey: widget.getAttribute("data-sitekey") || "",
       appearance: widget.getAttribute("data-appearance") || "interaction-only",
       callback: search,
-      "error-callback": function () { fail(VERIFY_TEXT, true); },
+      "error-callback": function () { fail(words.verify, true); },
       "expired-callback": function () { if (window.turnstile) window.turnstile.reset(widgetId); }
     });
   };
@@ -303,7 +338,7 @@ const SCRIPT = String.raw`
       fit();
       addShowOnMap();
     } catch (e) {
-      if (box) box.textContent = MAP_UNAVAILABLE_TEXT;
+      if (box) box.textContent = words.mapUnavailable;
     }
   }
 
@@ -407,7 +442,7 @@ const SCRIPT = String.raw`
     if (!panel) return;
     panel.textContent = "";
     var head = make("div", "sendhead");
-    head.appendChild(make("p", "hint", QUEUE_HINT_TEXT));
+    head.appendChild(make("p", "hint", words.queueHint));
     var shut = make("button", "link", "Close");
     shut.type = "button";
     shut.addEventListener("click", closePanel);
@@ -512,11 +547,6 @@ const SCRIPT = String.raw`
 })();
 `;
 
-/** Replaces one placeholder without letting a "$" sequence in the value mean anything. */
-function fill(body: string, placeholder: string, value: string): string {
-  return body.replace(placeholder, () => value);
-}
-
 /**
  * The data block, the script, Turnstile's loader and Google's, all carrying the nonce.
  *
@@ -526,12 +556,17 @@ function fill(body: string, placeholder: string, value: string): string {
  */
 export function renderScripts(data: PageData, mapsKey: string | undefined, nonce: string): string {
   const n = escapeHtml(nonce);
-  let body = fill(SCRIPT, "FINDING_TEXT", jsonForScript(FINDING));
-  body = fill(body, "UNAVAILABLE_TEXT", jsonForScript(SUPPLIERS_UNAVAILABLE));
-  body = fill(body, "VERIFY_TEXT", jsonForScript(VERIFY_FAILED));
-  body = fill(body, "MAP_UNAVAILABLE_TEXT", jsonForScript(MAP_UNAVAILABLE));
-  body = fill(body, "QUEUE_HINT_TEXT", jsonForScript(QUEUE_HINT));
-  body = fill(body, "FETCH_TIMEOUT", String(FETCH_TIMEOUT_MS));
+  const block: ScriptData = {
+    ...data,
+    text: {
+      finding: FINDING,
+      unavailable: SUPPLIERS_UNAVAILABLE,
+      verify: VERIFY_FAILED,
+      mapUnavailable: MAP_UNAVAILABLE,
+      queueHint: QUEUE_HINT,
+    },
+    timeoutMs: FETCH_TIMEOUT_MS,
+  };
   const maps =
     mapsKey === undefined || mapsKey === ""
       ? ""
@@ -540,7 +575,7 @@ export function renderScripts(data: PageData, mapsKey: string | undefined, nonce
             `?key=${encodeURIComponent(mapsKey)}&callback=initMap&loading=async`,
         )}" async nonce="${n}"></script>`;
   return `
-    <script type="application/json" id="pf-data" nonce="${n}">${jsonForScript(data)}</script>
-    <script nonce="${n}">${body}</script>
+    <script type="application/json" id="pf-data" nonce="${n}">${jsonForScript(block)}</script>
+    <script nonce="${n}">${CLIENT_SCRIPT}</script>
     <script src="${escapeHtml(TURNSTILE_SRC)}" async defer nonce="${n}"></script>${maps}`;
 }

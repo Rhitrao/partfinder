@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
-import { TURNSTILE_SRC } from "../src/vendors/script";
+import { CLIENT_SCRIPT, TURNSTILE_SRC } from "../src/vendors/script";
 import { NOT_CONFIGURED } from "../src/vendors/suppliers";
 import { Q, SEARCH, env, get, searchReply, stubFetch, unescapeHtml } from "./helpers";
 
@@ -28,6 +28,14 @@ const scriptTags = (html: string) => [...html.matchAll(/<script[^>]*>/g)].map((m
 /** The inline script's body. */
 const inlineScript = (html: string) =>
   html.match(/<script nonce="[^"]*">([\s\S]*?)<\/script>/)![1]!;
+
+/** The #pf-data block: everything the script is told before it fetches anything. */
+const pageData = (html: string) =>
+  JSON.parse(html.match(/id="pf-data"[^>]*>([\s\S]*?)<\/script>/)![1]!) as {
+    parts: string[];
+    text: Record<string, string>;
+    timeoutMs: number;
+  };
 
 describe("a page with a city", () => {
   it("fetches nothing and promises a list instead", async () => {
@@ -278,21 +286,42 @@ describe("the client script", () => {
   it("carries every message the page can end up showing", async () => {
     stubFetch(searchReply);
     const html = await (await get(`/parts/${SEARCH}`)).text();
+    // Since step 7c the constants ride in the data block and the ones the script builds itself
+    // stay in the script, so the page as a whole is what has to carry them.
     const script = inlineScript(html);
-    expect(script).toContain("Couldn't verify this browser.");
-    expect(script).toContain("Supplier list unavailable right now");
+    const block = pageData(html);
+    expect(block.text.verify).toBe("Couldn't verify this browser.");
+    expect(block.text.unavailable).toBe("Supplier list unavailable right now");
+    expect(block.text.finding).toBe("Finding suppliers\u2026");
+    expect(block.text.mapUnavailable).toBe("Map unavailable. The list below has everything.");
+    expect(block.text.queueHint).toBe(
+      "WhatsApp opens one chat at a time. Tap each supplier in turn.",
+    );
+    expect(block.timeoutMs).toBe(15000);
     expect(script).toContain("Couldn't find ");
     expect(script).toContain("Location off. Distances are from ");
     expect(script).toContain("suppliers found");
-    expect(script).toContain("WhatsApp opens one chat at a time. Tap each supplier in turn.");
-    expect(script).toContain("15000");
   });
 
-  it("is told the part keys and nothing else", async () => {
+  it("is told the part keys, the wording and the timeout, and nothing else", async () => {
     stubFetch(searchReply);
     const html = await (await get(`/parts/${SEARCH}`)).text();
-    const json = html.match(/id="pf-data"[^>]*>([\s\S]*?)<\/script>/)![1]!;
-    expect(JSON.parse(json)).toEqual({ parts: ["1U-3352", "40/300893"] });
+    const block = pageData(html);
+    expect(Object.keys(block).sort()).toEqual(["parts", "text", "timeoutMs"]);
+    expect(block.parts).toEqual(["1U-3352", "40/300893"]);
+    // Still nothing the user typed: not the query, not the city, not a note or a number.
+    const json = JSON.stringify(block);
+    for (const typed of ["Bengaluru", "1u3352", "need ", "98765"]) {
+      expect(json, typed).not.toContain(typed);
+    }
+  });
+
+  it("emits the script itself byte for byte, with nothing substituted into it", async () => {
+    stubFetch(searchReply);
+    const script = inlineScript(await (await get(`/parts/${SEARCH}`)).text());
+    // The invariant that replaces the old placeholder substitution: there is nothing left to
+    // get wrong, because the body the browser runs is the constant in src/vendors/script.ts.
+    expect(script).toBe(CLIENT_SCRIPT);
   });
 
   it("parses as JavaScript", async () => {

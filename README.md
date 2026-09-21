@@ -205,6 +205,9 @@ src/icons.ts      generated: the home-screen icons, base64, served from the bund
 scripts/sample.ts regenerates docs/sample-page.html
 scripts/icons.ts  draws the icons and regenerates src/icons.ts and docs/icon-*.png
 test/             vitest; no network; public part numbers only
+  dom.ts          a DOM small enough to read: elements, ids, classes, events, one template
+  run-script.ts   node:vm harness that runs the shipped script against it, with a fake
+                  Turnstile and a stubbed fetch
 ```
 
 `src/dealers.ts` is empty until each locator URL has actually been opened and confirmed to be
