@@ -3,7 +3,7 @@
 // stored or logged. Every piece of user input is HTML-escaped wherever it appears.
 
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
-import { THEME_COLOR } from "./manifest";
+import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "./manifest";
 import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
 import { quantityFor } from "./quantity";
 
@@ -260,206 +260,353 @@ export function mailtoUrl(subject: string, message: string): string {
 
 
 const STYLE = `
-:root { color-scheme: light dark; }
+/* ---- Design tokens -----------------------------------------------------------------------
+ * rohitrao.in's own stylesheet could not be read from here - the build environment's egress
+ * proxy refuses the host - so these are the site's light scheme as the step 8 prompt records
+ * it, and they are the single place any colour, radius or step is written down. Dark inverts
+ * background and surface and keeps the accents.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #FFFFFF;
+  --surface: #F7F7F5;
+  --border: #E6E5E1;
+  --text: #111111;
+  --muted: #5B5B57;
+
+  /* The one high-contrast button: black on white, and white on black in the dark scheme. */
+  --btn-bg: #111111;
+  --btn-fg: #FFFFFF;
+  /* WhatsApp's own green, with black text, in both schemes. */
+  --wa-bg: #25D366;
+  --wa-fg: #111111;
+
+  --r: 8px;
+  --r-sm: 6px;
+  --r-pill: 999px;
+
+  --s4: 4px;
+  --s8: 8px;
+  --s12: 12px;
+  --s16: 16px;
+  --s24: 24px;
+  --s32: 32px;
+  --s48: 48px;
+
+  --maxw: 760px;
+  /* Smallest comfortable target, and the floor for every control on the page. */
+  --tap: 44px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111111;
+    --surface: #1B1B19;
+    --border: #33322E;
+    --text: #F7F7F5;
+    --muted: #A5A49E;
+    --btn-bg: #F7F7F5;
+    --btn-fg: #111111;
+  }
+}
+
+/* ---- Base --------------------------------------------------------------------------------- */
 * { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  padding: 1rem;
-  font: 1rem/1.5 system-ui, sans-serif;
-  max-width: 40rem;
+  padding: var(--s24) var(--s16);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
 }
-h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
-h2 { font-size: 1.1rem; margin: 1.5rem 0 .5rem; }
-p { margin: .5rem 0; }
-.lede { margin-bottom: 1.25rem; }
-form { display: flex; flex-direction: column; gap: .35rem; }
-label { font-weight: 600; }
-.ask textarea { min-height: 7rem; }
-.primary { font-size: 1.05rem; padding: .85rem; min-height: 44px; }
-.more { margin-top: .75rem; }
-.more summary { cursor: pointer; font-weight: 600; padding: .4rem 0; min-height: 44px; }
-.more > * { margin-top: .5rem; }
-.how { margin-top: 2.5rem; font-size: .9rem; opacity: .85; }
-.how summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
-:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
-textarea, input, select, button {
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 24px; font-weight: 600; margin: 0 0 var(--s4); letter-spacing: -0.01em; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 var(--s12); }
+h3 { font-size: 14px; font-weight: 600; margin: 0 0 var(--s8); }
+p { margin: var(--s8) 0; }
+a { color: inherit; }
+.muted, .note, .hints, .astyped, .asknote, .grouphint, .unrecognised, .excluded,
+.basis, .strength, .suffix, .sendparts { color: var(--muted); }
+.note, .hints, .astyped, .asknote, .grouphint, .unrecognised, .excluded,
+.basis, .strength, .suffix, .sendparts { font-size: 14px; }
+.lede { color: var(--muted); margin: 0 0 var(--s24); }
+.warn { font-weight: 600; }
+
+/* One visible ring on everything focusable, in the text colour so it reads in both schemes. */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--r-sm); }
+
+/* ---- Controls ----------------------------------------------------------------------------- */
+form { display: flex; flex-direction: column; gap: var(--s4); }
+label { font-weight: 600; font-size: 14px; margin-top: var(--s8); }
+textarea, input, select {
   font: inherit;
   width: 100%;
-  padding: .6rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  background: transparent;
-  color: inherit;
+  min-height: var(--tap);
+  padding: var(--s12);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
 }
-textarea { min-height: 6rem; resize: vertical; }
-button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
-.hints { font-size: .9rem; opacity: .8; }
-.card { border: 1px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1rem 0; }
-.card h2 { margin-top: 0; font-family: ui-monospace, monospace; word-break: break-all; }
-.candidate { border-top: 1px dashed currentColor; padding-top: .6rem; margin-top: .6rem; }
-.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.oem { font-weight: 700; margin: 0; }
-.canonical { font-family: ui-monospace, monospace; margin: .15rem 0; word-break: break-all; }
-.basis, .strength, .suffix { font-size: .9rem; margin: .15rem 0; opacity: .85; }
-.warnings { font-size: .9rem; margin: .35rem 0 0; padding-left: 1.1rem; }
-.narrow { font-size: .9rem; font-weight: 600; margin: .75rem 0 0; }
-.excluded { font-size: .9rem; margin: .75rem 0 0; opacity: .85; }
-.nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
-.answer { margin: 0; }
-.answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
-.group { margin-top: .9rem; }
-.group h3 { font-size: .95rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; }
-.grouphint { font-size: .85rem; opacity: .8; margin: .35rem 0; }
-.link {
-  display: block;
-  margin-top: .4rem;
-  padding: .55rem .8rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  text-decoration: none;
-  color: inherit;
-}
-.search, .whatsapp {
-  display: inline-block;
-  margin-top: .75rem;
-  padding: .55rem .8rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  text-decoration: none;
-  color: inherit;
-}
-.whatsapp { display: block; text-align: center; font-weight: 700; margin: 1.25rem 0; }
-.send { margin-top: 2rem; }
-.send h2 { margin-bottom: .75rem; }
-.send label { display: block; margin-top: .75rem; font-weight: 600; }
-.send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
-.suppliers { margin-top: 2rem; }
-.gmaps { border: 2px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1.25rem 0; }
-.gmaps > :first-child { margin-top: 0; }
-.caveat { font-weight: 600; }
-.attribution { font-size: .9rem; font-weight: 600; margin: 1rem 0 0; }
-.shops { list-style: none; margin: 1rem 0 0; padding: 0; }
-.shop { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
-.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.sname { font-weight: 700; margin: 0; }
-.saddr, .sfound, .scount, .srating { font-size: .9rem; margin: .15rem 0; opacity: .85; }
-.sphone { font-family: ui-monospace, monospace; margin: .35rem 0 .15rem; }
-.shop .whatsapp { margin: .4rem 0 0; }
-.shop .link { margin-top: .4rem; }
-.sfacts { font-size: .9rem; margin: .15rem 0; }
-.sask { font-size: .9rem; margin: .5rem 0 .25rem; font-weight: 600; }
-.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.chip {
-  display: inline-block;
-  border: 1px solid currentColor;
-  border-radius: 1rem;
-  padding: .3rem .7rem;
-  font-size: .9rem;
-  text-decoration: none;
-  color: inherit;
-  min-height: 34px;
-}
-a.chip { min-height: 44px; padding: .6rem .9rem; }
-.actions { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
-.actions .link, .actions .whatsapp { margin: 0; min-height: 44px; }
-.select {
-  display: block;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  padding: .6rem .8rem;
-  min-height: 44px;
+textarea { min-height: 7rem; resize: vertical; line-height: 1.5; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: var(--tap);
+  padding: var(--s12) var(--s16);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
 }
-.select input { width: auto; margin-right: .5rem; }
-.pin {
+.primary {
+  width: 100%;
+  margin-top: var(--s16);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+  font-size: 16px;
+}
+.secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+
+/* A link that looks like a button: the link-outs, the shop actions, the dealer locators. */
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s8) var(--s12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  text-decoration: none;
+  color: var(--text);
+}
+.whatsapp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s12) var(--s16);
+  background: var(--wa-bg);
+  color: var(--wa-fg);
+  border: 1px solid var(--wa-bg);
+  border-radius: var(--r);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* The mark on every link that leaves this site. Decorative: the label already says where. */
+.ext { font-size: 0.85em; line-height: 1; }
+
+details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+}
+.more { margin-top: var(--s12); }
+.more > * { margin-top: var(--s8); }
+.how { margin-top: var(--s48); color: var(--muted); font-size: 14px; }
+.check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
+.elsewhere { margin-top: var(--s16); }
+
+/* ---- Part cards --------------------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s16);
+  margin: var(--s12) 0;
+}
+.number {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  word-break: break-all;
+}
+.maker { font-weight: 600; margin: var(--s8) 0 var(--s4); }
+.badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 2px var(--s8);
+  white-space: nowrap;
+}
+.tag {
   display: inline-block;
-  min-width: 1.6rem;
-  text-align: center;
-  border: 1px solid currentColor;
-  border-radius: .3rem;
-  margin-right: .4rem;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px var(--s8);
+  margin: var(--s4) 0;
 }
-.number { font-size: 1.5rem; font-weight: 700; font-family: ui-monospace, monospace; margin: 0; }
-.astyped, .asknote { font-size: .85rem; opacity: .8; margin: .1rem 0; }
-.tag { display: inline-block; border: 1px solid currentColor; border-radius: .3rem;
-  padding: .1rem .4rem; font-size: .85rem; margin: .3rem 0; }
-.maker { font-weight: 600; margin: .35rem 0 .2rem; }
-.badge { font-size: .75rem; font-weight: 400; border: 1px solid currentColor;
-  border-radius: .3rem; padding: .1rem .35rem; opacity: .85; }
-.qty { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 .25rem; }
-.qtyinput { width: 5rem; min-height: 44px; }
-.update { margin-top: .5rem; min-height: 44px; }
-.unrecognised { font-size: .9rem; opacity: .85; }
-.check summary { cursor: pointer; font-size: .9rem; padding: .5rem 0; min-height: 44px; }
-.signin { font-weight: 600; }
-.filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s8) 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: var(--s4) var(--s12);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+a.chip, button.chip { min-height: var(--tap); }
+.caveat { font-size: 14px; color: var(--muted); }
+.nothing { font-weight: 600; text-align: center; margin: var(--s24) 0; }
+.candidate { border-top: 1px solid var(--border); padding-top: var(--s12); margin-top: var(--s12); }
+.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.oem { font-weight: 600; margin: 0; }
+.canonical { font-family: var(--mono); margin: var(--s4) 0; word-break: break-all; }
+.warnings { font-size: 14px; margin: var(--s8) 0 0; padding-left: var(--s16); color: var(--muted); }
+.narrow { font-size: 14px; font-weight: 600; margin: var(--s12) 0 0; }
+.answer { margin: 0; }
+.answer .reason { font-size: 14px; color: var(--muted); margin: var(--s4) 0 0; }
+
+/* ---- Link-out groups ------------------------------------------------------------------------ */
+.group { margin-top: var(--s16); }
+.group h3 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.group .link { display: flex; margin-top: var(--s8); }
+
+/* ---- Suppliers ------------------------------------------------------------------------------ */
+.suppliers { margin-top: var(--s32); }
+.gmaps {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s12);
+  margin: var(--s16) 0;
+  background: var(--surface);
+}
+.gmaps > :first-child { margin-top: 0; }
+.attribution { font-size: 12px; font-weight: 600; color: var(--muted); margin: var(--s12) 0 0; }
+.shops { list-style: none; margin: var(--s16) 0 0; padding: 0; }
+.shop {
+  border-top: 1px solid var(--border);
+  padding-top: var(--s16);
+  margin-top: var(--s16);
+}
+.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.shop.here { outline: 2px solid var(--text); outline-offset: 4px; border-radius: var(--r); }
+.sname { font-weight: 600; margin: 0; }
+.pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  margin-right: var(--s8);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sfacts, .saddr { font-size: 14px; color: var(--muted); margin: var(--s4) 0; }
+.sask { font-size: 14px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--s8); margin-top: var(--s12); }
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s8) var(--s12);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+  cursor: pointer;
+}
+.select input { width: auto; min-height: 0; margin: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
 .filters:empty { display: none; }
-.filter { cursor: pointer; }
-.filter[aria-pressed="true"] { font-weight: 700; outline: 2px solid currentColor; }
-.locate { margin-top: .5rem; min-height: 44px; }
-.status { font-weight: 600; margin: .75rem 0 0; }
-.ghosts { list-style: none; margin: 1rem 0 0; padding: 0; }
-.ghosts[hidden] { display: none; }
-.ghost { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
-.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.ghostbar {
-  display: block;
-  height: 1rem;
-  margin: .4rem 0;
-  border-radius: .3rem;
-  background: currentColor;
-  opacity: .15;
-}
-.ghostbar.short { width: 45%; }
+.filter { cursor: pointer; background: var(--bg); }
+.filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
 .turnstile:empty { display: none; }
-.elsewhere { margin-top: 1rem; }
-.elsewhere summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
-.retry { margin-top: .5rem; min-height: 44px; }
-.shop.here { outline: 3px solid currentColor; outline-offset: 3px; }
+.locate, .retry { margin-top: var(--s12); }
+
+/* ---- Other ways to send --------------------------------------------------------------------- */
+.send { margin-top: var(--s32); }
+.send textarea { min-height: 0; font-size: 14px; }
 .sendbar {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  padding: .6rem 1rem;
-  background: Canvas;
-  border-top: 2px solid currentColor;
+  padding: var(--s12) var(--s16);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
-.sendbar[hidden] { display: none; }
+.sendbar[hidden], .sendpanel[hidden] { display: none; }
+.sendbar .primary { margin-top: 0; }
 .sendpanel {
   position: fixed;
   inset: auto 0 0 0;
   max-height: 80vh;
   overflow: auto;
-  padding: 1rem;
-  background: Canvas;
-  border-top: 2px solid currentColor;
+  padding: var(--s16);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
-.sendpanel[hidden] { display: none; }
-.sendrow { border-top: 1px solid currentColor; padding: .75rem 0; }
-.sendrow.done { opacity: .6; }
-.sendrow.next { outline: 2px dashed currentColor; outline-offset: 2px; }
-.sendparts { font-size: .9rem; opacity: .85; margin: .15rem 0; }
+.sendhead { display: flex; align-items: center; justify-content: space-between; gap: var(--s16); }
+.sendrow { border-top: 1px solid var(--border); padding: var(--s16) 0; }
+.sendrow.done { opacity: 0.55; }
+.sendrow.next { outline: 2px dashed var(--border); outline-offset: 4px; }
 .sr-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-/* The send bar is fixed, so the last card needs room to clear it. */
-body { padding-bottom: 5rem; }
+
+/* ---- The map --------------------------------------------------------------------------------- */
 .map {
-  height: 260px;
-  margin-top: 1rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
+  height: 220px;
+  margin-top: var(--s12);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: .9rem;
-  padding: .5rem;
+  font-size: 14px;
+  color: var(--muted);
+  padding: var(--s8);
 }
-@media (min-width: 40rem) { .map { height: 340px; } }
-.warn { font-weight: 600; }
-.notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
-.footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }
-.footer a { color: inherit; }
-.note { font-size: .9rem; opacity: .85; }
-@media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
+
+/* ---- Placeholders ----------------------------------------------------------------------------- */
+.ghosts { list-style: none; margin: var(--s16) 0 0; padding: 0; }
+.ghosts[hidden] { display: none; }
+.ghost { border-top: 1px solid var(--border); padding-top: var(--s16); margin-top: var(--s16); }
+.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.ghostbar {
+  display: block;
+  height: 14px;
+  margin: var(--s8) 0;
+  border-radius: var(--r-sm);
+  background: var(--border);
+}
+.ghostbar.short { width: 45%; }
+
+/* ---- Footer ------------------------------------------------------------------------------------ */
+.notes { font-size: 14px; color: var(--muted); margin-top: var(--s32); }
+.footer {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: var(--s48);
+  padding-top: var(--s16);
+  border-top: 1px solid var(--border);
+}
 `.trim();
 
 /**
@@ -738,7 +885,8 @@ export function renderDocument(main: string, options: DocumentOptions = {}): str
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <meta name="theme-color" content="${THEME_COLOR}">
+    <meta name="theme-color" content="${THEME_COLOR_LIGHT}" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="${THEME_COLOR_DARK}" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-title" content="Partfinder">
     <link rel="manifest" href="/parts/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/parts/icon-192.png">

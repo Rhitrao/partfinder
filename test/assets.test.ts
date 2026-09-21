@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "../src/icons";
 import { ICON_SIZES, renderIcon, renderIconsModule } from "../scripts/icons";
+import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "../src/manifest";
 
 const get = (path: string, init?: RequestInit) =>
   worker.fetch(new Request(`https://rohitrao.in${path}`, init), {});
@@ -81,7 +82,15 @@ describe("the page head", () => {
     expect(html).toContain('<link rel="manifest" href="/parts/manifest.webmanifest">');
     expect(html).toContain('<link rel="apple-touch-icon" href="/parts/icon-192.png">');
     expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Partfinder">');
-    expect(html).toContain('<meta name="theme-color" content="#111827">');
+    // One per scheme, each matching --bg, so the browser's own chrome never fights the page.
+    expect(html).toContain(
+      `<meta name="theme-color" content="${THEME_COLOR_LIGHT}" media="(prefers-color-scheme: light)">`,
+    );
+    expect(html).toContain(
+      `<meta name="theme-color" content="${THEME_COLOR_DARK}" media="(prefers-color-scheme: dark)">`,
+    );
+    expect(THEME_COLOR_LIGHT).toBe("#FFFFFF");
+    expect(THEME_COLOR_DARK).toBe("#111111");
   });
 
   it("allows the manifest and images in the CSP, and nothing else new", async () => {
