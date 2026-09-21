@@ -111,6 +111,34 @@ which it verifies with Cloudflare before it calls Google. It answers `{ html, pi
 the escaped cards, the map's pins and one row per shop with both WhatsApp messages already
 written - or `{ error: "verify" | "city" | "unavailable" }`. Nothing about a request is logged.
 
+## How it looks
+
+One hand-written stylesheet, inline in the document, with no framework and no web font. Every
+colour, radius and spacing step is a token on `:root`, so the palette is in one place: `#FFFFFF`
+background, `#F7F7F5` surface, `#E6E5E1` borders, `#111111` text, `#5B5B57` muted, an 8px radius,
+and a 4/8/12/16/24/32/48 scale on the system font stack. A `prefers-color-scheme: dark` block
+inverts background and surface and keeps the accents, and the page declares one `theme-color` per
+scheme so the browser's own chrome never fights it.
+
+The layout is mobile first: one column, 16px of side padding, capped at 760px and centred. At
+960px it becomes two - the paste box and the part cards on the left, suppliers, map and sending
+on the right - and the left column sticks while it is shorter than the viewport. The second
+column is only rendered once there is something to put in it.
+
+Every control is at least 44px, every focusable thing has a visible ring, and every link that
+leaves the site carries `rel="noopener"` and a small ↗. That last one is done in one helper
+rather than at each call site, which is how a link gets missed.
+
+## Machines a part fits
+
+`src/fitments.ts` holds one entry per canonical part: the machines, grouped by family, with the
+source tier, the URL, and the date that page was read. A part with an entry shows "Commonly
+fitted to (N machines)" inside "Check this part", and under the list one muted line saying what
+the list is, where it came from and when. A part with no entry shows nothing - there is no
+inference from a neighbouring number and none across to a suffixed variant.
+
+Adding an entry is a data commit. Nothing in the renderer changes.
+
 ## Every result is a guess, and says so
 
 A match means the number fits a manufacturer's known numbering format. That is all it means. No
@@ -182,6 +210,7 @@ src/index.ts      Worker entry and routing under /parts/, plus the manifest and 
 src/env.ts        the four Worker secrets, all optional: the page works without any of them
 src/cookies.ts    the remembered city and country, and nothing else
 src/legal.ts      the public Terms and Privacy pages
+src/fitments.ts   which machines a part is commonly fitted to, as data, with its source
 src/health.ts     GET /parts/api/health, and the one gate that decides the Suppliers section
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/headers.ts    the response headers, including the supplier page's nonce CSP
@@ -205,6 +234,7 @@ src/icons.ts      generated: the home-screen icons, base64, served from the bund
 scripts/sample.ts regenerates docs/sample-page.html
 scripts/icons.ts  draws the icons and regenerates src/icons.ts and docs/icon-*.png
 test/             vitest; no network; public part numbers only
+  design.test.ts  the theme tokens, the breakpoints, and the rule on external links
   dom.ts          a DOM small enough to read: elements, ids, classes, events, one template
   run-script.ts   node:vm harness that runs the shipped script against it, with a fake
                   Turnstile and a stubbed fetch
