@@ -63,7 +63,11 @@ about a hundred metres and never leaves the one request it was sent in, no page 
 supplier list is kept. When Google will not answer, the status line says "Supplier list
 unavailable right now" and opens "Search on Google instead", which is the per-brand link-outs and
 needs no key. With JavaScript off, `<noscript>` says so and carries the same links. With no city,
-the section is one line asking for one.
+the section is one line asking for one. And when the supplier search cannot run at all because
+this Worker is not configured for it, the section says "Supplier search isn't set up right now."
+above those same links, rather than showing them bare and passing for a page that simply found
+nothing. Which key is missing is never on the page; `GET /parts/api/health` is where that is
+answered.
 
 **4. Other ways to send.** Collapsed under the suppliers, open when there is no Suppliers section
 at all: the message to copy, the WhatsApp contact picker, email, and a box for a supplier's own

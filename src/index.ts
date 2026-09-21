@@ -18,7 +18,7 @@ import { MAX_QUERY_LENGTH, partKey, readQuery, renderPage, resolveCountry } from
 import { handleVendors } from "./vendors/index";
 import { handleSupplierApi } from "./vendors/api";
 import { renderScripts } from "./vendors/script";
-import { renderLinkOuts, renderPending } from "./vendors/suppliers";
+import { NOT_CONFIGURED, NO_CITY, renderLinkOuts, renderPending } from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -117,7 +117,11 @@ function handlePage(request: Request, url: URL, env: Env): Response {
       );
       sendOpen = false;
     } else {
-      suppliers = renderLinkOuts(groups, country, city);
+      // Never silently. A missing city is the user's to fix and says so; anything else that
+      // stops the search is ours, and the page says that much rather than showing the link-outs
+      // bare, which is what a working page with nothing nearby would look like.
+      const notice = gate.blockers.includes("no_city") ? NO_CITY : NOT_CONFIGURED;
+      suppliers = renderLinkOuts(groups, country, city, notice);
     }
   }
 

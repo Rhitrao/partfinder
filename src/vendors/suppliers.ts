@@ -113,16 +113,27 @@ export function jsonForScript(value: unknown): string {
 
 export const NO_CITY = "Add your city to see suppliers near you.";
 
-/** Signed out, or with no city: the section is the link-outs, and says nothing about signing in. */
+/**
+ * What the section says when the user gave everything it needs - a number, a brand, a city - and
+ * the supplier search still cannot run because this Worker is not configured for it.
+ *
+ * It names no key, because which key is missing is our problem and not the visitor's, and a page
+ * that named one would be telling every passer-by where the gap is. The point of the line is
+ * only that the page never again looks like a page that simply had nothing more to offer.
+ */
+export const NOT_CONFIGURED = "Supplier search isn't set up right now.";
+
+/** No city, or nothing set up: the section is the link-outs, under a line saying which it is. */
 export function renderLinkOuts(
   groups: readonly BrandGroup[],
   country: Country,
   city: string,
+  notice = "",
 ): string {
   const where = city.trim();
   return `<section class="suppliers">
         <h2>Suppliers${where === "" ? "" : ` near ${escapeHtml(where)}`}</h2>
-        ${where === "" ? `<p class="warn">${NO_CITY}</p>` : ""}
+        ${notice === "" ? "" : `<p class="warn">${escapeHtml(notice)}</p>`}
         ${renderFallback(groups, country, city)}
       </section>`;
 }
