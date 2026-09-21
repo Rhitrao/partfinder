@@ -7,6 +7,7 @@ import {
   CLOUDFLARE_PRIVACY_URL,
   GOOGLE_MAPS_TERMS_URL,
   GOOGLE_PRIVACY_URL,
+  TURNSTILE_PRIVACY_URL,
 } from "../src/legal";
 
 const env = { GOOGLE_PLACES_KEY: "not-a-real-key", TURNSTILE_SITE_KEY: "not-a-real-site-key" };
@@ -47,6 +48,18 @@ describe("GET /parts/terms and /parts/privacy", () => {
     expect(GOOGLE_MAPS_TERMS_URL).toBe("https://maps.google.com/help/terms_maps/");
     expect(hrefs(html)).toContain(GOOGLE_MAPS_TERMS_URL);
     expect(html).toContain("Google Maps / Google Earth Additional Terms of");
+  });
+
+  it("references the Turnstile Privacy Addendum, as invisible mode requires", async () => {
+    const html = await (await get("/parts/privacy")).text();
+    expect(TURNSTILE_PRIVACY_URL).toBe("https://www.cloudflare.com/turnstile-privacy-policy/");
+    expect(hrefs(html)).toContain(TURNSTILE_PRIVACY_URL);
+    // The link text is the addendum's name, so it is findable by what it is called.
+    expect(html).toContain(`<a href="${TURNSTILE_PRIVACY_URL}">Turnstile Privacy Addendum</a>`);
+    // Beside Cloudflare's general policy, not instead of it, and in the Turnstile paragraph.
+    expect(hrefs(html)).toContain(CLOUDFLARE_PRIVACY_URL);
+    const turnstile = html.slice(html.indexOf("<h2>Turnstile</h2>"), html.indexOf("<h2>Your location</h2>"));
+    expect(turnstile).toContain(TURNSTILE_PRIVACY_URL);
   });
 
   it("incorporates Google's privacy policy on the privacy page", async () => {
