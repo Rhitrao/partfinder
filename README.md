@@ -129,13 +129,47 @@ Every control is at least 44px, every focusable thing has a visible ring, and ev
 leaves the site carries `rel="noopener"` and a small ↗. That last one is done in one helper
 rather than at each call site, which is how a link gets missed.
 
+## Three kinds of part
+
+A part arrives as a number, as a description, or as a number nobody can place. All three get a
+card, and all three travel in the message.
+
+**A number a rule places** reads as it always did: the canonical form, the manufacturers it could
+be, and a chip per manufacturer when the format fits more than one.
+
+**A number no rule places** is still a part. The card says "Manufacturer not recognised" and keeps
+the search links and the quantity field, and the message carries it with whatever words the
+message had around it: "9ZZ123456 (CVVT)". Reading as a part number means six characters, a digit,
+and either a letter or a separator - which is what keeps a year, an invoice number and a phone
+number out. Anything shorter, or bare digits, still gets the one-line "Not recognised".
+
+**A part with no number at all** is built when the message names a machine or brand and has words
+left once the padding in `src/words.ts` is gone. "need 2 nos ex200 pin pivot urgent" is one part
+called "pin pivot", for an EX200, from Hitachi or Tata Hitachi, quantity 2. A message that names a
+number does not also build one: there the machine word stays a hint that re-ranks candidates.
+
+## Where suppliers are searched
+
+Near a city, or all of India. A city gives "Near Bengaluru" and "All India" as chips above the
+list; no city gives All India alone, because there is nowhere to be near. All India names the
+country on every query, makes no origin call and applies no location bias, and cards show where a
+shop is instead of how far away it is - unless the browser shared a location, which still measures
+from you. The scope is in the address and nowhere else: no cookie holds it.
+
+What is searched for depends on the card. A placed number searches its brand; a described part
+searches its brands and then its name ("pin pivot supplier"); a number nobody placed searches the
+words around it ("CVVT spare parts"), or nothing at all when there were none. Four searches and
+one origin call, as before.
+
 ## Machines a part fits
 
 `src/fitments.ts` holds one entry per canonical part: the machines, grouped by family, with the
-source tier, the URL, and the date that page was read. A part with an entry shows "Commonly
-fitted to (N machines)" inside "Check this part", and under the list one muted line saying what
-the list is, where it came from and when. A part with no entry shows nothing - there is no
-inference from a neighbouring number and none across to a suffixed variant.
+source tier, the URLs, and the date those pages were read. A part with an entry says "Fits 52
+machines, incl. 213B, 214B, 215B, 224B…" on the card itself, with "See all" holding the grouped
+list, the note and the sources. A part without one says "Fitment not in our list yet · Check on
+Google ↗" - saying nothing would read as "this fits nothing", and a missing entry only means
+nobody has looked yet. There is no inference from a neighbouring number and none across to a
+suffixed variant.
 
 Adding an entry is a data commit. Nothing in the renderer changes.
 
@@ -211,6 +245,7 @@ src/env.ts        the four Worker secrets, all optional: the page works without 
 src/cookies.ts    the remembered city and country, and nothing else
 src/legal.ts      the public Terms and Privacy pages
 src/fitments.ts   which machines a part is commonly fitted to, as data, with its source
+src/words.ts      the padding a pasted message carries: greetings, urgency, units
 src/health.ts     GET /parts/api/health, and the one gate that decides the Suppliers section
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/headers.ts    the response headers, including the supplier page's nonce CSP
@@ -234,6 +269,8 @@ src/icons.ts      generated: the home-screen icons, base64, served from the bund
 scripts/sample.ts regenerates docs/sample-page.html
 scripts/icons.ts  draws the icons and regenerates src/icons.ts and docs/icon-*.png
 test/             vitest; no network; public part numbers only
+  described.test.ts  what a message is read as: a number, a description, or neither
+  scope.test.ts   where a supplier search looks, and what each card type asks for
   design.test.ts  the theme tokens, the breakpoints, and the rule on external links
   dom.ts          a DOM small enough to read: elements, ids, classes, events, one template
   run-script.ts   node:vm harness that runs the shipped script against it, with a fake
