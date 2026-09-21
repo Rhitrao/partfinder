@@ -139,9 +139,14 @@ be, and a chip per manufacturer when the format fits more than one.
 
 **A number no rule places** is still a part. The card says "Manufacturer not recognised" and keeps
 the search links and the quantity field, and the message carries it with whatever words the
-message had around it: "9ZZ123456 (CVVT)". Reading as a part number means six characters, a digit,
+message had around it: "9ZZ123456 CVVT". Reading as a part number means six characters, a digit,
 and either a letter or a separator - which is what keeps a year, an invoice number and a phone
 number out. Anything shorter, or bare digits, still gets the one-line "Not recognised".
+
+Loose words - "CVVT", "sensor" - go on the line only when the message holds exactly one part.
+Nothing in a pasted message says which part such a word belongs to, so with two of them the word
+is left out of the message and out of the supplier queries alike. A wrong part named confidently
+is worse than a right one named plainly.
 
 **A part with no number at all** is built when the message names a machine or brand and has words
 left once the padding in `src/words.ts` is gone. "need 2 nos ex200 pin pivot urgent" is one part

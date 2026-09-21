@@ -1209,29 +1209,47 @@ export interface ParsedQuery {
  * Read a query into cards. Exported because the supplier search needs the same parse the cards
  * are built from, and parsing twice would spend the request's budget twice.
  */
+/**
+ * The words the message carried that are not doing another job, given to the one part they can
+ * only belong to.
+ *
+ * Nothing in the message says which part a loose word is about. With one part there is nothing
+ * to be wrong about, and "24370-2E000 CVVT" is worth more to a supplier than the number alone.
+ * With two, there is: "1u3352 40/300893 CVVT" was putting CVVT on both lines, and a supplier
+ * read the second as a JCB CVVT, which is not a thing. A wrong part named confidently is worse
+ * than a right one named plainly, so past one card the words are dropped - from the message and
+ * from the supplier queries alike, since both read the same field.
+ *
+ * Counted over outbound(), which is the set that gets cards and message lines: a phone-shaped
+ * run is not a part and does not make a message a two-part message. A described part is skipped
+ * because its name is already those words.
+ */
+function attachWords(q: string, results: readonly ParseResult[]): ParseResult[] {
+  const words = descriptiveWords(q);
+  if (words.length === 0) return [...results];
+  const cards = outbound(results);
+  const only = cards.length === 1 ? cards[0] : undefined;
+  if (only === undefined || only.described !== undefined) return [...results];
+  return results.map((result) => (result === only ? { ...result, words } : result));
+}
+
 export function readQuery(q: string, hint: string): ParsedQuery {
   if (q.trim() === "") return { hints: [], results: [], truncated: 0, quantities: {} };
   const hints = [...extractHints(q)];
   for (const h of extractHints(hint)) if (!hints.includes(h)) hints.push(h);
   const tokens = extractTokens(q);
-  // The words the message carried that are not doing another job. They belong to the message
-  // rather than to any one number, so every card on it gets the same list: with two numbers and
-  // one word like "CVVT", the word is about both of them or about neither.
-  const words = descriptiveWords(q);
-  const results = tokens.slice(0, MAX_CARDS).map((token) => {
-    const parsed = parse(token, hints);
-    return words.length > 0 ? { ...parsed, words } : parsed;
-  });
+  const results = tokens.slice(0, MAX_CARDS).map((token) => parse(token, hints));
   // Only when the message names no number at all. describedPart enforces that itself: with
   // numbers present the machine word stays a hint and nothing new is built.
   const described = describedPart(q);
   if (described !== null) results.push(describedResult(described));
+  const carded = attachWords(q, results);
   const quantities: Record<string, number> = {};
-  for (const result of results) {
+  for (const result of carded) {
     const quantity = quantityFor(q, result.input);
     if (quantity !== null) quantities[partKey(result)] = quantity;
   }
-  return { hints, results, truncated: Math.max(0, tokens.length - MAX_CARDS), quantities };
+  return { hints, results: carded, truncated: Math.max(0, tokens.length - MAX_CARDS), quantities };
 }
 
 export interface PageInput {
