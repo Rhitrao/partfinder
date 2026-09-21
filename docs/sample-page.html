@@ -376,7 +376,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     <footer class="footer">
       <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
     </footer>
-    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"]}</script>
+    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"],"text":{"finding":"Finding suppliers…","unavailable":"Supplier list unavailable right now","verify":"Couldn't verify this browser.","mapUnavailable":"Map unavailable. The list below has everything.","queueHint":"WhatsApp opens one chat at a time. Tap each supplier in turn."},"timeoutMs":15000}</script>
     <script nonce="sample-nonce">
 (function () {
   "use strict";
@@ -385,6 +385,12 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   var data;
   try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
   var parts = data.parts || [];
+  // Every constant this script shows or waits on arrives in that same block rather than being
+  // written into the script body. A property that is missing reads as undefined; a bare name
+  // that is missing throws, which is how this script spent a week not running at all. It is
+  // "words" rather than "text" because make() already takes a parameter by that name.
+  var words = data.text || {};
+  var timeoutMs = data.timeoutMs;
 
   var status = document.getElementById("pf-status");
   var ghosts = document.getElementById("pf-ghosts");
@@ -432,7 +438,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   function again() {
     clearRetry();
     if (!window.turnstile || widgetId === null) return;
-    say("Finding suppliers…");
+    say(words.finding);
     window.turnstile.reset(widgetId);
   }
 
@@ -458,7 +464,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     if (running) return;
     running = true;
     clearRetry();
-    say(FINDING_TEXT);
+    say(words.finding);
     var payload = {
       token: token,
       q: field("q"),
@@ -470,7 +476,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     if (near) payload.near = near;
 
     var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
     var done = function () { clearTimeout(timer); running = false; };
 
     fetch("/parts/api/suppliers", {
@@ -487,19 +493,19 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       handle(body);
     }).catch(function () {
       done();
-      fail("Supplier list unavailable right now", true);
+      fail(words.unavailable, true);
     });
   }
 
   function handle(body) {
-    if (!body || typeof body !== "object") return fail(UNAVAILABLE_TEXT, true);
-    if (body.error === "verify") return fail("Couldn't verify this browser.", true);
+    if (!body || typeof body !== "object") return fail(words.unavailable, true);
+    if (body.error === "verify") return fail(words.verify, true);
     if (body.error === "city") {
       say("Couldn't find " + field("city").trim() + ". Check the spelling.");
       openElsewhere();
       return;
     }
-    if (typeof body.html !== "string") return fail(UNAVAILABLE_TEXT, false);
+    if (typeof body.html !== "string") return fail(words.unavailable, false);
     show(body);
   }
 
@@ -530,7 +536,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       sitekey: widget.getAttribute("data-sitekey") || "",
       appearance: widget.getAttribute("data-appearance") || "interaction-only",
       callback: search,
-      "error-callback": function () { fail(VERIFY_TEXT, true); },
+      "error-callback": function () { fail(words.verify, true); },
       "expired-callback": function () { if (window.turnstile) window.turnstile.reset(widgetId); }
     });
   };
@@ -649,7 +655,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       fit();
       addShowOnMap();
     } catch (e) {
-      if (box) box.textContent = "Map unavailable. The list below has everything.";
+      if (box) box.textContent = words.mapUnavailable;
     }
   }
 
@@ -753,7 +759,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     if (!panel) return;
     panel.textContent = "";
     var head = make("div", "sendhead");
-    head.appendChild(make("p", "hint", "WhatsApp opens one chat at a time. Tap each supplier in turn."));
+    head.appendChild(make("p", "hint", words.queueHint));
     var shut = make("button", "link", "Close");
     shut.type = "button";
     shut.addEventListener("click", closePanel);
