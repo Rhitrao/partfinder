@@ -8,6 +8,15 @@ export type Strength = "distinctive" | "shared";
 export interface FormatRule {
   id: string;
   oem: string;
+  /**
+   * Other manufacturers this same format belongs to, each producing its own candidate.
+   *
+   * One format, several makers, is a real thing rather than a modelling convenience: the 5-5
+   * number is used by Hyundai/Kia and by Toyota alike, and there is nothing in the number to tell
+   * them apart. Splitting it into two rules would say the opposite - that these are two formats
+   * that happen to look the same - and would give the ambiguity two ids to drift between.
+   */
+  alsoOems?: readonly string[];
   /** "typed": match the uppercased token as typed. "compact": match it with separators removed. */
   matchOn: MatchOn;
   regex: RegExp;
@@ -185,6 +194,23 @@ export const RULES: readonly FormatRule[] = [
     suffixes: false,
   },
   {
+    id: "kia-hyundai-toyota-55",
+    oem: "Hyundai / Kia",
+    alsoOems: ["Toyota"],
+    genericVendorQuery: "car spare parts",
+    // Typed, with the dash optional, so 24370-2E000 and 243702E000 are the same reading. Every
+    // other separator is left out on purpose: nobody writes this number with a slash.
+    matchOn: "typed",
+    regex: /^(\d{5})-?([0-9A-Z]{5})$/,
+    canonical: "$1-$2",
+    strength: "shared",
+    alternates: ["$1$2"],
+    note:
+      "5-5 format used by Hyundai/Kia and Toyota; hypothesis. A bare 10-digit token also fits " +
+      "komatsu-325 and komatsu-424, which is reported as ambiguity rather than resolved.",
+    suffixes: false,
+  },
+  {
     id: "volvo-8",
     oem: "Volvo CE",
     genericVendorQuery: "earthmoving spare parts",
@@ -204,7 +230,12 @@ export const RULES: readonly FormatRule[] = [
  * knows that manufacturer.
  */
 export function genericVendorQueryFor(oem: string, rules: readonly FormatRule[] = RULES): string | undefined {
-  return rules.find((r) => r.oem === oem)?.genericVendorQuery;
+  return rules.find((r) => r.oem === oem || (r.alsoOems ?? []).includes(oem))?.genericVendorQuery;
+}
+
+/** Every manufacturer a rule speaks for, the primary one first. */
+export function oemsOf(rule: FormatRule): string[] {
+  return [rule.oem, ...(rule.alsoOems ?? [])];
 }
 
 /** Known suffixes, longest first so WTL is tried before TL. Meanings live in the taxonomy, not here.

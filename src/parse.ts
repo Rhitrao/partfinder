@@ -3,7 +3,7 @@
 // suffix and alternate spellings are all returned.
 
 import { HINT_WORDS } from "./hints";
-import { RULES, SUFFIXES, UNCONFIRMED_SUFFIXES, type FormatRule, type Strength } from "./rules";
+import { RULES, SUFFIXES, UNCONFIRMED_SUFFIXES, oemsOf, type FormatRule, type Strength } from "./rules";
 
 export interface Candidate {
   oem: string;
@@ -210,8 +210,9 @@ interface Ranked extends Candidate {
 }
 
 function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): Candidate[] {
+  const oems = oemsOf(rule);
   if (v.suffix && !rule.suffixes) return [];
-  if (rule.requiresHint && !hints.includes(rule.oem)) return [];
+  if (rule.requiresHint && !oems.some((oem) => hints.includes(oem))) return [];
   const m = rule.regex.exec(rule.matchOn === "typed" ? v.typed : v.compact);
   if (!m) return [];
   let groupSets: (string | undefined)[][] = [[...m]];
@@ -225,18 +226,22 @@ function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): 
   const warnings: string[] = [];
   if (rule.warning) warnings.push(rule.warning);
   if (v.suffix && UNCONFIRMED_SUFFIXES.includes(v.suffix)) warnings.push("suffix meaning unconfirmed");
-  return groupSets.map((groups) => ({
-    oem: rule.oem,
-    canonical: expand(rule.canonical, groups),
-    base: v.compact,
-    ...(v.suffix ? { suffix: v.suffix } : {}),
-    alternates: rule.alternates.map((a) => expand(a, groups)),
-    basis: "T5" as const,
-    ruleId: rule.id,
-    strength: rule.strength,
-    warnings: [...warnings],
-    hintMatched: hints.includes(rule.oem),
-  }));
+  // One candidate per manufacturer the rule speaks for: the same reading, offered under each
+  // name, because the number itself does not say which.
+  return groupSets.flatMap((groups) =>
+    oems.map((oem) => ({
+      oem,
+      canonical: expand(rule.canonical, groups),
+      base: v.compact,
+      ...(v.suffix ? { suffix: v.suffix } : {}),
+      alternates: rule.alternates.map((a) => expand(a, groups)),
+      basis: "T5" as const,
+      ruleId: rule.id,
+      strength: rule.strength,
+      warnings: [...warnings],
+      hintMatched: hints.includes(oem),
+    })),
+  );
 }
 
 /**
