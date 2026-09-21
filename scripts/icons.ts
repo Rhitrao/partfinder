@@ -20,9 +20,10 @@ import { pathToFileURL } from "node:url";
 
 export const ICON_SIZES = [192, 512] as const;
 
-/** Matches theme_color and background_color in the manifest, and the page's theme-color meta. */
-export const ICON_BACKGROUND: readonly [number, number, number] = [0x11, 0x18, 0x27];
-export const ICON_INK: readonly [number, number, number] = [0xf9, 0xfa, 0xfb];
+/** THEME_COLOR_DARK from src/manifest.ts, as bytes: the page's dark background. */
+export const ICON_BACKGROUND: readonly [number, number, number] = [0x11, 0x11, 0x11];
+/** The dark scheme's --text. */
+export const ICON_INK: readonly [number, number, number] = [0xf7, 0xf7, 0xf5];
 
 /** Five by seven cells per letter, one blank column between them. */
 const GLYPHS = [

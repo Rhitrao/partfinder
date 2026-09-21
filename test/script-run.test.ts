@@ -332,6 +332,16 @@ describe("the map, once the crash is out of the way", () => {
     return { app, google };
   }
 
+  it("is pannable with one finger and can be opened full screen", async () => {
+    const { google } = await drawn();
+    const options = google.map.options as Record<string, unknown>;
+    expect(options.gestureHandling).toBe("greedy");
+    expect(options.fullscreenControl).toBe(true);
+    // The two controls that only add chrome to a map this small.
+    expect(options.mapTypeControl).toBe(false);
+    expect(options.streetViewControl).toBe(false);
+  });
+
   it("replaces the placeholder and drops a pin per shop", async () => {
     const { app, google } = await drawn();
     expect(app.byId("pf-map")!.textContent).not.toBe(MAP_UNAVAILABLE);

@@ -5,6 +5,7 @@
 
 import { findDealerLocator } from "../dealers";
 import {
+  anchor,
   escapeHtml,
   mapsUrl,
   partKey,
@@ -70,9 +71,9 @@ export function renderFallback(
       const locator = findDealerLocator(group.oem, country.code);
       return `<div class="group">
           <h3>${escapeHtml(group.oem)}</h3>
-          ${link(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
-          ${link(suppliersUrl(first, country, city), "Search suppliers on Google")}
-          ${locator ? link(locator.url, `Authorised ${group.oem} dealers`) : ""}
+          ${anchor(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
+          ${anchor(suppliersUrl(first, country, city), "Search suppliers on Google")}
+          ${locator ? anchor(locator.url, `Authorised ${group.oem} dealers`) : ""}
         </div>`;
     })
     .join("\n        ");
@@ -151,11 +152,19 @@ export const NO_SCRIPT = "Turn on JavaScript to see suppliers here.";
 const LOCATE_BUTTON =
   `<button type="button" class="locate" id="pf-locate-button" hidden>Use my location</button>`;
 
-/** Grey rows in the shape of the cards that will replace them. Decoration, so hidden from AT. */
+/**
+ * Grey rows in the shape of the cards that will replace them. Decoration, so hidden from AT.
+ *
+ * One bar per line a real shop card has - name, the facts line, the address, the actions row -
+ * at the heights those lines occupy, so the page does not jump when the list arrives. .ghost and
+ * .shop share their border, padding and margin rules in the stylesheet for the same reason.
+ */
 function renderGhosts(): string {
   const row = `<li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>`;
   return `<ol class="ghosts" id="pf-ghosts" aria-hidden="true">
             ${[row, row, row].join("\n            ")}
@@ -190,8 +199,10 @@ export function renderPending(input: PendingInput): string {
     `<div id="pf-list"></div>`,
   ];
   return `<section class="suppliers">
-        <h2>Suppliers near ${escapeHtml(where)}</h2>
-        <p class="status" id="pf-status" aria-live="polite">${escapeHtml(FINDING)}</p>
+        <div class="suphead">
+          <h2>Suppliers near ${escapeHtml(where)}</h2>
+          <p class="status" id="pf-status" aria-live="polite">${escapeHtml(FINDING)}</p>
+        </div>
         ${googleMapsBox(inner.join("\n          "))}
         <div class="turnstile" id="pf-turnstile" data-sitekey="${escapeHtml(siteKey)}"
           data-appearance="interaction-only"></div>
@@ -270,8 +281,9 @@ function openLine(supplier: Supplier): string {
   return `<span class="sopen">${openNow ? "Open now" : "Closed now"}</span>`;
 }
 
+/** Same rule as the page's: a link that leaves the site is marked, one place, for both. */
 function link(href: string, text: string, className = "link"): string {
-  return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+  return anchor(href, text, className);
 }
 
 /** The parts one shop is listed for, in page order. */
@@ -341,10 +353,10 @@ function renderShop(supplier: Supplier, number: number, input: CardsInput): stri
   if (phone.whatsapp !== null) {
     actions.push(link(whatsappUrl(message, phone.whatsapp), WHATSAPP_LABEL, "whatsapp"));
   }
-  if (phone.tel !== null) actions.push(link(`tel:${phone.tel}`, "Call"));
+  if (phone.tel !== null) actions.push(link(`tel:${phone.tel}`, "Call", "link secondary"));
   else actions.push(`<p class="note">No WhatsApp number listed</p>`);
-  if (place.website !== "") actions.push(link(place.website, "Website"));
-  if (place.mapsUri !== "") actions.push(link(place.mapsUri, "Map"));
+  if (place.website !== "") actions.push(link(place.website, "Website", "link secondary"));
+  if (place.mapsUri !== "") actions.push(link(place.mapsUri, "Map", "link secondary"));
   if (phone.whatsapp !== null && matched.length > 0 && matched.length < parts.length) {
     // No JavaScript means no toggle, so the wider message is its own link.
     actions.push(link(whatsappUrl(everything, phone.whatsapp), "WhatsApp: all parts", "noscript-all"));

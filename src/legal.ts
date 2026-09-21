@@ -34,7 +34,7 @@ const LEGAL_STYLE = `
 
 function page(title: string, body: string): string {
   return renderDocument(
-    `<main class="legal">
+    `<main class="legal wrap">
       <h1>${title}</h1>
       ${body}
     </main>`,

@@ -2,220 +2,478 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex">
-    <meta name="theme-color" content="#111827">
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-title" content="Partfinder">
     <link rel="manifest" href="/parts/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/parts/icon-192.png">
     <title>Partfinder</title>
-    <style nonce="sample-nonce">:root { color-scheme: light dark; }
+    <style nonce="sample-nonce">/* ---- Design tokens -----------------------------------------------------------------------
+ * rohitrao.in's own stylesheet could not be read from here - the build environment's egress
+ * proxy refuses the host - so these are the site's light scheme as the step 8 prompt records
+ * it, and they are the single place any colour, radius or step is written down. Dark inverts
+ * background and surface and keeps the accents.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #FFFFFF;
+  --surface: #F7F7F5;
+  --border: #E6E5E1;
+  --text: #111111;
+  --muted: #5B5B57;
+
+  /* The one high-contrast button: black on white, and white on black in the dark scheme. */
+  --btn-bg: #111111;
+  --btn-fg: #FFFFFF;
+  /* WhatsApp's own green, with black text, in both schemes. */
+  --wa-bg: #25D366;
+  --wa-fg: #111111;
+
+  --r: 8px;
+  --r-sm: 6px;
+  --r-pill: 999px;
+
+  --s4: 4px;
+  --s8: 8px;
+  --s12: 12px;
+  --s16: 16px;
+  --s24: 24px;
+  --s32: 32px;
+  --s48: 48px;
+
+  --maxw: 760px;
+  /* Smallest comfortable target, and the floor for every control on the page. */
+  --tap: 44px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111111;
+    --surface: #1B1B19;
+    --border: #33322E;
+    --text: #F7F7F5;
+    --muted: #A5A49E;
+    --btn-bg: #F7F7F5;
+    --btn-fg: #111111;
+  }
+}
+
+/* ---- Base --------------------------------------------------------------------------------- */
 * { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  padding: 1rem;
-  font: 1rem/1.5 system-ui, sans-serif;
-  max-width: 40rem;
+  padding: var(--s24) var(--s16);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
 }
-h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
-h2 { font-size: 1.1rem; margin: 1.5rem 0 .5rem; }
-p { margin: .5rem 0; }
-.lede { margin-bottom: 1.25rem; }
-form { display: flex; flex-direction: column; gap: .35rem; }
-label { font-weight: 600; }
-.ask textarea { min-height: 7rem; }
-.primary { font-size: 1.05rem; padding: .85rem; min-height: 44px; }
-.more { margin-top: .75rem; }
-.more summary { cursor: pointer; font-weight: 600; padding: .4rem 0; min-height: 44px; }
-.more > * { margin-top: .5rem; }
-.how { margin-top: 2.5rem; font-size: .9rem; opacity: .85; }
-.how summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
-:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
-textarea, input, select, button {
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 24px; font-weight: 600; margin: 0 0 var(--s4); letter-spacing: -0.01em; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 var(--s12); }
+h3 { font-size: 14px; font-weight: 600; margin: 0 0 var(--s8); }
+p { margin: var(--s8) 0; }
+a { color: inherit; }
+.muted, .note, .hints, .astyped, .asknote, .grouphint, .unrecognised, .excluded,
+.basis, .strength, .suffix, .sendparts { color: var(--muted); }
+.note, .hints, .astyped, .asknote, .grouphint, .unrecognised, .excluded,
+.basis, .strength, .suffix, .sendparts { font-size: 14px; }
+.lede { color: var(--muted); margin: 0 0 var(--s24); }
+.warn { font-weight: 600; }
+
+/* One visible ring on everything focusable, in the text colour so it reads in both schemes. */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--r-sm); }
+
+/* ---- Controls ----------------------------------------------------------------------------- */
+form { display: flex; flex-direction: column; gap: var(--s4); }
+label { font-weight: 600; font-size: 14px; margin-top: var(--s8); }
+textarea, input, select {
   font: inherit;
   width: 100%;
-  padding: .6rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  background: transparent;
-  color: inherit;
+  min-height: var(--tap);
+  padding: var(--s12);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
 }
-textarea { min-height: 6rem; resize: vertical; }
-button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
-.hints { font-size: .9rem; opacity: .8; }
-.card { border: 1px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1rem 0; }
-.card h2 { margin-top: 0; font-family: ui-monospace, monospace; word-break: break-all; }
-.candidate { border-top: 1px dashed currentColor; padding-top: .6rem; margin-top: .6rem; }
-.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.oem { font-weight: 700; margin: 0; }
-.canonical { font-family: ui-monospace, monospace; margin: .15rem 0; word-break: break-all; }
-.basis, .strength, .suffix { font-size: .9rem; margin: .15rem 0; opacity: .85; }
-.warnings { font-size: .9rem; margin: .35rem 0 0; padding-left: 1.1rem; }
-.narrow { font-size: .9rem; font-weight: 600; margin: .75rem 0 0; }
-.excluded { font-size: .9rem; margin: .75rem 0 0; opacity: .85; }
-.nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
-.answer { margin: 0; }
-.answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
-.group { margin-top: .9rem; }
-.group h3 { font-size: .95rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; }
-.grouphint { font-size: .85rem; opacity: .8; margin: .35rem 0; }
-.link {
-  display: block;
-  margin-top: .4rem;
-  padding: .55rem .8rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  text-decoration: none;
-  color: inherit;
-}
-.search, .whatsapp {
-  display: inline-block;
-  margin-top: .75rem;
-  padding: .55rem .8rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  text-decoration: none;
-  color: inherit;
-}
-.whatsapp { display: block; text-align: center; font-weight: 700; margin: 1.25rem 0; }
-.send { margin-top: 2rem; }
-.send h2 { margin-bottom: .75rem; }
-.send label { display: block; margin-top: .75rem; font-weight: 600; }
-.send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
-.suppliers { margin-top: 2rem; }
-.gmaps { border: 2px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1.25rem 0; }
-.gmaps > :first-child { margin-top: 0; }
-.caveat { font-weight: 600; }
-.attribution { font-size: .9rem; font-weight: 600; margin: 1rem 0 0; }
-.shops { list-style: none; margin: 1rem 0 0; padding: 0; }
-.shop { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
-.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.sname { font-weight: 700; margin: 0; }
-.saddr, .sfound, .scount, .srating { font-size: .9rem; margin: .15rem 0; opacity: .85; }
-.sphone { font-family: ui-monospace, monospace; margin: .35rem 0 .15rem; }
-.shop .whatsapp { margin: .4rem 0 0; }
-.shop .link { margin-top: .4rem; }
-.sfacts { font-size: .9rem; margin: .15rem 0; }
-.sask { font-size: .9rem; margin: .5rem 0 .25rem; font-weight: 600; }
-.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.chip {
-  display: inline-block;
-  border: 1px solid currentColor;
-  border-radius: 1rem;
-  padding: .3rem .7rem;
-  font-size: .9rem;
-  text-decoration: none;
-  color: inherit;
-  min-height: 34px;
-}
-a.chip { min-height: 44px; padding: .6rem .9rem; }
-.actions { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
-.actions .link, .actions .whatsapp { margin: 0; min-height: 44px; }
-.select {
-  display: block;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  padding: .6rem .8rem;
-  min-height: 44px;
+textarea { min-height: 7rem; resize: vertical; line-height: 1.5; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: var(--tap);
+  padding: var(--s12) var(--s16);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
 }
-.select input { width: auto; margin-right: .5rem; }
-.pin {
+.primary {
+  width: 100%;
+  margin-top: var(--s16);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+  font-size: 16px;
+}
+.secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+
+/* A link that looks like a button: the link-outs, the shop actions, the dealer locators. */
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s8) var(--s12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  text-decoration: none;
+  color: var(--text);
+}
+.whatsapp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s12) var(--s16);
+  background: var(--wa-bg);
+  color: var(--wa-fg);
+  border: 1px solid var(--wa-bg);
+  border-radius: var(--r);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* The mark on every link that leaves this site. Decorative: the label already says where. */
+.ext { font-size: 0.85em; line-height: 1; }
+
+details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+}
+.more { margin-top: var(--s12); }
+.more > * { margin-top: var(--s8); }
+.how { margin-top: var(--s48); color: var(--muted); font-size: 14px; }
+.check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
+.check > .link { display: flex; margin-top: var(--s8); }
+h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
+.fitment { margin: var(--s8) 0 var(--s12); }
+.fitment summary { font-size: 14px; font-weight: 600; }
+.fitgroup h4 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.machines { font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0; }
+.fitnote { font-size: 13px; color: var(--muted); margin: var(--s12) 0 0; }
+/* A link inside a sentence, not a button like the link-outs around it. */
+.link.inline {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+}
+.elsewhere { margin-top: var(--s16); }
+
+/* ---- Part cards --------------------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s16);
+  margin: var(--s12) 0;
+}
+.number {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  word-break: break-all;
+}
+.maker { font-weight: 600; margin: var(--s8) 0 var(--s4); }
+.badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 2px var(--s8);
+  white-space: nowrap;
+}
+.tag {
   display: inline-block;
-  min-width: 1.6rem;
-  text-align: center;
-  border: 1px solid currentColor;
-  border-radius: .3rem;
-  margin-right: .4rem;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px var(--s8);
+  margin: var(--s4) 0;
 }
-.number { font-size: 1.5rem; font-weight: 700; font-family: ui-monospace, monospace; margin: 0; }
-.astyped, .asknote { font-size: .85rem; opacity: .8; margin: .1rem 0; }
-.tag { display: inline-block; border: 1px solid currentColor; border-radius: .3rem;
-  padding: .1rem .4rem; font-size: .85rem; margin: .3rem 0; }
-.maker { font-weight: 600; margin: .35rem 0 .2rem; }
-.badge { font-size: .75rem; font-weight: 400; border: 1px solid currentColor;
-  border-radius: .3rem; padding: .1rem .35rem; opacity: .85; }
-.qty { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 .25rem; }
-.qtyinput { width: 5rem; min-height: 44px; }
-.update { margin-top: .5rem; min-height: 44px; }
-.unrecognised { font-size: .9rem; opacity: .85; }
-.check summary { cursor: pointer; font-size: .9rem; padding: .5rem 0; min-height: 44px; }
-.signin { font-weight: 600; }
-.filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s8) 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: var(--s4) var(--s12);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+a.chip, button.chip { min-height: var(--tap); }
+.caveat { font-size: 14px; color: var(--muted); }
+.qty { display: flex; align-items: center; gap: var(--s12); margin: var(--s12) 0 0; }
+.qty label { margin: 0; font-weight: 500; color: var(--muted); }
+.qtyinput { width: 72px; flex: none; text-align: center; }
+/* A correction, not the main action: small, secondary, and only as wide as its label. */
+.update { align-self: flex-start; min-height: 36px; padding: var(--s8) var(--s16); font-size: 14px; }
+.nothing { font-weight: 600; text-align: center; margin: var(--s24) 0; }
+.candidate { border-top: 1px solid var(--border); padding-top: var(--s12); margin-top: var(--s12); }
+.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.oem { font-weight: 600; margin: 0; }
+.canonical { font-family: var(--mono); margin: var(--s4) 0; word-break: break-all; }
+.warnings { font-size: 14px; margin: var(--s8) 0 0; padding-left: var(--s16); color: var(--muted); }
+.narrow { font-size: 14px; font-weight: 600; margin: var(--s12) 0 0; }
+.answer { margin: 0; }
+.answer .reason { font-size: 14px; color: var(--muted); margin: var(--s4) 0 0; }
+
+/* ---- Link-out groups ------------------------------------------------------------------------ */
+.group { margin-top: var(--s16); }
+.group h3 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.group .link { display: flex; margin-top: var(--s8); }
+
+/* ---- Suppliers ------------------------------------------------------------------------------ */
+.suppliers { margin-top: var(--s32); }
+.gmaps {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s12);
+  margin: var(--s16) 0;
+  background: var(--surface);
+}
+.gmaps > :first-child { margin-top: 0; }
+.attribution { font-size: 12px; font-weight: 600; color: var(--muted); margin: var(--s12) 0 0; }
+.shops { list-style: none; margin: var(--s16) 0 0; padding: 0; }
+.shop {
+  border-top: 1px solid var(--border);
+  padding-top: var(--s16);
+  margin-top: var(--s16);
+}
+.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.shop.here { outline: 2px solid var(--text); outline-offset: 4px; border-radius: var(--r); }
+.suphead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s8) var(--s12);
+}
+.suphead h2 { margin: 0; }
+/* The count is an aside to the heading, not an announcement of its own. */
+.status { font-size: 14px; color: var(--muted); font-weight: 500; margin: 0; }
+.sname { font-size: 17px; font-weight: 600; margin: 0; }
+.pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  margin-right: var(--s8);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sfacts, .saddr { font-size: 14px; color: var(--muted); margin: var(--s4) 0; }
+/* An address is for recognising a place, not reading in full; two lines is enough to do that. */
+.saddr {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sask { font-size: 14px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--s8); margin-top: var(--s12); }
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s8) var(--s12);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+  cursor: pointer;
+}
+.select input { width: auto; min-height: 0; margin: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
 .filters:empty { display: none; }
-.filter { cursor: pointer; }
-.filter[aria-pressed="true"] { font-weight: 700; outline: 2px solid currentColor; }
-.locate { margin-top: .5rem; min-height: 44px; }
-.status { font-weight: 600; margin: .75rem 0 0; }
-.ghosts { list-style: none; margin: 1rem 0 0; padding: 0; }
-.ghosts[hidden] { display: none; }
-.ghost { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
-.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.ghostbar {
-  display: block;
-  height: 1rem;
-  margin: .4rem 0;
-  border-radius: .3rem;
-  background: currentColor;
-  opacity: .15;
-}
-.ghostbar.short { width: 45%; }
+.filter { cursor: pointer; background: var(--bg); }
+.filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
 .turnstile:empty { display: none; }
-.elsewhere { margin-top: 1rem; }
-.elsewhere summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
-.retry { margin-top: .5rem; min-height: 44px; }
-.shop.here { outline: 3px solid currentColor; outline-offset: 3px; }
+.locate, .retry { margin-top: var(--s12); }
+
+/* ---- Other ways to send --------------------------------------------------------------------- */
+.send { margin-top: var(--s32); }
+.send textarea { min-height: 0; font-size: 14px; }
 .sendbar {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  padding: .6rem 1rem;
-  background: Canvas;
-  border-top: 2px solid currentColor;
+  padding: var(--s12) var(--s16);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
-.sendbar[hidden] { display: none; }
+.sendbar[hidden], .sendpanel[hidden] { display: none; }
+.sendbar .primary { margin-top: 0; }
 .sendpanel {
   position: fixed;
   inset: auto 0 0 0;
   max-height: 80vh;
   overflow: auto;
-  padding: 1rem;
-  background: Canvas;
-  border-top: 2px solid currentColor;
+  padding: var(--s16);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
-.sendpanel[hidden] { display: none; }
-.sendrow { border-top: 1px solid currentColor; padding: .75rem 0; }
-.sendrow.done { opacity: .6; }
-.sendrow.next { outline: 2px dashed currentColor; outline-offset: 2px; }
-.sendparts { font-size: .9rem; opacity: .85; margin: .15rem 0; }
+.sendhead { display: flex; align-items: center; justify-content: space-between; gap: var(--s16); }
+.sendrow { border-top: 1px solid var(--border); padding: var(--s16) 0; }
+.sendrow.done { opacity: 0.55; }
+.sendrow.next { outline: 2px dashed var(--border); outline-offset: 4px; }
 .sr-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-/* The send bar is fixed, so the last card needs room to clear it. */
-body { padding-bottom: 5rem; }
+
+/* ---- The map --------------------------------------------------------------------------------- */
 .map {
-  height: 260px;
-  margin-top: 1rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
+  height: 220px;
+  margin-top: var(--s12);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: .9rem;
-  padding: .5rem;
+  font-size: 14px;
+  color: var(--muted);
+  padding: var(--s8);
 }
-@media (min-width: 40rem) { .map { height: 340px; } }
-.warn { font-weight: 600; }
-.notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
-.footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }
-.footer a { color: inherit; }
-.note { font-size: .9rem; opacity: .85; }
-@media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }</style>
+
+/* ---- Placeholders ----------------------------------------------------------------------------- */
+.ghosts { list-style: none; margin: var(--s16) 0 0; padding: 0; }
+.ghosts[hidden] { display: none; }
+.ghost { border-top: 1px solid var(--border); padding-top: var(--s16); margin-top: var(--s16); }
+.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.ghostbar {
+  display: block;
+  height: 14px;
+  margin: var(--s8) 0;
+  border-radius: var(--r-sm);
+  background: var(--border);
+}
+.ghostbar.short { width: 45%; }
+/* Shaped like the card that replaces it: a 17px name, then the two muted lines, then the
+ * actions row, at the heights those occupy. Nothing moves when the real list arrives. */
+.ghostbar.name { height: 17px; width: 70%; }
+.ghostbar.actions { height: var(--tap); margin-top: var(--s12); border-radius: var(--r); }
+
+/* ---- Footer ------------------------------------------------------------------------------------ */
+.notes { font-size: 14px; color: var(--muted); margin-top: var(--s32); }
+.footer {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: var(--s48);
+  padding-top: var(--s16);
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Layout ------------------------------------------------------------------------------------
+ * Mobile first: one column, 16px of side padding, capped at 760px and centred. The second column
+ * arrives at 960px and only when there is something to put in it - an empty right half would just
+ * squeeze the form to half width on a page that has not been searched yet.
+ */
+.wrap { max-width: var(--maxw); margin: 0 auto; }
+.cols { display: grid; gap: var(--s32); }
+.col { min-width: 0; }
+
+/* One column's width at the two-column breakpoint. The send bar is fixed, so it cannot inherit
+ * the grid's geometry and has to be told it. */
+:root {
+  --col-w: calc((min(100vw - (2 * var(--s16)), var(--maxw)) - var(--s32)) / 2);
+  /* The fixed send bar's height, which is also the room the page leaves under its last card. */
+  --bar-h: 72px;
+}
+
+@media (min-width: 960px) {
+  /*
+   * The measure widens with the second column. 760px is right for one column of prose; split in
+   * two it leaves 364px a side, which is not enough for a supplier card's actions without them
+   * wrapping three deep.
+   *
+   * This redefines --maxw rather than setting .wrap's max-width directly, because --col-w is
+   * derived from --maxw and the send bar is derived from --col-w. Widening only .wrap would
+   * leave a 364px bar under a 534px column.
+   */
+  :root { --maxw: 1100px; }
+
+  .cols.two { grid-template-columns: 1fr 1fr; align-items: start; }
+  /*
+   * The left column sticks while it is shorter than the viewport, and scrolls with the page once
+   * it is taller - which is what position: sticky does on its own, given align-self: start. CSS
+   * has no way to ask how tall the column's content is, so this is the behaviour rather than the
+   * measurement.
+   */
+  .cols.two > .left { position: sticky; top: var(--s16); align-self: start; }
+  /* Fixed, so it cannot sit inside the column; placed over it instead, to the pixel. */
+  .sendbar, .sendpanel {
+    left: calc(50% + (var(--s32) / 2));
+    right: auto;
+    width: var(--col-w);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--r) var(--r) 0 0;
+  }
+}
+
+/* The map: a strip on a phone, taller on a tablet, and as much of its column as it can have on a
+ * desktop, up to 480px. */
+@media (min-width: 700px) { .map { height: 320px; } }
+@media (min-width: 960px) { .map { height: clamp(320px, 52vh, 480px); } }
+
+/*
+ * Safe areas. The viewport meta carries viewport-fit=cover so that env() is not simply zero,
+ * which means the page now reaches under a notch and has to hold its own gutters back out of it.
+ */
+body {
+  padding-left: max(var(--s16), env(safe-area-inset-left));
+  padding-right: max(var(--s16), env(safe-area-inset-right));
+  /* Exactly the bar's height, so a fixed bar never covers the last card. */
+  padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
+}
+.sendbar { padding-bottom: calc(var(--s12) + env(safe-area-inset-bottom)); }
+.sendpanel { padding-bottom: calc(var(--s16) + env(safe-area-inset-bottom)); }</style>
   </head>
   <body>
-    <main>
+    <main class="wrap">
       <h1>Partfinder</h1>
       <p class="lede">Paste a customer's message. Get the parts, nearby suppliers, and ready
       WhatsApp messages.</p>
-      <form method="GET" action="/parts/" class="ask">
+      <div class="cols two">
+        <div class="col left">
+          <form method="GET" action="/parts/" class="ask">
       <label for="q">Paste a WhatsApp message or part numbers</label>
       <textarea id="q" name="q" rows="5" autofocus
         placeholder="Paste a WhatsApp message or part numbers">need 1u3352 and 40/300893 for JCB 3CX</textarea>
@@ -240,62 +498,90 @@ body { padding-bottom: 5rem; }
         <label for="note">Note for suppliers</label>
         <input id="note" name="note" type="text" value="Qty 4" placeholder="e.g. urgent, need by Friday">
       </details>
-      <section class="parts">
+          <section class="parts">
         <h2>Parts</h2>
         <section class="card">
           <p class="number">1U-3352</p>
           <p class="astyped">as typed: 1U3352</p>
           <p class="maker">Caterpillar <span class="badge">format match</span></p>
           <p class="qty">
-            <label for="qty-0">Qty not given</label>
+            <label for="qty-0">Qty</label>
             <input id="qty-0" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
               name="qty_1U-3352" value=""
-              aria-label="Quantity for 1U-3352">
+              placeholder="Qty" aria-label="Quantity for 1U-3352">
           </p>
           <details class="check">
           <summary>Check this part</summary>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch">See images</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models">Which machines it fits</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search Google</a>
+          <details class="fitment">
+            <summary>Commonly fitted to (52 machines)</summary>
+            <div class="fitgroup">
+              <h4>Excavators</h4>
+              <p class="machines">213B, 214B, 215B, 224B, 225, 229, 245, 318B, 318C, 320, 320B, 320C, 320D, 320D2, 320E, 321D LCR, 322, 322B, 322C, 323D L, 324D, 325, 325B, 325C, 330, 330B L, E200B, E240, E240C, EL240B</p>
+            </div>
+            <div class="fitgroup">
+              <h4>Wheel loaders</h4>
+              <p class="machines">950B, 950F, 950G, 960F, 962G, 966D, 966F, 966G, 966H, 966K, 970F, 972G, 972H, 980C, 980F</p>
+            </div>
+            <div class="fitgroup">
+              <h4>Track loaders and other</h4>
+              <p class="machines">963B, 963C, 973, 973C, 227, 633E, M322C</p>
+            </div>
+            <p class="fitnote">Compiled from aftermarket seller listings, not Caterpillar&#39;s own catalogue. Lists vary between sellers.
+              Source: <a class="link inline" href="https://www.romacparts.com/1u3352-teeth.html" rel="noopener">romacparts.com <span class="ext" aria-hidden="true">&#8599;</span></a>, checked 2026-09-18.</p>
+          </details>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch" rel="noopener">See images <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models" rel="noopener">Which machines it fits <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22" rel="noopener">Search Google <span class="ext" aria-hidden="true">&#8599;</span></a>
         </details>
         </section>
         <section class="card">
           <p class="number">40/300893</p>
           <p class="maker">JCB <span class="badge">format match</span></p>
           <p class="qty">
-            <label for="qty-1">Qty not given</label>
+            <label for="qty-1">Qty</label>
             <input id="qty-1" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
               name="qty_40/300893" value=""
-              aria-label="Quantity for 40/300893">
+              placeholder="Qty" aria-label="Quantity for 40/300893">
           </p>
           <details class="check">
           <summary>Check this part</summary>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch">See images</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models">Which machines it fits</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search Google</a>
+          
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch" rel="noopener">See images <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models" rel="noopener">Which machines it fits <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22" rel="noopener">Search Google <span class="ext" aria-hidden="true">&#8599;</span></a>
         </details>
         </section>
+        <button type="submit" class="update secondary">Update</button>
         <p class="caveat">Manufacturer matched from the number's format, not confirmed. Suppliers confirm fitment.</p>
-        <button type="submit" class="update">Update quantities</button>
       </section>
-      </form>
-      <section class="suppliers">
-        <h2>Suppliers near Bengaluru</h2>
-        <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+          </form>
+        </div>
+        <div class="col right">
+          <section class="suppliers">
+        <div class="suphead">
+          <h2>Suppliers near Bengaluru</h2>
+          <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+        </div>
         <section class="gmaps" aria-label="Google Maps">
           <div class="map" id="pf-map">Map unavailable. The list below has everything.</div>
           <ol class="ghosts" id="pf-ghosts" aria-hidden="true">
             <li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>
             <li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>
             <li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>
           </ol>
           <div id="pf-list"></div>
@@ -308,14 +594,14 @@ body { padding-bottom: 5rem; }
           <p class="warn">Turn on JavaScript to see suppliers here.</p>
           <div class="group">
           <h3>Caterpillar</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India" rel="noopener">Caterpillar parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         <div class="group">
           <h3>JCB</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India" rel="noopener">JCB parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         </noscript>
@@ -323,19 +609,19 @@ body { padding-bottom: 5rem; }
           <summary>Search on Google instead</summary>
           <div class="group">
           <h3>Caterpillar</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India" rel="noopener">Caterpillar parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         <div class="group">
           <h3>JCB</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India" rel="noopener">JCB parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         </details>
       </section>
-      <details class="send">
+          <details class="send">
         <summary>Other ways to send</summary>
         <label for="message">The message</label>
         <textarea id="message" rows="8" readonly>Hi,
@@ -345,8 +631,8 @@ We have a requirement for:
 Note: Qty 4
 Please share availability, price and delivery time.
 Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
-        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Open WhatsApp chat with +91 9876543210</a>
-        <a class="link" href="https://wa.me/?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Pick a contact in WhatsApp</a>
+        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893" rel="noopener">Open WhatsApp chat with +91 9876543210 <span class="ext" aria-hidden="true">&#8599;</span></a>
+        <a class="link" href="https://wa.me/?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893" rel="noopener">Pick a contact in WhatsApp <span class="ext" aria-hidden="true">&#8599;</span></a>
         <a class="link" href="mailto:?subject=Requirement%3A%201U3352%2C%2040%2F300893&amp;body=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send by email</a>
         <form method="GET" action="/parts/" class="toform">
           <input type="hidden" name="q" value="need 1u3352 and 40/300893 for JCB 3CX">
@@ -360,6 +646,8 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
           <button type="submit">Prepare message</button>
         </form>
       </details>
+        </div>
+      </div>
       <details class="how">
         <summary>How it works</summary>
         <p>Partfinder reads each number and matches it against manufacturers' known numbering
@@ -632,10 +920,19 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       placed = [];
       if (!gmap) {
         box.textContent = "";
+        // greedy: one finger pans and pinch zooms, without the "use two fingers" overlay. The
+        // map is the only thing on this page worth zooming into, and it sits inside its own
+        // bordered box rather than under the scroll, so it is not stealing a gesture the page
+        // needs. Full screen is the rest of it: a 220px strip on a phone is for orientation,
+        // and looking properly means filling the screen.
         gmap = new maps.Map(box, {
           mapId: "DEMO_MAP_ID",
           zoom: 12,
-          center: { lat: pins[0].lat, lng: pins[0].lng }
+          center: { lat: pins[0].lat, lng: pins[0].lng },
+          gestureHandling: "greedy",
+          fullscreenControl: true,
+          mapTypeControl: false,
+          streetViewControl: false
         });
       }
       pins.forEach(function (pin) {
@@ -803,7 +1100,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
 
       var action;
       if (shop.waMatched || shop.waAll) {
-        action = make("a", "whatsapp", "Open WhatsApp");
+        action = make("a", "whatsapp", "Open WhatsApp ↗");
         action.target = "_blank";
         action.rel = "noopener";
         action.addEventListener("click", function () {

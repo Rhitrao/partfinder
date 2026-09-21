@@ -23,9 +23,13 @@ function unescapeHtml(text: string): string {
     .replaceAll("&amp;", "&");
 }
 
-/** The href of the link whose visible text is exactly this. */
+/**
+ * The href of the link whose visible text is exactly this. The external mark, where there is
+ * one, sits between the label and </a>, so the pattern allows for it.
+ */
 function linkByText(html: string, text: string): string | undefined {
-  const found = html.match(new RegExp(`href="([^"]*)"[^>]*>${text}<`))?.[1];
+  const mark = `(?: <span class="ext"[^>]*>[^<]*</span>)?`;
+  const found = html.match(new RegExp(`href="([^"]*)"[^>]*>${text}${mark}<`))?.[1];
   return found === undefined ? undefined : unescapeHtml(found);
 }
 

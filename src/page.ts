@@ -3,7 +3,8 @@
 // stored or logged. Every piece of user input is HTML-escaped wherever it appears.
 
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
-import { THEME_COLOR } from "./manifest";
+import { findFitment, machineCount, sourceLabel, type Fitment } from "./fitments";
+import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "./manifest";
 import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
 import { quantityFor } from "./quantity";
 
@@ -260,206 +261,461 @@ export function mailtoUrl(subject: string, message: string): string {
 
 
 const STYLE = `
-:root { color-scheme: light dark; }
+/* ---- Design tokens -----------------------------------------------------------------------
+ * rohitrao.in's own stylesheet could not be read from here - the build environment's egress
+ * proxy refuses the host - so these are the site's light scheme as the step 8 prompt records
+ * it, and they are the single place any colour, radius or step is written down. Dark inverts
+ * background and surface and keeps the accents.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #FFFFFF;
+  --surface: #F7F7F5;
+  --border: #E6E5E1;
+  --text: #111111;
+  --muted: #5B5B57;
+
+  /* The one high-contrast button: black on white, and white on black in the dark scheme. */
+  --btn-bg: #111111;
+  --btn-fg: #FFFFFF;
+  /* WhatsApp's own green, with black text, in both schemes. */
+  --wa-bg: #25D366;
+  --wa-fg: #111111;
+
+  --r: 8px;
+  --r-sm: 6px;
+  --r-pill: 999px;
+
+  --s4: 4px;
+  --s8: 8px;
+  --s12: 12px;
+  --s16: 16px;
+  --s24: 24px;
+  --s32: 32px;
+  --s48: 48px;
+
+  --maxw: 760px;
+  /* Smallest comfortable target, and the floor for every control on the page. */
+  --tap: 44px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111111;
+    --surface: #1B1B19;
+    --border: #33322E;
+    --text: #F7F7F5;
+    --muted: #A5A49E;
+    --btn-bg: #F7F7F5;
+    --btn-fg: #111111;
+  }
+}
+
+/* ---- Base --------------------------------------------------------------------------------- */
 * { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  padding: 1rem;
-  font: 1rem/1.5 system-ui, sans-serif;
-  max-width: 40rem;
+  padding: var(--s24) var(--s16);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
 }
-h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
-h2 { font-size: 1.1rem; margin: 1.5rem 0 .5rem; }
-p { margin: .5rem 0; }
-.lede { margin-bottom: 1.25rem; }
-form { display: flex; flex-direction: column; gap: .35rem; }
-label { font-weight: 600; }
-.ask textarea { min-height: 7rem; }
-.primary { font-size: 1.05rem; padding: .85rem; min-height: 44px; }
-.more { margin-top: .75rem; }
-.more summary { cursor: pointer; font-weight: 600; padding: .4rem 0; min-height: 44px; }
-.more > * { margin-top: .5rem; }
-.how { margin-top: 2.5rem; font-size: .9rem; opacity: .85; }
-.how summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
-:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
-textarea, input, select, button {
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 24px; font-weight: 600; margin: 0 0 var(--s4); letter-spacing: -0.01em; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 var(--s12); }
+h3 { font-size: 14px; font-weight: 600; margin: 0 0 var(--s8); }
+p { margin: var(--s8) 0; }
+a { color: inherit; }
+.muted, .note, .hints, .astyped, .asknote, .grouphint, .unrecognised, .excluded,
+.basis, .strength, .suffix, .sendparts { color: var(--muted); }
+.note, .hints, .astyped, .asknote, .grouphint, .unrecognised, .excluded,
+.basis, .strength, .suffix, .sendparts { font-size: 14px; }
+.lede { color: var(--muted); margin: 0 0 var(--s24); }
+.warn { font-weight: 600; }
+
+/* One visible ring on everything focusable, in the text colour so it reads in both schemes. */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--r-sm); }
+
+/* ---- Controls ----------------------------------------------------------------------------- */
+form { display: flex; flex-direction: column; gap: var(--s4); }
+label { font-weight: 600; font-size: 14px; margin-top: var(--s8); }
+textarea, input, select {
   font: inherit;
   width: 100%;
-  padding: .6rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  background: transparent;
-  color: inherit;
+  min-height: var(--tap);
+  padding: var(--s12);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
 }
-textarea { min-height: 6rem; resize: vertical; }
-button { margin-top: .75rem; font-weight: 700; cursor: pointer; }
-.hints { font-size: .9rem; opacity: .8; }
-.card { border: 1px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1rem 0; }
-.card h2 { margin-top: 0; font-family: ui-monospace, monospace; word-break: break-all; }
-.candidate { border-top: 1px dashed currentColor; padding-top: .6rem; margin-top: .6rem; }
-.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.oem { font-weight: 700; margin: 0; }
-.canonical { font-family: ui-monospace, monospace; margin: .15rem 0; word-break: break-all; }
-.basis, .strength, .suffix { font-size: .9rem; margin: .15rem 0; opacity: .85; }
-.warnings { font-size: .9rem; margin: .35rem 0 0; padding-left: 1.1rem; }
-.narrow { font-size: .9rem; font-weight: 600; margin: .75rem 0 0; }
-.excluded { font-size: .9rem; margin: .75rem 0 0; opacity: .85; }
-.nothing { text-align: center; font-weight: 700; margin: 1.25rem 0; }
-.answer { margin: 0; }
-.answer .reason { font-size: .9rem; opacity: .85; margin: .15rem 0 0; }
-.group { margin-top: .9rem; }
-.group h3 { font-size: .95rem; margin: 0 0 .4rem; text-transform: uppercase; letter-spacing: .04em; }
-.grouphint { font-size: .85rem; opacity: .8; margin: .35rem 0; }
-.link {
-  display: block;
-  margin-top: .4rem;
-  padding: .55rem .8rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  text-decoration: none;
-  color: inherit;
-}
-.search, .whatsapp {
-  display: inline-block;
-  margin-top: .75rem;
-  padding: .55rem .8rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  text-decoration: none;
-  color: inherit;
-}
-.whatsapp { display: block; text-align: center; font-weight: 700; margin: 1.25rem 0; }
-.send { margin-top: 2rem; }
-.send h2 { margin-bottom: .75rem; }
-.send label { display: block; margin-top: .75rem; font-weight: 600; }
-.send textarea { min-height: 0; margin-top: .35rem; font-size: .95rem; }
-.suppliers { margin-top: 2rem; }
-.gmaps { border: 2px solid currentColor; border-radius: .5rem; padding: .75rem; margin: 1.25rem 0; }
-.gmaps > :first-child { margin-top: 0; }
-.caveat { font-weight: 600; }
-.attribution { font-size: .9rem; font-weight: 600; margin: 1rem 0 0; }
-.shops { list-style: none; margin: 1rem 0 0; padding: 0; }
-.shop { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
-.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.sname { font-weight: 700; margin: 0; }
-.saddr, .sfound, .scount, .srating { font-size: .9rem; margin: .15rem 0; opacity: .85; }
-.sphone { font-family: ui-monospace, monospace; margin: .35rem 0 .15rem; }
-.shop .whatsapp { margin: .4rem 0 0; }
-.shop .link { margin-top: .4rem; }
-.sfacts { font-size: .9rem; margin: .15rem 0; }
-.sask { font-size: .9rem; margin: .5rem 0 .25rem; font-weight: 600; }
-.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.chip {
-  display: inline-block;
-  border: 1px solid currentColor;
-  border-radius: 1rem;
-  padding: .3rem .7rem;
-  font-size: .9rem;
-  text-decoration: none;
-  color: inherit;
-  min-height: 34px;
-}
-a.chip { min-height: 44px; padding: .6rem .9rem; }
-.actions { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
-.actions .link, .actions .whatsapp { margin: 0; min-height: 44px; }
-.select {
-  display: block;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
-  padding: .6rem .8rem;
-  min-height: 44px;
+textarea { min-height: 7rem; resize: vertical; line-height: 1.5; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: var(--tap);
+  padding: var(--s12) var(--s16);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
 }
-.select input { width: auto; margin-right: .5rem; }
-.pin {
+.primary {
+  width: 100%;
+  margin-top: var(--s16);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+  font-size: 16px;
+}
+.secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+
+/* A link that looks like a button: the link-outs, the shop actions, the dealer locators. */
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s8) var(--s12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  text-decoration: none;
+  color: var(--text);
+}
+.whatsapp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s12) var(--s16);
+  background: var(--wa-bg);
+  color: var(--wa-fg);
+  border: 1px solid var(--wa-bg);
+  border-radius: var(--r);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* The mark on every link that leaves this site. Decorative: the label already says where. */
+.ext { font-size: 0.85em; line-height: 1; }
+
+details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+}
+.more { margin-top: var(--s12); }
+.more > * { margin-top: var(--s8); }
+.how { margin-top: var(--s48); color: var(--muted); font-size: 14px; }
+.check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
+.check > .link { display: flex; margin-top: var(--s8); }
+h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
+.fitment { margin: var(--s8) 0 var(--s12); }
+.fitment summary { font-size: 14px; font-weight: 600; }
+.fitgroup h4 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.machines { font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0; }
+.fitnote { font-size: 13px; color: var(--muted); margin: var(--s12) 0 0; }
+/* A link inside a sentence, not a button like the link-outs around it. */
+.link.inline {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+}
+.elsewhere { margin-top: var(--s16); }
+
+/* ---- Part cards --------------------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s16);
+  margin: var(--s12) 0;
+}
+.number {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  word-break: break-all;
+}
+.maker { font-weight: 600; margin: var(--s8) 0 var(--s4); }
+.badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 2px var(--s8);
+  white-space: nowrap;
+}
+.tag {
   display: inline-block;
-  min-width: 1.6rem;
-  text-align: center;
-  border: 1px solid currentColor;
-  border-radius: .3rem;
-  margin-right: .4rem;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px var(--s8);
+  margin: var(--s4) 0;
 }
-.number { font-size: 1.5rem; font-weight: 700; font-family: ui-monospace, monospace; margin: 0; }
-.astyped, .asknote { font-size: .85rem; opacity: .8; margin: .1rem 0; }
-.tag { display: inline-block; border: 1px solid currentColor; border-radius: .3rem;
-  padding: .1rem .4rem; font-size: .85rem; margin: .3rem 0; }
-.maker { font-weight: 600; margin: .35rem 0 .2rem; }
-.badge { font-size: .75rem; font-weight: 400; border: 1px solid currentColor;
-  border-radius: .3rem; padding: .1rem .35rem; opacity: .85; }
-.qty { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 .25rem; }
-.qtyinput { width: 5rem; min-height: 44px; }
-.update { margin-top: .5rem; min-height: 44px; }
-.unrecognised { font-size: .9rem; opacity: .85; }
-.check summary { cursor: pointer; font-size: .9rem; padding: .5rem 0; min-height: 44px; }
-.signin { font-weight: 600; }
-.filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s8) 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: var(--s4) var(--s12);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+a.chip, button.chip { min-height: var(--tap); }
+.caveat { font-size: 14px; color: var(--muted); }
+.qty { display: flex; align-items: center; gap: var(--s12); margin: var(--s12) 0 0; }
+.qty label { margin: 0; font-weight: 500; color: var(--muted); }
+.qtyinput { width: 72px; flex: none; text-align: center; }
+/* A correction, not the main action: small, secondary, and only as wide as its label. */
+.update { align-self: flex-start; min-height: 36px; padding: var(--s8) var(--s16); font-size: 14px; }
+.nothing { font-weight: 600; text-align: center; margin: var(--s24) 0; }
+.candidate { border-top: 1px solid var(--border); padding-top: var(--s12); margin-top: var(--s12); }
+.candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.oem { font-weight: 600; margin: 0; }
+.canonical { font-family: var(--mono); margin: var(--s4) 0; word-break: break-all; }
+.warnings { font-size: 14px; margin: var(--s8) 0 0; padding-left: var(--s16); color: var(--muted); }
+.narrow { font-size: 14px; font-weight: 600; margin: var(--s12) 0 0; }
+.answer { margin: 0; }
+.answer .reason { font-size: 14px; color: var(--muted); margin: var(--s4) 0 0; }
+
+/* ---- Link-out groups ------------------------------------------------------------------------ */
+.group { margin-top: var(--s16); }
+.group h3 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.group .link { display: flex; margin-top: var(--s8); }
+
+/* ---- Suppliers ------------------------------------------------------------------------------ */
+.suppliers { margin-top: var(--s32); }
+.gmaps {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s12);
+  margin: var(--s16) 0;
+  background: var(--surface);
+}
+.gmaps > :first-child { margin-top: 0; }
+.attribution { font-size: 12px; font-weight: 600; color: var(--muted); margin: var(--s12) 0 0; }
+.shops { list-style: none; margin: var(--s16) 0 0; padding: 0; }
+.shop {
+  border-top: 1px solid var(--border);
+  padding-top: var(--s16);
+  margin-top: var(--s16);
+}
+.shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.shop.here { outline: 2px solid var(--text); outline-offset: 4px; border-radius: var(--r); }
+.suphead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s8) var(--s12);
+}
+.suphead h2 { margin: 0; }
+/* The count is an aside to the heading, not an announcement of its own. */
+.status { font-size: 14px; color: var(--muted); font-weight: 500; margin: 0; }
+.sname { font-size: 17px; font-weight: 600; margin: 0; }
+.pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  margin-right: var(--s8);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sfacts, .saddr { font-size: 14px; color: var(--muted); margin: var(--s4) 0; }
+/* An address is for recognising a place, not reading in full; two lines is enough to do that. */
+.saddr {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sask { font-size: 14px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--s8); margin-top: var(--s12); }
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s8);
+  min-height: var(--tap);
+  padding: var(--s8) var(--s12);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+  cursor: pointer;
+}
+.select input { width: auto; min-height: 0; margin: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
 .filters:empty { display: none; }
-.filter { cursor: pointer; }
-.filter[aria-pressed="true"] { font-weight: 700; outline: 2px solid currentColor; }
-.locate { margin-top: .5rem; min-height: 44px; }
-.status { font-weight: 600; margin: .75rem 0 0; }
-.ghosts { list-style: none; margin: 1rem 0 0; padding: 0; }
-.ghosts[hidden] { display: none; }
-.ghost { border-top: 1px solid currentColor; padding-top: .75rem; margin-top: .75rem; }
-.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.ghostbar {
-  display: block;
-  height: 1rem;
-  margin: .4rem 0;
-  border-radius: .3rem;
-  background: currentColor;
-  opacity: .15;
-}
-.ghostbar.short { width: 45%; }
+.filter { cursor: pointer; background: var(--bg); }
+.filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
 .turnstile:empty { display: none; }
-.elsewhere { margin-top: 1rem; }
-.elsewhere summary { cursor: pointer; font-weight: 600; padding: .5rem 0; min-height: 44px; }
-.retry { margin-top: .5rem; min-height: 44px; }
-.shop.here { outline: 3px solid currentColor; outline-offset: 3px; }
+.locate, .retry { margin-top: var(--s12); }
+
+/* ---- Other ways to send --------------------------------------------------------------------- */
+.send { margin-top: var(--s32); }
+.send textarea { min-height: 0; font-size: 14px; }
 .sendbar {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  padding: .6rem 1rem;
-  background: Canvas;
-  border-top: 2px solid currentColor;
+  padding: var(--s12) var(--s16);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
-.sendbar[hidden] { display: none; }
+.sendbar[hidden], .sendpanel[hidden] { display: none; }
+.sendbar .primary { margin-top: 0; }
 .sendpanel {
   position: fixed;
   inset: auto 0 0 0;
   max-height: 80vh;
   overflow: auto;
-  padding: 1rem;
-  background: Canvas;
-  border-top: 2px solid currentColor;
+  padding: var(--s16);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
-.sendpanel[hidden] { display: none; }
-.sendrow { border-top: 1px solid currentColor; padding: .75rem 0; }
-.sendrow.done { opacity: .6; }
-.sendrow.next { outline: 2px dashed currentColor; outline-offset: 2px; }
-.sendparts { font-size: .9rem; opacity: .85; margin: .15rem 0; }
+.sendhead { display: flex; align-items: center; justify-content: space-between; gap: var(--s16); }
+.sendrow { border-top: 1px solid var(--border); padding: var(--s16) 0; }
+.sendrow.done { opacity: 0.55; }
+.sendrow.next { outline: 2px dashed var(--border); outline-offset: 4px; }
 .sr-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-/* The send bar is fixed, so the last card needs room to clear it. */
-body { padding-bottom: 5rem; }
+
+/* ---- The map --------------------------------------------------------------------------------- */
 .map {
-  height: 260px;
-  margin-top: 1rem;
-  border: 1px solid currentColor;
-  border-radius: .4rem;
+  height: 220px;
+  margin-top: var(--s12);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: .9rem;
-  padding: .5rem;
+  font-size: 14px;
+  color: var(--muted);
+  padding: var(--s8);
 }
-@media (min-width: 40rem) { .map { height: 340px; } }
-.warn { font-weight: 600; }
-.notes { font-size: .9rem; opacity: .85; margin-top: 2rem; }
-.footer { font-size: .9rem; opacity: .85; margin-top: 2rem; }
-.footer a { color: inherit; }
-.note { font-size: .9rem; opacity: .85; }
-@media (min-width: 40rem) { body { margin: 0 auto; padding: 2rem 1rem; } }
+
+/* ---- Placeholders ----------------------------------------------------------------------------- */
+.ghosts { list-style: none; margin: var(--s16) 0 0; padding: 0; }
+.ghosts[hidden] { display: none; }
+.ghost { border-top: 1px solid var(--border); padding-top: var(--s16); margin-top: var(--s16); }
+.ghost:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.ghostbar {
+  display: block;
+  height: 14px;
+  margin: var(--s8) 0;
+  border-radius: var(--r-sm);
+  background: var(--border);
+}
+.ghostbar.short { width: 45%; }
+/* Shaped like the card that replaces it: a 17px name, then the two muted lines, then the
+ * actions row, at the heights those occupy. Nothing moves when the real list arrives. */
+.ghostbar.name { height: 17px; width: 70%; }
+.ghostbar.actions { height: var(--tap); margin-top: var(--s12); border-radius: var(--r); }
+
+/* ---- Footer ------------------------------------------------------------------------------------ */
+.notes { font-size: 14px; color: var(--muted); margin-top: var(--s32); }
+.footer {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: var(--s48);
+  padding-top: var(--s16);
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Layout ------------------------------------------------------------------------------------
+ * Mobile first: one column, 16px of side padding, capped at 760px and centred. The second column
+ * arrives at 960px and only when there is something to put in it - an empty right half would just
+ * squeeze the form to half width on a page that has not been searched yet.
+ */
+.wrap { max-width: var(--maxw); margin: 0 auto; }
+.cols { display: grid; gap: var(--s32); }
+.col { min-width: 0; }
+
+/* One column's width at the two-column breakpoint. The send bar is fixed, so it cannot inherit
+ * the grid's geometry and has to be told it. */
+:root {
+  --col-w: calc((min(100vw - (2 * var(--s16)), var(--maxw)) - var(--s32)) / 2);
+  /* The fixed send bar's height, which is also the room the page leaves under its last card. */
+  --bar-h: 72px;
+}
+
+@media (min-width: 960px) {
+  /*
+   * The measure widens with the second column. 760px is right for one column of prose; split in
+   * two it leaves 364px a side, which is not enough for a supplier card's actions without them
+   * wrapping three deep.
+   *
+   * This redefines --maxw rather than setting .wrap's max-width directly, because --col-w is
+   * derived from --maxw and the send bar is derived from --col-w. Widening only .wrap would
+   * leave a 364px bar under a 534px column.
+   */
+  :root { --maxw: 1100px; }
+
+  .cols.two { grid-template-columns: 1fr 1fr; align-items: start; }
+  /*
+   * The left column sticks while it is shorter than the viewport, and scrolls with the page once
+   * it is taller - which is what position: sticky does on its own, given align-self: start. CSS
+   * has no way to ask how tall the column's content is, so this is the behaviour rather than the
+   * measurement.
+   */
+  .cols.two > .left { position: sticky; top: var(--s16); align-self: start; }
+  /* Fixed, so it cannot sit inside the column; placed over it instead, to the pixel. */
+  .sendbar, .sendpanel {
+    left: calc(50% + (var(--s32) / 2));
+    right: auto;
+    width: var(--col-w);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--r) var(--r) 0 0;
+  }
+}
+
+/* The map: a strip on a phone, taller on a tablet, and as much of its column as it can have on a
+ * desktop, up to 480px. */
+@media (min-width: 700px) { .map { height: 320px; } }
+@media (min-width: 960px) { .map { height: clamp(320px, 52vh, 480px); } }
+
+/*
+ * Safe areas. The viewport meta carries viewport-fit=cover so that env() is not simply zero,
+ * which means the page now reaches under a notch and has to hold its own gutters back out of it.
+ */
+body {
+  padding-left: max(var(--s16), env(safe-area-inset-left));
+  padding-right: max(var(--s16), env(safe-area-inset-right));
+  /* Exactly the bar's height, so a fixed bar never covers the last card. */
+  padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
+}
+.sendbar { padding-bottom: calc(var(--s12) + env(safe-area-inset-bottom)); }
+.sendpanel { padding-bottom: calc(var(--s16) + env(safe-area-inset-bottom)); }
 `.trim();
 
 /**
@@ -523,8 +779,30 @@ function oems(result: ParseResult): string[] {
   return [...new Set(result.candidates.map((c) => c.oem))];
 }
 
+/**
+ * True for a link that leaves this site. mailto: and tel: hand off to an app rather than opening
+ * a site, and /parts/... stays here, so neither is marked.
+ */
+export function isExternal(href: string): boolean {
+  return href.startsWith("https://") || href.startsWith("http://");
+}
+
+/**
+ * Every anchor on the page goes through here, so the rule cannot be applied to some link-outs
+ * and forgotten on others: a link that leaves the site carries rel="noopener" and a small arrow
+ * after its label. The arrow is aria-hidden - it is a sign for the eye, and the label already
+ * says where the link goes.
+ */
+export function anchor(href: string, text: string, className = "link"): string {
+  const outward = isExternal(href)
+    ? ` rel="noopener"`
+    : "";
+  const mark = isExternal(href) ? ` <span class="ext" aria-hidden="true">&#8599;</span>` : "";
+  return `<a class="${className}" href="${escapeHtml(href)}"${outward}>${escapeHtml(text)}${mark}</a>`;
+}
+
 function link(href: string, text: string): string {
-  return `<a class="link" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+  return anchor(href, text);
 }
 
 /** The same query with one manufacturer hinted. Hints re-rank candidates; they never remove one. */
@@ -541,18 +819,61 @@ function hintUrl(input: PageInput, oem: string): string {
  * internally; the spellings themselves are never shown - that is the parser's business.
  */
 function renderCheck(result: ParseResult, country: Country): string {
+  // Only where an entry exists. A part nobody has looked up shows nothing here, because the
+  // alternative is a list Partfinder made up about somebody's machine.
+  const fitment = findFitment(partKey(result));
   return `<details class="check">
           <summary>Check this part</summary>
+          ${fitment === undefined ? "" : renderFitment(fitment)}
           ${link(imagesUrl(result, country), "See images")}
           ${link(fitsUrl(result, country), "Which machines it fits")}
           ${link(searchUrl(result, country), "Search Google")}
         </details>`;
 }
 
-/** "Qty 2 (from message)", "Qty 2", or "Qty not given". */
+/**
+ * "Commonly fitted to (52 machines)", collapsed, with the groups inside and the provenance under
+ * them.
+ *
+ * The note and the source are not a footnote to be tucked away: the list is a compilation of
+ * other people's listings, it disagrees with itself between sellers, and it goes stale. So the
+ * same line always carries all three - what the list is, where it came from, and when it was
+ * read - and it renders from the entry rather than from anything written here.
+ */
+function renderFitment(fitment: Fitment): string {
+  const groups = fitment.machines
+    .map(
+      (group) => `<div class="fitgroup">
+              <h4>${escapeHtml(group.heading)}</h4>
+              <p class="machines">${escapeHtml(group.machines.join(", "))}</p>
+            </div>`,
+    )
+    .join("\n            ");
+  const count = machineCount(fitment);
+  // Each source by its domain, because whether two of them are independent domains is exactly
+  // what decides the tier, and a reader can see that for themselves this way.
+  const sources = fitment.sources
+    .map((url) => anchor(url, sourceLabel(url), "link inline"))
+    .join(", ");
+  const label = fitment.sources.length === 1 ? "Source" : "Sources";
+  return `<details class="fitment">
+            <summary>Commonly fitted to (${count} machine${count === 1 ? "" : "s"})</summary>
+            ${groups}
+            <p class="fitnote">${escapeHtml(fitment.note)}
+              ${label}: ${sources}, checked ${escapeHtml(fitment.checkedOn)}.</p>
+          </details>`;
+}
+
+/**
+ * The quantity label: "Qty 2 from message", "Qty 2", or just "Qty".
+ *
+ * There is no "Qty not given" any more. Nothing was given because the message did not say, which
+ * is the ordinary case rather than a finding, and an empty box with "Qty" over it says it better
+ * than a sentence does.
+ */
 function quantityLine(parsed: number | null, typed: boolean): string {
-  if (parsed === null) return "Qty not given";
-  return typed ? `Qty ${parsed}` : `Qty ${parsed} (from message)`;
+  if (parsed === null) return "Qty";
+  return typed ? `Qty ${parsed}` : `Qty ${parsed} from message`;
 }
 
 function renderCard(result: ParseResult, input: PageInput, index: number): string {
@@ -576,7 +897,7 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
   } else {
     // Ambiguity is reported, not resolved: each chip re-runs the same query with one hint.
     const chips = makers
-      .map((oem) => `<a class="chip" href="${escapeHtml(hintUrl(input, oem))}">${escapeHtml(oem)}</a>`)
+      .map((oem) => anchor(hintUrl(input, oem), oem, "chip"))
       .join("\n            ");
     lines.push(`<p class="maker">${escapeHtml(makers.join(" or "))}? <span class="badge">format match</span></p>
           <div class="chips">
@@ -588,7 +909,7 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
             <label for="qty-${index}">${quantityLine(quantity, typed)}</label>
             <input id="qty-${index}" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
               name="qty_${escapeHtml(key)}" value="${quantity === null ? "" : quantity}"
-              aria-label="Quantity for ${escapeHtml(number)}">
+              placeholder="Qty" aria-label="Quantity for ${escapeHtml(number)}">
           </p>`);
 
   lines.push(renderCheck(result, input.country));
@@ -619,8 +940,10 @@ function renderResults(results: readonly ParseResult[], input: PageInput): strin
     parts.push(`<p class="nothing">${NOTHING_RECOGNISED}</p>`);
   } else {
     parts.push(...recognised.map((r, i) => renderCard(r, input, i)));
+    // Directly under the cards, because it acts on them, and small because it is a correction
+    // rather than the thing the page is for.
+    parts.push(`<button type="submit" class="update secondary">Update</button>`);
     parts.push(`<p class="caveat">${FORMAT_CAVEAT}</p>`);
-    parts.push(`<button type="submit" class="update">Update quantities</button>`);
   }
   if (unrecognised.length > 0) {
     const names = unrecognised.map((r) => escapeHtml(r.input)).join(", ");
@@ -663,7 +986,7 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
 
   const parts: string[] = [];
   if (open !== "") {
-    parts.push(`<a class="whatsapp" href="${escapeHtml(picker)}">Send on WhatsApp</a>`);
+    parts.push(anchor(picker, "Send on WhatsApp", "whatsapp"));
   }
   parts.push(
     `<label for="message">The message</label>`,
@@ -671,8 +994,11 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   );
   if (digits !== null) {
     parts.push(
-      `<a class="whatsapp" href="${escapeHtml(whatsappUrl(message, digits))}">` +
-        `Open WhatsApp chat with ${escapeHtml(formatWhatsapp(digits))}</a>`,
+      anchor(
+        whatsappUrl(message, digits),
+        `Open WhatsApp chat with ${formatWhatsapp(digits)}`,
+        "whatsapp",
+      ),
     );
   }
   if (open === "") parts.push(link(picker, "Pick a contact in WhatsApp"));
@@ -736,9 +1062,10 @@ export function renderDocument(main: string, options: DocumentOptions = {}): str
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex">
-    <meta name="theme-color" content="${THEME_COLOR}">
+    <meta name="theme-color" content="${THEME_COLOR_LIGHT}" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="${THEME_COLOR_DARK}" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-title" content="Partfinder">
     <link rel="manifest" href="/parts/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/parts/icon-192.png">
@@ -855,17 +1182,32 @@ export function renderPage(input: PageInput): string {
     after.push(renderSend(withQuantities, results));
   }
 
-  const sections = [
+  // What the buyer types and what Partfinder read out of it, on the left; who can be asked and
+  // how, on the right. On a phone that is one column in that order, which is the order of the
+  // job. The right column only exists once there is a search, so the empty page stays one column
+  // at every width.
+  const left = [
     ...(input.notice ? [`<p class="note">${escapeHtml(input.notice)}</p>`] : []),
-    form.join("\n      "),
-    ...after,
-  ];
+    form.join("\n          "),
+  ].join("\n          ");
+  const right = after.filter((part) => part !== "").join("\n          ");
+  const columns = right === "" ? "cols" : "cols two";
+  const rightColumn =
+    right === ""
+      ? ""
+      : `\n        <div class="col right">
+          ${right}
+        </div>`;
 
-  return renderDocument(`<main>
+  return renderDocument(`<main class="wrap">
       <h1>Partfinder</h1>
       <p class="lede">Paste a customer's message. Get the parts, nearby suppliers, and ready
       WhatsApp messages.</p>
-      ${sections.join("\n      ")}
+      <div class="${columns}">
+        <div class="col left">
+          ${left}
+        </div>${rightColumn}
+      </div>
       ${HOW_IT_WORKS}
     </main>`, {
     ...(input.nonce === undefined ? {} : { nonce: input.nonce }),

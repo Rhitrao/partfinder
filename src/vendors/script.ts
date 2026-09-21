@@ -315,10 +315,19 @@ export const CLIENT_SCRIPT = String.raw`
       placed = [];
       if (!gmap) {
         box.textContent = "";
+        // greedy: one finger pans and pinch zooms, without the "use two fingers" overlay. The
+        // map is the only thing on this page worth zooming into, and it sits inside its own
+        // bordered box rather than under the scroll, so it is not stealing a gesture the page
+        // needs. Full screen is the rest of it: a 220px strip on a phone is for orientation,
+        // and looking properly means filling the screen.
         gmap = new maps.Map(box, {
           mapId: "DEMO_MAP_ID",
           zoom: 12,
-          center: { lat: pins[0].lat, lng: pins[0].lng }
+          center: { lat: pins[0].lat, lng: pins[0].lng },
+          gestureHandling: "greedy",
+          fullscreenControl: true,
+          mapTypeControl: false,
+          streetViewControl: false
         });
       }
       pins.forEach(function (pin) {
@@ -486,7 +495,7 @@ export const CLIENT_SCRIPT = String.raw`
 
       var action;
       if (shop.waMatched || shop.waAll) {
-        action = make("a", "whatsapp", "Open WhatsApp");
+        action = make("a", "whatsapp", "Open WhatsApp ↗");
         action.target = "_blank";
         action.rel = "noopener";
         action.addEventListener("click", function () {
