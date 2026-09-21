@@ -183,6 +183,32 @@ export interface MessageOptions {
  *
  * No spellings. A supplier reading "1U-3352" does not need to be told it is also written 1U3352.
  */
+/**
+ * One part, as a supplier reads it. Three shapes, because there are three kinds of card.
+ *
+ * A placed number names its likely makers. A number nobody placed goes on its own, with the
+ * words the message carried around it in brackets when there were any - "24370-2E000 (CVVT)"
+ * tells a supplier far more than the number alone, and it is the customer's own word for the
+ * thing, not a guess. A described part reads as a sentence, because that is what it is:
+ * "Pin pivot for EX200 (Hitachi or Tata Hitachi)".
+ *
+ * No spellings anywhere. A supplier reading "1U-3352" does not need to be told it is also
+ * written 1U3352.
+ */
+export function describeForMessage(result: ParseResult): string {
+  if (result.described) {
+    const { machine, brands, name } = result.described;
+    const title = name.charAt(0).toUpperCase() + name.slice(1);
+    const where = machine === "" ? "" : ` for ${machine}`;
+    const who = brands.length === 0 ? "" : ` (${brands.join(" or ")})`;
+    return `${title}${where}${who}`;
+  }
+  const makers = [...new Set(result.candidates.map((c) => c.oem))];
+  if (makers.length > 0) return `${partKey(result)} (likely ${makers.join(" or ")})`;
+  const words = (result.words ?? []).join(" ").toUpperCase();
+  return words === "" ? partKey(result) : `${partKey(result)} (${words})`;
+}
+
 export function requirementMessage(
   results: readonly ParseResult[],
   options: MessageOptions = {},
@@ -197,11 +223,8 @@ export function requirementMessage(
   ];
   const line = (result: ParseResult, index: number): string => {
     const quantity = quantities[partKey(result)];
-    const makers = [...new Set(result.candidates.map((c) => c.oem))].join(" or ");
     const amount = quantity === undefined ? "" : `, qty ${quantity}`;
-    // Nothing placed it, so there is no "likely" to claim. The number goes on its own.
-    const who = makers === "" ? "" : ` (likely ${makers})`;
-    return `${index + 1}. ${partKey(result)}${who}${amount}`;
+    return `${index + 1}. ${describeForMessage(result)}${amount}`;
   };
   const assemble = (count: number): string => {
     const lines = results.slice(0, count).map(line);
