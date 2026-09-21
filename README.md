@@ -79,6 +79,22 @@ both, incorporating Google's own terms and privacy policy, so these are a condit
 supplier list rather than decoration. The privacy page is the short list of what Partfinder keeps,
 which is nothing you type, and the two cookies it sets.
 
+**The health endpoint, `GET /parts/api/health`.** What is set on this Worker, and whether the
+Suppliers section would render:
+
+```
+{ ok: true,
+  env: { placesKey: { present, length }, mapsBrowserKey: { present, length },
+         turnstileSiteKey: { present, length }, turnstileSecret: { present, length } },
+  render: { suppliersSectionWouldRender: boolean, reasons: string[] } }
+```
+
+No key value, and no part of one, is ever in that answer: only whether the binding arrived and
+how many characters it holds, which is the one thing the Cloudflare dashboard cannot show. The
+`render` block is computed for a fixed sample query by the same function the page itself uses, so
+it cannot report a render the page would not do. It calls neither Google nor Cloudflare, so
+asking costs nothing.
+
 **The API, `GET /parts/api/parse?q=<text>`.** The same parsing as JSON:
 
 ```
@@ -162,6 +178,7 @@ src/index.ts      Worker entry and routing under /parts/, plus the manifest and 
 src/env.ts        the four Worker secrets, all optional: the page works without any of them
 src/cookies.ts    the remembered city and country, and nothing else
 src/legal.ts      the public Terms and Privacy pages
+src/health.ts     GET /parts/api/health, and the one gate that decides the Suppliers section
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/headers.ts    the response headers, including the supplier page's nonce CSP
 src/quantity.ts   how many, read out of the pasted message

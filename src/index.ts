@@ -8,22 +8,15 @@
 
 import { readCity, readCountry, setCity, setCountry } from "./cookies";
 import type { Env } from "./env";
+import { handleHealth, supplierGate } from "./health";
 import { PAGE_HEADERS, newNonce, supplierPageHeaders } from "./headers";
 import { ICON_192_BASE64, ICON_512_BASE64 } from "./icons";
 import { renderPrivacy, renderTerms } from "./legal";
 import { MANIFEST_JSON } from "./manifest";
 import { extractHints, extractTokens, parse } from "./parse";
-import {
-  MAX_QUERY_LENGTH,
-  outbound,
-  partKey,
-  readQuery,
-  renderPage,
-  resolveCountry,
-} from "./page";
+import { MAX_QUERY_LENGTH, partKey, readQuery, renderPage, resolveCountry } from "./page";
 import { handleVendors } from "./vendors/index";
 import { handleSupplierApi } from "./vendors/api";
-import { groupByOem } from "./vendors/search";
 import { renderScripts } from "./vendors/script";
 import { renderLinkOuts, renderPending } from "./vendors/suppliers";
 
@@ -73,7 +66,14 @@ function handlePage(request: Request, url: URL, env: Env): Response {
   }
 
   const parsed = readQuery(q, hint);
-  const sending = outbound(parsed.results);
+  // One decision, made in src/health.ts, so that GET /parts/api/health can report exactly what
+  // this page would do rather than its own guess at it.
+  const gate = supplierGate({
+    results: parsed.results,
+    city,
+    siteKey: env.TURNSTILE_SITE_KEY ?? "",
+  });
+  const { sending, groups } = gate;
   // Quantities the user typed on a card, one field per part key, capped like everything else.
   const typedQuantities: Record<string, number> = {};
   for (const [name, value] of url.searchParams) {
@@ -95,33 +95,29 @@ function handlePage(request: Request, url: URL, env: Env): Response {
   // "Other ways to send" is the only way out when there is no Suppliers section, so it opens
   // then, and stays collapsed when the section is there to be used instead.
   let sendOpen = true;
-  const siteKey = env.TURNSTILE_SITE_KEY ?? "";
-  if (sending.length > 0) {
-    const { groups } = groupByOem(sending);
-    if (groups.length > 0) {
-      // Three things have to hold before the page promises a list: a city to search in, a brand
-      // to search for, and a site key, because without one no token can be minted and the
-      // endpoint would refuse every request the script made.
-      if (city.trim() !== "" && siteKey !== "") {
-        nonce = newNonce();
-        suppliers = renderPending({
-          groups,
-          country,
-          city,
-          siteKey,
-          map: (env.GOOGLE_MAPS_BROWSER_KEY ?? "") !== "",
-        });
-        // The script is told the part keys and nothing else. Everything about a shop arrives
-        // from the endpoint, already escaped and with its messages already written.
-        tail = renderScripts(
-          { parts: sending.map(partKey) },
-          env.GOOGLE_MAPS_BROWSER_KEY,
-          nonce,
-        );
-        sendOpen = false;
-      } else {
-        suppliers = renderLinkOuts(groups, country, city);
-      }
+  // Three things have to hold before the page promises a list: a city to search in, a brand to
+  // search for, and a site key, because without one no token can be minted and the endpoint
+  // would refuse every request the script made. supplierGate checks all of them.
+  if (groups.length > 0) {
+    if (gate.render) {
+      nonce = newNonce();
+      suppliers = renderPending({
+        groups,
+        country,
+        city,
+        siteKey: env.TURNSTILE_SITE_KEY ?? "",
+        map: (env.GOOGLE_MAPS_BROWSER_KEY ?? "") !== "",
+      });
+      // The script is told the part keys and nothing else. Everything about a shop arrives
+      // from the endpoint, already escaped and with its messages already written.
+      tail = renderScripts(
+        { parts: sending.map(partKey) },
+        env.GOOGLE_MAPS_BROWSER_KEY,
+        nonce,
+      );
+      sendOpen = false;
+    } else {
+      suppliers = renderLinkOuts(groups, country, city);
     }
   }
 
@@ -226,6 +222,10 @@ export default {
     // method rules, because a wrong method here has to say 405 with the right Allow.
     if (url.pathname === "/parts/api/suppliers") {
       return handleSupplierApi(request, env);
+    }
+    // What is set on this Worker and what the render path would do with it. It calls nothing.
+    if (url.pathname === "/parts/api/health") {
+      return handleHealth(request, env);
     }
     if (url.pathname === "/parts/api/parse") {
       if (request.method !== "GET") return respond(405, { error: "method not allowed" }, { Allow: "GET" });
