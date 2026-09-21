@@ -19,10 +19,16 @@ function hrefs(html: string): string[] {
   );
 }
 
-/** The href of the link whose visible text is exactly this. */
+/**
+ * The href of the link whose visible text is exactly this.
+ *
+ * A link that leaves the site carries the external mark after its label, so the label is no
+ * longer the last thing before </a>. The mark is optional in the pattern: internal links, and
+ * mailto:, do not have one.
+ */
 const linkByText = (html: string, text: string) =>
   html
-    .match(new RegExp(`href="([^"]*)"[^>]*>${text}<`))?.[1]
+    .match(new RegExp(`href="([^"]*)"[^>]*>${text}(?: <span class="ext"[^>]*>[^<]*</span>)?<`))?.[1]
     ?.replaceAll("&amp;", "&")
     .replaceAll("&quot;", '"')
     .replaceAll("&#39;", "'");
@@ -147,16 +153,20 @@ describe("quantities on a card", () => {
   it("reads them from the message and prefills the field", async () => {
     const html = await page(q("need 2 nos 1u3352 and 40/300893 x1"));
     expect(numbers(html)).toEqual(["1U-3352", "40/300893"]);
-    expect(html).toContain("Qty 2 (from message)");
-    expect(html).toContain("Qty 1 (from message)");
+    expect(html).toContain("Qty 2 from message");
+    expect(html).toContain("Qty 1 from message");
     expect(html).toContain('name="qty_1U-3352" value="2"');
     expect(html).toContain('name="qty_40/300893" value="1"');
   });
 
-  it("says so when the message gives none", async () => {
+  it("shows an empty field labelled just Qty when the message gives none", async () => {
     const html = await page(q("1u3352 2023"));
-    expect(html).toContain("Qty not given");
+    // "Qty not given" is gone: nothing was given because the message did not say, which is the
+    // ordinary case and not a finding worth a sentence.
+    expect(html).not.toContain("not given");
+    expect(html).toContain(">Qty</label>");
     expect(html).toContain('name="qty_1U-3352" value=""');
+    expect(html).toContain('placeholder="Qty"');
   });
 
   it("prefers a typed quantity and stops crediting the message", async () => {
@@ -345,8 +355,8 @@ describe("what the page never shows", () => {
   it("reads two parts and their quantities out of one pasted line", async () => {
     const html = await page(q("need 2 nos 1u3352 and 40/300893 x1"));
     expect(numbers(html)).toEqual(["1U-3352", "40/300893"]);
-    expect(html).toContain("Qty 2 (from message)");
-    expect(html).toContain("Qty 1 (from message)");
+    expect(html).toContain("Qty 2 from message");
+    expect(html).toContain("Qty 1 from message");
     expect(html).toContain("as typed: 1U3352");
   });
 });

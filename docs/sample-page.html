@@ -219,6 +219,11 @@ details > summary {
 }
 a.chip, button.chip { min-height: var(--tap); }
 .caveat { font-size: 14px; color: var(--muted); }
+.qty { display: flex; align-items: center; gap: var(--s12); margin: var(--s12) 0 0; }
+.qty label { margin: 0; font-weight: 500; color: var(--muted); }
+.qtyinput { width: 72px; flex: none; text-align: center; }
+/* A correction, not the main action: small, secondary, and only as wide as its label. */
+.update { align-self: flex-start; min-height: 36px; padding: var(--s8) var(--s16); font-size: 14px; }
 .nothing { font-weight: 600; text-align: center; margin: var(--s24) 0; }
 .candidate { border-top: 1px solid var(--border); padding-top: var(--s12); margin-top: var(--s12); }
 .candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
@@ -253,7 +258,16 @@ a.chip, button.chip { min-height: var(--tap); }
 }
 .shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
 .shop.here { outline: 2px solid var(--text); outline-offset: 4px; border-radius: var(--r); }
-.sname { font-weight: 600; margin: 0; }
+.suphead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s8) var(--s12);
+}
+.suphead h2 { margin: 0; }
+/* The count is an aside to the heading, not an announcement of its own. */
+.status { font-size: 14px; color: var(--muted); font-weight: 500; margin: 0; }
+.sname { font-size: 17px; font-weight: 600; margin: 0; }
 .pin {
   display: inline-flex;
   align-items: center;
@@ -267,6 +281,14 @@ a.chip, button.chip { min-height: var(--tap); }
   font-variant-numeric: tabular-nums;
 }
 .sfacts, .saddr { font-size: 14px; color: var(--muted); margin: var(--s4) 0; }
+/* An address is for recognising a place, not reading in full; two lines is enough to do that. */
+.saddr {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .sask { font-size: 14px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--s8); margin-top: var(--s12); }
 .select {
@@ -347,6 +369,10 @@ a.chip, button.chip { min-height: var(--tap); }
   background: var(--border);
 }
 .ghostbar.short { width: 45%; }
+/* Shaped like the card that replaces it: a 17px name, then the two muted lines, then the
+ * actions row, at the heights those occupy. Nothing moves when the real list arrives. */
+.ghostbar.name { height: 17px; width: 70%; }
+.ghostbar.actions { height: var(--tap); margin-top: var(--s12); border-radius: var(--r); }
 
 /* ---- Footer ------------------------------------------------------------------------------------ */
 .notes { font-size: 14px; color: var(--muted); margin-top: var(--s32); }
@@ -452,57 +478,65 @@ body {
           <p class="astyped">as typed: 1U3352</p>
           <p class="maker">Caterpillar <span class="badge">format match</span></p>
           <p class="qty">
-            <label for="qty-0">Qty not given</label>
+            <label for="qty-0">Qty</label>
             <input id="qty-0" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
               name="qty_1U-3352" value=""
-              aria-label="Quantity for 1U-3352">
+              placeholder="Qty" aria-label="Quantity for 1U-3352">
           </p>
           <details class="check">
           <summary>Check this part</summary>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch">See images</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models">Which machines it fits</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22">Search Google</a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch" rel="noopener">See images <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models" rel="noopener">Which machines it fits <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22" rel="noopener">Search Google <span class="ext" aria-hidden="true">&#8599;</span></a>
         </details>
         </section>
         <section class="card">
           <p class="number">40/300893</p>
           <p class="maker">JCB <span class="badge">format match</span></p>
           <p class="qty">
-            <label for="qty-1">Qty not given</label>
+            <label for="qty-1">Qty</label>
             <input id="qty-1" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
               name="qty_40/300893" value=""
-              aria-label="Quantity for 40/300893">
+              placeholder="Qty" aria-label="Quantity for 40/300893">
           </p>
           <details class="check">
           <summary>Check this part</summary>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch">See images</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models">Which machines it fits</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22">Search Google</a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch" rel="noopener">See images <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models" rel="noopener">Which machines it fits <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22" rel="noopener">Search Google <span class="ext" aria-hidden="true">&#8599;</span></a>
         </details>
         </section>
+        <button type="submit" class="update secondary">Update</button>
         <p class="caveat">Manufacturer matched from the number's format, not confirmed. Suppliers confirm fitment.</p>
-        <button type="submit" class="update">Update quantities</button>
       </section>
           </form>
         </div>
         <div class="col right">
           <section class="suppliers">
-        <h2>Suppliers near Bengaluru</h2>
-        <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+        <div class="suphead">
+          <h2>Suppliers near Bengaluru</h2>
+          <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+        </div>
         <section class="gmaps" aria-label="Google Maps">
           <div class="map" id="pf-map">Map unavailable. The list below has everything.</div>
           <ol class="ghosts" id="pf-ghosts" aria-hidden="true">
             <li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>
             <li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>
             <li class="ghost">
-              <span class="ghostbar"></span>
+              <span class="ghostbar name"></span>
               <span class="ghostbar short"></span>
+              <span class="ghostbar"></span>
+              <span class="ghostbar actions"></span>
             </li>
           </ol>
           <div id="pf-list"></div>
@@ -515,14 +549,14 @@ body {
           <p class="warn">Turn on JavaScript to see suppliers here.</p>
           <div class="group">
           <h3>Caterpillar</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India" rel="noopener">Caterpillar parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         <div class="group">
           <h3>JCB</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India" rel="noopener">JCB parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         </noscript>
@@ -530,14 +564,14 @@ body {
           <summary>Search on Google instead</summary>
           <div class="group">
           <h3>Caterpillar</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India">Caterpillar parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=Caterpillar%20spare%20parts%20Bengaluru%20India" rel="noopener">Caterpillar parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         <div class="group">
           <h3>JCB</h3>
-          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India">JCB parts shops on Google Maps</a>
-          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India">Search suppliers on Google</a>
+          <a class="link" href="https://www.google.com/maps/search/?api=1&amp;query=JCB%20spare%20parts%20Bengaluru%20India" rel="noopener">JCB parts shops on Google Maps <span class="ext" aria-hidden="true">&#8599;</span></a>
+          <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20supplier%20Bengaluru%20India" rel="noopener">Search suppliers on Google <span class="ext" aria-hidden="true">&#8599;</span></a>
           
         </div>
         </details>
@@ -552,8 +586,8 @@ We have a requirement for:
 Note: Qty 4
 Please share availability, price and delivery time.
 Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
-        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Open WhatsApp chat with +91 9876543210</a>
-        <a class="link" href="https://wa.me/?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Pick a contact in WhatsApp</a>
+        <a class="whatsapp" href="https://wa.me/919876543210?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893" rel="noopener">Open WhatsApp chat with +91 9876543210 <span class="ext" aria-hidden="true">&#8599;</span></a>
+        <a class="link" href="https://wa.me/?text=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893" rel="noopener">Pick a contact in WhatsApp <span class="ext" aria-hidden="true">&#8599;</span></a>
         <a class="link" href="mailto:?subject=Requirement%3A%201U3352%2C%2040%2F300893&amp;body=Hi%2C%0AWe%20have%20a%20requirement%20for%3A%0A1.%201U-3352%20(likely%20Caterpillar)%0A2.%2040%2F300893%20(likely%20JCB)%0ANote%3A%20Qty%204%0APlease%20share%20availability%2C%20price%20and%20delivery%20time.%0ADetails%3A%20https%3A%2F%2Frohitrao.in%2Fparts%2F%3Fq%3D1U3352%252040%252F300893">Send by email</a>
         <form method="GET" action="/parts/" class="toform">
           <input type="hidden" name="q" value="need 1u3352 and 40/300893 for JCB 3CX">
@@ -1012,7 +1046,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
 
       var action;
       if (shop.waMatched || shop.waAll) {
-        action = make("a", "whatsapp", "Open WhatsApp");
+        action = make("a", "whatsapp", "Open WhatsApp ↗");
         action.target = "_blank";
         action.rel = "noopener";
         action.addEventListener("click", function () {

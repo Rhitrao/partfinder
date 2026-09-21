@@ -486,7 +486,7 @@ export const CLIENT_SCRIPT = String.raw`
 
       var action;
       if (shop.waMatched || shop.waAll) {
-        action = make("a", "whatsapp", "Open WhatsApp");
+        action = make("a", "whatsapp", "Open WhatsApp ↗");
         action.target = "_blank";
         action.rel = "noopener";
         action.addEventListener("click", function () {

@@ -469,6 +469,11 @@ details > summary {
 }
 a.chip, button.chip { min-height: var(--tap); }
 .caveat { font-size: 14px; color: var(--muted); }
+.qty { display: flex; align-items: center; gap: var(--s12); margin: var(--s12) 0 0; }
+.qty label { margin: 0; font-weight: 500; color: var(--muted); }
+.qtyinput { width: 72px; flex: none; text-align: center; }
+/* A correction, not the main action: small, secondary, and only as wide as its label. */
+.update { align-self: flex-start; min-height: 36px; padding: var(--s8) var(--s16); font-size: 14px; }
 .nothing { font-weight: 600; text-align: center; margin: var(--s24) 0; }
 .candidate { border-top: 1px solid var(--border); padding-top: var(--s12); margin-top: var(--s12); }
 .candidate:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
@@ -503,7 +508,16 @@ a.chip, button.chip { min-height: var(--tap); }
 }
 .shop:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
 .shop.here { outline: 2px solid var(--text); outline-offset: 4px; border-radius: var(--r); }
-.sname { font-weight: 600; margin: 0; }
+.suphead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s8) var(--s12);
+}
+.suphead h2 { margin: 0; }
+/* The count is an aside to the heading, not an announcement of its own. */
+.status { font-size: 14px; color: var(--muted); font-weight: 500; margin: 0; }
+.sname { font-size: 17px; font-weight: 600; margin: 0; }
 .pin {
   display: inline-flex;
   align-items: center;
@@ -517,6 +531,14 @@ a.chip, button.chip { min-height: var(--tap); }
   font-variant-numeric: tabular-nums;
 }
 .sfacts, .saddr { font-size: 14px; color: var(--muted); margin: var(--s4) 0; }
+/* An address is for recognising a place, not reading in full; two lines is enough to do that. */
+.saddr {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .sask { font-size: 14px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--s8); margin-top: var(--s12); }
 .select {
@@ -597,6 +619,10 @@ a.chip, button.chip { min-height: var(--tap); }
   background: var(--border);
 }
 .ghostbar.short { width: 45%; }
+/* Shaped like the card that replaces it: a 17px name, then the two muted lines, then the
+ * actions row, at the heights those occupy. Nothing moves when the real list arrives. */
+.ghostbar.name { height: 17px; width: 70%; }
+.ghostbar.actions { height: var(--tap); margin-top: var(--s12); border-radius: var(--r); }
 
 /* ---- Footer ------------------------------------------------------------------------------------ */
 .notes { font-size: 14px; color: var(--muted); margin-top: var(--s32); }
@@ -725,8 +751,30 @@ function oems(result: ParseResult): string[] {
   return [...new Set(result.candidates.map((c) => c.oem))];
 }
 
+/**
+ * True for a link that leaves this site. mailto: and tel: hand off to an app rather than opening
+ * a site, and /parts/... stays here, so neither is marked.
+ */
+export function isExternal(href: string): boolean {
+  return href.startsWith("https://") || href.startsWith("http://");
+}
+
+/**
+ * Every anchor on the page goes through here, so the rule cannot be applied to some link-outs
+ * and forgotten on others: a link that leaves the site carries rel="noopener" and a small arrow
+ * after its label. The arrow is aria-hidden - it is a sign for the eye, and the label already
+ * says where the link goes.
+ */
+export function anchor(href: string, text: string, className = "link"): string {
+  const outward = isExternal(href)
+    ? ` rel="noopener"`
+    : "";
+  const mark = isExternal(href) ? ` <span class="ext" aria-hidden="true">&#8599;</span>` : "";
+  return `<a class="${className}" href="${escapeHtml(href)}"${outward}>${escapeHtml(text)}${mark}</a>`;
+}
+
 function link(href: string, text: string): string {
-  return `<a class="link" href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
+  return anchor(href, text);
 }
 
 /** The same query with one manufacturer hinted. Hints re-rank candidates; they never remove one. */
@@ -751,10 +799,16 @@ function renderCheck(result: ParseResult, country: Country): string {
         </details>`;
 }
 
-/** "Qty 2 (from message)", "Qty 2", or "Qty not given". */
+/**
+ * The quantity label: "Qty 2 from message", "Qty 2", or just "Qty".
+ *
+ * There is no "Qty not given" any more. Nothing was given because the message did not say, which
+ * is the ordinary case rather than a finding, and an empty box with "Qty" over it says it better
+ * than a sentence does.
+ */
 function quantityLine(parsed: number | null, typed: boolean): string {
-  if (parsed === null) return "Qty not given";
-  return typed ? `Qty ${parsed}` : `Qty ${parsed} (from message)`;
+  if (parsed === null) return "Qty";
+  return typed ? `Qty ${parsed}` : `Qty ${parsed} from message`;
 }
 
 function renderCard(result: ParseResult, input: PageInput, index: number): string {
@@ -778,7 +832,7 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
   } else {
     // Ambiguity is reported, not resolved: each chip re-runs the same query with one hint.
     const chips = makers
-      .map((oem) => `<a class="chip" href="${escapeHtml(hintUrl(input, oem))}">${escapeHtml(oem)}</a>`)
+      .map((oem) => anchor(hintUrl(input, oem), oem, "chip"))
       .join("\n            ");
     lines.push(`<p class="maker">${escapeHtml(makers.join(" or "))}? <span class="badge">format match</span></p>
           <div class="chips">
@@ -790,7 +844,7 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
             <label for="qty-${index}">${quantityLine(quantity, typed)}</label>
             <input id="qty-${index}" class="qtyinput" type="number" inputmode="numeric" min="1" max="9999"
               name="qty_${escapeHtml(key)}" value="${quantity === null ? "" : quantity}"
-              aria-label="Quantity for ${escapeHtml(number)}">
+              placeholder="Qty" aria-label="Quantity for ${escapeHtml(number)}">
           </p>`);
 
   lines.push(renderCheck(result, input.country));
@@ -821,8 +875,10 @@ function renderResults(results: readonly ParseResult[], input: PageInput): strin
     parts.push(`<p class="nothing">${NOTHING_RECOGNISED}</p>`);
   } else {
     parts.push(...recognised.map((r, i) => renderCard(r, input, i)));
+    // Directly under the cards, because it acts on them, and small because it is a correction
+    // rather than the thing the page is for.
+    parts.push(`<button type="submit" class="update secondary">Update</button>`);
     parts.push(`<p class="caveat">${FORMAT_CAVEAT}</p>`);
-    parts.push(`<button type="submit" class="update">Update quantities</button>`);
   }
   if (unrecognised.length > 0) {
     const names = unrecognised.map((r) => escapeHtml(r.input)).join(", ");
@@ -865,7 +921,7 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
 
   const parts: string[] = [];
   if (open !== "") {
-    parts.push(`<a class="whatsapp" href="${escapeHtml(picker)}">Send on WhatsApp</a>`);
+    parts.push(anchor(picker, "Send on WhatsApp", "whatsapp"));
   }
   parts.push(
     `<label for="message">The message</label>`,
@@ -873,8 +929,11 @@ function renderSend(input: PageInput, results: readonly ParseResult[]): string {
   );
   if (digits !== null) {
     parts.push(
-      `<a class="whatsapp" href="${escapeHtml(whatsappUrl(message, digits))}">` +
-        `Open WhatsApp chat with ${escapeHtml(formatWhatsapp(digits))}</a>`,
+      anchor(
+        whatsappUrl(message, digits),
+        `Open WhatsApp chat with ${formatWhatsapp(digits)}`,
+        "whatsapp",
+      ),
     );
   }
   if (open === "") parts.push(link(picker, "Pick a contact in WhatsApp"));
