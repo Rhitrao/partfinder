@@ -375,3 +375,111 @@ describe("the map, once the crash is out of the way", () => {
     expect(app.byId("pf-map")!.textContent).toBe(MAP_UNAVAILABLE);
   });
 });
+
+/**
+ * Step 8c: where the token comes from, every time the script asks the endpoint.
+ *
+ * A Turnstile token is good for one redemption. Spend one twice and siteverify answers
+ * timeout-or-duplicate, which is what a 403 with no codes on it looks like from outside. These
+ * cases run the real script and watch every token it sends.
+ */
+describe("tokens", () => {
+  it("Retry obtains a new token before it fetches again", async () => {
+    const app = await boot();
+    const widget = app.turnstile();
+    app.reply({ error: "verify", codes: ["timeout-or-duplicate"] });
+    const first = app.solve();
+    await app.settle();
+    expect(app.calls).toHaveLength(1);
+    expect(app.calls[0]!.body.token).toBe(first);
+
+    // Retry resets the widget, and resetting is the whole of how a new token is obtained.
+    app.reply(ANSWER);
+    app.byId("pf-retry")!.fire("click");
+    expect(app.resets).toBe(1);
+    // Nothing has been sent yet: Turnstile has not called back.
+    expect(app.calls).toHaveLength(1);
+
+    const second = app.solve();
+    await app.settle();
+    expect(app.calls).toHaveLength(2);
+    expect(second).not.toBe(first);
+    expect(app.calls[1]!.body.token).toBe(second);
+    expect(app.status()).toBe("2 suppliers found");
+  });
+
+  it("gets a fresh token for the first search, Retry and Use my location alike", async () => {
+    const position = { coords: { latitude: 12.97159, longitude: 77.59457 } };
+    const app = await boot({ geolocation: { getCurrentPosition: (ok) => ok(position) } });
+    const widget = app.turnstile();
+    void widget;
+
+    app.reply({ error: "verify", codes: ["timeout-or-duplicate"] });
+    app.solve();
+    await app.settle();
+
+    app.reply(ANSWER);
+    app.byId("pf-retry")!.fire("click");
+    app.solve();
+    await app.settle();
+
+    app.byId("pf-locate-button")!.fire("click");
+    app.solve();
+    await app.settle();
+
+    expect(app.calls).toHaveLength(3);
+    const tokens = app.calls.map((call) => call.body.token);
+    // Three rounds, three tokens, none of them sent twice.
+    expect(new Set(tokens).size).toBe(3);
+    expect(tokens).toEqual(app.minted);
+    // The location only rides on the round that was started after it was shared.
+    expect(app.calls[2]!.body.near).toBe("12.972,77.595");
+  });
+
+  it("never sends a token it has already sent, however the round ended", async () => {
+    const app = await boot();
+    app.turnstile();
+    // A failure of each kind in turn, each one offering a Retry that mints again.
+    for (const reply of [
+      { error: "verify", codes: ["timeout-or-duplicate"] },
+      "not json",
+      { error: "verify", codes: ["invalid-input-secret"] },
+    ]) {
+      app.reply(reply);
+      if (app.byId("pf-retry")) app.byId("pf-retry")!.fire("click");
+      app.solve();
+      await app.settle();
+    }
+    const tokens = app.calls.map((call) => call.body.token);
+    expect(tokens).toHaveLength(3);
+    expect(new Set(tokens).size).toBe(3);
+  });
+
+  it("logs Turnstile's reason to the console and puts none of it on the page", async () => {
+    const app = await boot();
+    app.turnstile();
+    app.reply({ error: "verify", codes: ["timeout-or-duplicate", "invalid-input-secret"] });
+    app.solve();
+    await app.settle();
+
+    expect(app.warnings).toEqual([
+      "Partfinder: Turnstile rejected this browser: timeout-or-duplicate, invalid-input-secret",
+    ]);
+    // The page says what it said before, and nothing about a code.
+    expect(app.status()).toBe(VERIFY_FAILED);
+    const body = app.doc.body.textContent;
+    expect(body).not.toContain("timeout-or-duplicate");
+    expect(body).not.toContain("invalid-input-secret");
+    expect(body).not.toContain("Turnstile");
+  });
+
+  it("says nothing to the console when a refusal carries no codes", async () => {
+    const app = await boot();
+    app.turnstile();
+    app.reply({ error: "verify" });
+    app.solve();
+    await app.settle();
+    expect(app.warnings).toEqual([]);
+    expect(app.status()).toBe(VERIFY_FAILED);
+  });
+});

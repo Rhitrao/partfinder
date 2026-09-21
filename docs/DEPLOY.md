@@ -136,6 +136,44 @@ Read it in this order:
 No key value, and no prefix of one, is ever in that response. It calls neither Google nor
 Cloudflare, so a health check spends nothing from the day's Places allowance.
 
+## When the supplier endpoint answers 403
+
+`POST /parts/api/suppliers` refuses with `{"error":"verify","codes":[...]}`. The codes are
+Cloudflare's own and name which input was wrong, never what it was.
+
+| Code | What it means | What to do |
+| --- | --- | --- |
+| `timeout-or-duplicate` | the token was already redeemed, or is more than 300 seconds old | not a key problem. See *Tokens* below |
+| `invalid-input-secret` | `TURNSTILE_SECRET_KEY` is not a key Cloudflare recognises | check it is the **secret** key, and that it belongs to the same widget as the site key |
+| `missing-input-secret` | the Worker read no secret at all | the binding is not there. `GET /parts/api/health` says which |
+| `missing-input-response` / `invalid-input-response` | the token was empty or malformed | the page sent nothing usable; check the browser console |
+| `bad-request` | Cloudflare rejected the request shape | the siteverify call itself is wrong |
+| `siteverify-unreachable` | ours, not Cloudflare's: a timeout, a dropped connection, an HTTP error, or a body that would not parse | nothing was verified. Cloudflare's status page, or a transient |
+| `unknown` | Cloudflare refused and gave no code | as above |
+
+A site key and a secret key from **different widgets** both look present and both have plausible
+lengths, so `/parts/api/health` reads normal while every verification fails with
+`invalid-input-secret`. That is the one failure the health endpoint cannot see.
+
+### Tokens
+
+A Turnstile token is good for exactly one redemption and for 300 seconds. Two things follow.
+
+The Worker calls siteverify **once** per request and never retries. A retry with the same token
+is the classic way to produce `timeout-or-duplicate` from server code; if one is ever added it
+needs Turnstile's `idempotency_key`.
+
+The page mints a fresh token for every round. Retry and "Use my location" both go through
+`turnstile.reset()`, which is what obtains a new one, and a token is never sent twice. Tests in
+`test/script-run.test.ts` run the real script and check it.
+
+### What is not checked
+
+siteverify also returns `hostname`, `action` and `challenge_ts`, and none of them is validated.
+The widget sets no `action`, so there is nothing to match. Cloudflare recommends checking
+`hostname` as defence in depth; the site key is domain-bound in the dashboard, which is what
+stands in for it today.
+
 ## Rolling back
 
 Cloudflare keeps previous versions of the Worker.

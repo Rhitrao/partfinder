@@ -103,6 +103,14 @@ export const CLIENT_SCRIPT = String.raw`
   }
   function openElsewhere() { if (elsewhere) elsewhere.open = true; }
 
+  /** Cloudflare's reason for a refusal, to the console. Never to the page, and never stored. */
+  function warn(codes) {
+    if (!codes || !codes.length) return;
+    var log = window.console;
+    if (!log || typeof log.warn !== "function") return;
+    log.warn("Partfinder: Turnstile rejected this browser: " + codes.join(", "));
+  }
+
   // ---- Asking the endpoint ---------------------------------------------------------------
   function clearRetry() {
     var old = document.getElementById("pf-retry");
@@ -182,7 +190,13 @@ export const CLIENT_SCRIPT = String.raw`
 
   function handle(body) {
     if (!body || typeof body !== "object") return fail(words.unavailable, true);
-    if (body.error === "verify") return fail(words.verify, true);
+    if (body.error === "verify") {
+      // The console, and nowhere else. "timeout-or-duplicate" tells whoever is looking at the
+      // console what went wrong; it tells a parts buyer nothing, so the page says what it said
+      // before and this line is the only place the codes appear.
+      warn(body.codes);
+      return fail(words.verify, true);
+    }
     if (body.error === "city") {
       say("Couldn't find " + field("city").trim() + ". Check the spelling.");
       openElsewhere();
