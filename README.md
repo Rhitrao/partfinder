@@ -63,7 +63,11 @@ about a hundred metres and never leaves the one request it was sent in, no page 
 supplier list is kept. When Google will not answer, the status line says "Supplier list
 unavailable right now" and opens "Search on Google instead", which is the per-brand link-outs and
 needs no key. With JavaScript off, `<noscript>` says so and carries the same links. With no city,
-the section is one line asking for one.
+the section is one line asking for one. And when the supplier search cannot run at all because
+this Worker is not configured for it, the section says "Supplier search isn't set up right now."
+above those same links, rather than showing them bare and passing for a page that simply found
+nothing. Which key is missing is never on the page; `GET /parts/api/health` is where that is
+answered.
 
 **4. Other ways to send.** Collapsed under the suppliers, open when there is no Suppliers section
 at all: the message to copy, the WhatsApp contact picker, email, and a box for a supplier's own
@@ -78,6 +82,22 @@ the footer of every page. Google's Places API policies require an app using its 
 both, incorporating Google's own terms and privacy policy, so these are a condition of the
 supplier list rather than decoration. The privacy page is the short list of what Partfinder keeps,
 which is nothing you type, and the two cookies it sets.
+
+**The health endpoint, `GET /parts/api/health`.** What is set on this Worker, and whether the
+Suppliers section would render:
+
+```
+{ ok: true,
+  env: { placesKey: { present, length }, mapsBrowserKey: { present, length },
+         turnstileSiteKey: { present, length }, turnstileSecret: { present, length } },
+  render: { suppliersSectionWouldRender: boolean, reasons: string[] } }
+```
+
+No key value, and no part of one, is ever in that answer: only whether the binding arrived and
+how many characters it holds, which is the one thing the Cloudflare dashboard cannot show. The
+`render` block is computed for a fixed sample query by the same function the page itself uses, so
+it cannot report a render the page would not do. It calls neither Google nor Cloudflare, so
+asking costs nothing.
 
 **The API, `GET /parts/api/parse?q=<text>`.** The same parsing as JSON:
 
@@ -162,6 +182,7 @@ src/index.ts      Worker entry and routing under /parts/, plus the manifest and 
 src/env.ts        the four Worker secrets, all optional: the page works without any of them
 src/cookies.ts    the remembered city and country, and nothing else
 src/legal.ts      the public Terms and Privacy pages
+src/health.ts     GET /parts/api/health, and the one gate that decides the Suppliers section
 src/page.ts       the /parts/ page: form, cards, link-outs, the requirement and its handoffs
 src/headers.ts    the response headers, including the supplier page's nonce CSP
 src/quantity.ts   how many, read out of the pasted message

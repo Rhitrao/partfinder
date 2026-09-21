@@ -16,6 +16,17 @@ export const GOOGLE_PRIVACY_URL = "https://policies.google.com/privacy";
 /** Cloudflare's, which covers what Turnstile checks about a browser. */
 export const CLOUDFLARE_PRIVACY_URL = "https://www.cloudflare.com/privacypolicy/";
 
+/**
+ * Cloudflare's addendum for Turnstile itself, and a condition of using the widget the way
+ * Partfinder does.
+ *
+ * Turnstile is rendered with data-appearance="interaction-only", so most visitors never see it
+ * and are never asked anything - and Cloudflare requires a site running Turnstile invisibly to
+ * reference this addendum in its own privacy policy. A check nobody can see is a check nobody
+ * consented to unless the policy says it happens, so this link is not decoration.
+ */
+export const TURNSTILE_PRIVACY_URL = "https://www.cloudflare.com/turnstile-privacy-policy/";
+
 const LEGAL_STYLE = `
 .legal h2 { margin-top: 1.75rem; }
 .legal li { margin: .35rem 0; }
@@ -114,9 +125,11 @@ export function renderPrivacy(): string {
 
       <p>To keep bots from using the supplier search, Cloudflare Turnstile checks the browser
       (Cloudflare's privacy policy:
-      <a href="${CLOUDFLARE_PRIVACY_URL}">https://www.cloudflare.com/privacypolicy/</a>). The
-      check runs in your browser when a results page asks for suppliers, and usually shows you
-      nothing. Partfinder learns only whether it passed.</p>
+      <a href="${CLOUDFLARE_PRIVACY_URL}">https://www.cloudflare.com/privacypolicy/</a>, and the
+      <a href="${TURNSTILE_PRIVACY_URL}">Turnstile Privacy Addendum</a>, which covers the check
+      itself). The check runs in your browser when a results page asks for suppliers, and usually
+      shows you nothing at all - that is the point of it, and it is why the addendum is linked
+      here rather than left to be found. Partfinder learns only whether it passed.</p>
 
       <h2>Your location</h2>
 

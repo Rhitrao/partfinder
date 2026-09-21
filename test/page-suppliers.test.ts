@@ -7,7 +7,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { TURNSTILE_SRC } from "../src/vendors/script";
-import { Q, SEARCH, env, get, searchReply, stubFetch } from "./helpers";
+import { NOT_CONFIGURED } from "../src/vendors/suppliers";
+import { Q, SEARCH, env, get, searchReply, stubFetch, unescapeHtml } from "./helpers";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -114,6 +115,53 @@ describe("a page with no city", () => {
     expect(html).not.toContain("Finding suppliers");
     expect(html).toContain("Caterpillar parts shops on Google Maps");
   });
+});
+
+describe("a page whose supplier search is not configured", () => {
+  const withoutSiteKey = () => {
+    const { TURNSTILE_SITE_KEY: _absent, ...rest } = env;
+    return worker.fetch(new Request(`https://rohitrao.in/parts/${SEARCH}`), rest as never);
+  };
+
+  it("says so, in the section, above the link-outs it falls back to", async () => {
+    const calls = stubFetch(searchReply);
+    const html = unescapeHtml(await (await withoutSiteKey()).text());
+    expect(calls).toHaveLength(0);
+    // The heading is still there, and so is everything the page can still do.
+    expect(html).toContain("<h2>Suppliers near Bengaluru</h2>");
+    expect(html).toContain(NOT_CONFIGURED);
+    expect(html).toContain("Caterpillar parts shops on Google Maps");
+    expect(html).toContain("JCB parts shops on Google Maps");
+    // The line comes before the link-outs, not after them.
+    expect(html.indexOf(NOT_CONFIGURED)).toBeLessThan(html.indexOf("parts shops on Google Maps"));
+  });
+
+  it("promises nothing it cannot keep: no script, no widget, no status line", async () => {
+    const res = await withoutSiteKey();
+    const html = await res.text();
+    expect(html.toLowerCase()).not.toContain("<script");
+    expect(html).not.toContain("Finding suppliers");
+    expect(html).not.toContain("pf-turnstile");
+    expect(html).not.toContain("pf-ghosts");
+    expect(res.headers.get("Content-Security-Policy")).not.toContain("nonce-");
+  });
+
+  it("tells the visitor nothing about which key that was", async () => {
+    const html = unescapeHtml(await (await withoutSiteKey()).text());
+    const start = html.indexOf('<section class="suppliers">');
+    const section = html.slice(start, html.indexOf("</section>", start));
+    expect(start).toBeGreaterThan(-1);
+    expect(section).toContain(NOT_CONFIGURED);
+    for (const word of ["TURNSTILE_SITE_KEY", "Turnstile", "site key", "key", "secret", "env"]) {
+      expect(section, word).not.toContain(word);
+    }
+  });
+
+  it("says nothing of the sort when the city is the thing that is missing", async () => {
+    const html = unescapeHtml(await (await get(`/parts/?q=${encodeURIComponent(Q)}`)).text());
+    expect(html).toContain("Add your city to see suppliers near you.");
+    expect(html).not.toContain(NOT_CONFIGURED);
+  });
 
   it("runs no script for a query with nothing recognised in it", async () => {
     const calls = stubFetch(searchReply);
@@ -121,6 +169,37 @@ describe("a page with no city", () => {
     expect(calls).toHaveLength(0);
     expect(html).not.toContain("Suppliers near");
     expect(html.toLowerCase()).not.toContain("<script");
+  });
+});
+
+describe("the query from the step 7b report", () => {
+  // The exact address that showed the symptom in production: one Caterpillar number, one city,
+  // no country parameter. With every key set it has to be the live section, not the link-outs.
+  const URL_AS_REPORTED = "/parts/?q=1u3352&city=Bengaluru";
+
+  it("renders the section, the placeholders and the Turnstile container", async () => {
+    const calls = stubFetch(searchReply);
+    const res = await get(URL_AS_REPORTED);
+    const html = await res.text();
+    expect(calls).toHaveLength(0);
+    expect(html).toContain("<h2>Suppliers near Bengaluru</h2>");
+    expect(html).toContain("Finding suppliers");
+    expect([...html.matchAll(/<li class="ghost">/g)]).toHaveLength(3);
+    expect(html).toContain('<div id="pf-list"></div>');
+    expect(html).toContain(`data-sitekey="${env.TURNSTILE_SITE_KEY}"`);
+    expect(html).toContain('id="pf-turnstile"');
+    expect(html).not.toContain(NOT_CONFIGURED);
+    expect(html.toLowerCase()).toContain("<script");
+    expect(res.headers.get("Content-Security-Policy")).toContain("nonce-");
+  });
+
+  it("and health agrees with it, key for key", async () => {
+    const res = await worker.fetch(
+      new Request("https://rohitrao.in/parts/api/health"),
+      env as never,
+    );
+    const body = (await res.json()) as { render: { suppliersSectionWouldRender: boolean } };
+    expect(body.render.suppliersSectionWouldRender).toBe(true);
   });
 });
 

@@ -93,11 +93,48 @@ configuration. `.dev.vars.example` lists the same four names for `npx wrangler d
 | --- | --- | --- |
 | `GOOGLE_PLACES_KEY` | server only, never in a response | the supplier endpoint answers `{error:"unavailable"}` |
 | `GOOGLE_MAPS_BROWSER_KEY` | rendered into the page on purpose | no map; the list stands on its own |
-| `TURNSTILE_SITE_KEY` | rendered into the page on purpose | no Suppliers section at all; the page shows its link-outs |
+| `TURNSTILE_SITE_KEY` | rendered into the page on purpose | no live Suppliers section; the page says so and shows its link-outs |
 | `TURNSTILE_SECRET_KEY` | server only, never in a response | the supplier endpoint refuses every request |
 
 A missing `TURNSTILE_SECRET_KEY` refusing everything is deliberate. A Worker that cannot verify a
 token has not verified it, and "cannot check" must never fall open onto a paid API.
+
+## Checking what is set, without logs
+
+```
+curl -s https://rohitrao.in/parts/api/health
+```
+
+The dashboard says a secret exists. It never says what is in it, and there are no request logs
+here to read instead, so that answer used to be unobtainable. `GET /parts/api/health` gives it:
+
+```
+{ "ok": true,
+  "env": { "placesKey": { "present": true, "length": 39 },
+           "mapsBrowserKey": { "present": true, "length": 39 },
+           "turnstileSiteKey": { "present": false, "length": 0 },
+           "turnstileSecret": { "present": true, "length": 32 } },
+  "render": { "suppliersSectionWouldRender": false,
+              "reasons": ["TURNSTILE_SITE_KEY is missing or empty, ..."] } }
+```
+
+Read it in this order:
+
+1. **`ok`** only says the Worker is running and the route reached it. It is not a verdict on the
+   configuration.
+2. **`present: false`** means the binding never arrived: never set, set on a different Worker (see
+   *The Worker name* above), or set as a Cloudflare build variable rather than a Worker secret.
+   Build variables exist at build time and are not runtime bindings.
+3. **`present: true` with `length: 0`** means a secret that exists and holds nothing - usually a
+   `wrangler secret put` that was given an empty line, or a paste that did not take.
+4. **A `length` that is not the length of the key you hold** means it was truncated or has a
+   newline or a quote in it. Compare it against the real key on your own machine; the endpoint
+   will never show you any of it.
+5. **`render.reasons`** is the render path's own answer, computed by the function the page calls,
+   so it cannot disagree with what the page did.
+
+No key value, and no prefix of one, is ever in that response. It calls neither Google nor
+Cloudflare, so a health check spends nothing from the day's Places allowance.
 
 ## Rolling back
 
