@@ -103,12 +103,44 @@ describe("the layout", () => {
     expect(html).toContain("width=device-width, initial-scale=1, viewport-fit=cover");
   });
 
+  it("widens the measure once there are two columns", async () => {
+    const css = styles(await page());
+    const at = css.indexOf("@media (min-width: 960px)");
+    // 760px split in two leaves 364px a side, which is not enough for a supplier card's actions.
+    expect(css.slice(at)).toContain(":root { --maxw: 1100px; }");
+    // Widened through the token, not .wrap, so everything derived from it follows.
+    expect(css).toContain(".wrap { max-width: var(--maxw); margin: 0 auto; }");
+  });
+
   it("puts the fixed send bar over the right column on a desktop", async () => {
     const css = styles(await page());
     const at = css.indexOf("@media (min-width: 960px)");
     expect(css.slice(at)).toContain("left: calc(50% + (var(--s32) / 2));");
     expect(css.slice(at)).toContain("width: var(--col-w);");
     expect(css).toContain("--col-w: calc((min(100vw - (2 * var(--s16)), var(--maxw)) - var(--s32)) / 2);");
+
+    /*
+     * The bar is fixed, so its geometry is written out rather than inherited from the grid, and
+     * the two can drift. They cannot drift silently: the same arithmetic the CSS does is done
+     * here, and the right column's left edge has to land where the bar's does.
+     *
+     * wrap W = min(100vw - 32, maxw), centred. A column is (W - 32) / 2, so the right column
+     * begins at 50% - W/2 + (W - 32)/2 + 32, which is 50% + 16px whatever W is - and 50% + 16px
+     * is what the bar's `left` says.
+     */
+    for (const [viewport, maxw] of [
+      [1440, 1100],
+      [1200, 1100],
+      [1000, 1100],
+      [960, 1100],
+      [900, 760],
+    ] as const) {
+      const wrap = Math.min(viewport - 32, maxw);
+      const column = (wrap - 32) / 2;
+      const columnLeft = viewport / 2 - wrap / 2 + column + 32;
+      const barLeft = viewport / 2 + 16;
+      expect(columnLeft, `${viewport}px viewport`).toBe(barLeft);
+    }
   });
 });
 

@@ -418,6 +418,17 @@ a.chip, button.chip { min-height: var(--tap); }
 }
 
 @media (min-width: 960px) {
+  /*
+   * The measure widens with the second column. 760px is right for one column of prose; split in
+   * two it leaves 364px a side, which is not enough for a supplier card's actions without them
+   * wrapping three deep.
+   *
+   * This redefines --maxw rather than setting .wrap's max-width directly, because --col-w is
+   * derived from --maxw and the send bar is derived from --col-w. Widening only .wrap would
+   * leave a 364px bar under a 534px column.
+   */
+  :root { --maxw: 1100px; }
+
   .cols.two { grid-template-columns: 1fr 1fr; align-items: start; }
   /*
    * The left column sticks while it is shorter than the viewport, and scrolls with the page once
