@@ -61,7 +61,8 @@ describe("what the endpoint refuses before it costs anything", () => {
     const calls = stubFetch(apiReply());
     const res = await postSuppliers({ ...ASK, token: "" });
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "verify" });
+    // Cloudflare's own name for an empty response field, without asking Cloudflare for it.
+    expect(await res.json()).toEqual({ error: "verify", codes: ["missing-input-response"] });
     expect(placesCalls(calls)).toHaveLength(0);
   });
 
@@ -69,7 +70,8 @@ describe("what the endpoint refuses before it costs anything", () => {
     const calls = stubFetch(apiReply(false));
     const res = await postSuppliers(ASK);
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "verify" });
+    // apiReply(false) is a bare {success:false} with no error-codes at all.
+    expect(await res.json()).toEqual({ error: "verify", codes: ["unknown"] });
     expect(placesCalls(calls)).toHaveLength(0);
     // It did ask Cloudflare, form-encoded, with the secret and the token.
     const verify = calls.filter(isVerifyCall);
@@ -90,7 +92,7 @@ describe("what the endpoint refuses before it costs anything", () => {
       { GOOGLE_PLACES_KEY: "k" },
     );
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "verify" });
+    expect(await res.json()).toEqual({ error: "verify", codes: ["missing-input-secret"] });
     expect(calls).toHaveLength(0);
   });
 });

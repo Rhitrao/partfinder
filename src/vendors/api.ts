@@ -198,12 +198,16 @@ export async function handleSupplierApi(request: Request, env: Env): Promise<Res
   const body = readBody(payload);
   if (body === null) return json(400, { error: "request" });
 
-  const verified = await verifyTurnstile(
+  // The codes are Cloudflare's own and are generic by construction - see readCodes - so they go
+  // back to the browser with the refusal. They are the difference between a 403 anyone can act
+  // on and one nobody can. Nothing else from siteverify leaves here: not the token, not the
+  // secret, not the body it came in.
+  const verification = await verifyTurnstile(
     env.TURNSTILE_SECRET_KEY,
     body.token,
     request.headers.get("CF-Connecting-IP"),
   );
-  if (!verified) return json(403, { error: "verify" });
+  if (!verification.ok) return json(403, { error: "verify", codes: verification.codes });
 
   // Everything from here is recomputed from q. The client's idea of which numbers it holds, and
   // which of them may leave the page, is never taken on trust.
