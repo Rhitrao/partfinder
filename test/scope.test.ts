@@ -185,6 +185,18 @@ describe("what each kind of card asks Google for", () => {
     expect(asks("9ZZ123456")).toEqual([]);
   });
 
+  it("asks nothing by the words once there is more than one part to attach them to", () => {
+    // The same rule as the message line, and for the same reason: the query would be about a
+    // part nobody said it was about. It falls out of the field being the same one.
+    expect(asks("9ZZ123456 8YY654321 CVVT")).toEqual([]);
+    expect(asks("1u3352 9ZZ123456 CVVT").map((a) => a.subject)).toEqual([
+      "Caterpillar spare parts dealer",
+      "earthmoving spare parts",
+    ]);
+    // One part, and the words are its own again.
+    expect(asks("9ZZ123456 CVVT").map((a) => a.subject)).toEqual(["cvvt spare parts"]);
+  });
+
   it("sends those queries with a place attached", async () => {
     const calls = stubFetch(apiReply());
     await postSuppliers({ token: "t", q: "9ZZ123456 CVVT", country: "IN" });

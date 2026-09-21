@@ -178,10 +178,27 @@ describe("what the customer called it", () => {
     expect(outgoing).not.toContain("PIN PIVOT");
   });
 
-  it("goes on every card, because the words belong to the message and not to one number", async () => {
+  it("goes nowhere at all once there are two parts to be wrong about", async () => {
+    // It used to go on both, and a supplier read the second as a JCB CVVT, which is not a
+    // thing. Nothing in the message says which part a loose word belongs to, so past one card
+    // the only honest answer is to leave it out.
     const outgoing = message(await page("1u3352 40/300893 CVVT"));
+    expect(outgoing).toContain("1. 1U-3352 (likely Caterpillar)");
+    expect(outgoing).toContain("2. 40/300893 (likely JCB)");
+    expect(outgoing).not.toContain("CVVT");
+  });
+
+  it("counts parts, not tokens: a phone number does not make it a two-part message", async () => {
+    const outgoing = message(await page("Ramesh 9876543210 1u3352 CVVT"));
     expect(outgoing).toContain("1. 1U-3352 CVVT (likely Caterpillar)");
-    expect(outgoing).toContain("2. 40/300893 CVVT (likely JCB)");
+    expect(outgoing).not.toContain("9876543210");
+  });
+
+  it("drops them from two unplaced numbers too, not only from placed ones", async () => {
+    const outgoing = message(await page("9ZZ123456 8YY654321 CVVT"));
+    expect(outgoing).toContain("1. 9ZZ123456");
+    expect(outgoing).toContain("2. 8YY654321");
+    expect(outgoing).not.toContain("CVVT");
   });
 });
 
