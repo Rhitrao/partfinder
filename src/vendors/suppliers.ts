@@ -16,7 +16,7 @@ import {
 } from "../page";
 import type { ParseResult } from "../parse";
 import { WHATSAPP_LABEL, phoneFor } from "./phone";
-import { formatDistance, type BrandGroup, type Supplier } from "./search";
+import { areaOf, formatDistance, type BrandGroup, type Scope, type Supplier } from "./search";
 
 /**
  * Google's attribution for Places results shown without a Google map, and for the map itself.
@@ -114,6 +114,43 @@ export function jsonForScript(value: unknown): string {
 
 export const NO_CITY = "Add your city to see suppliers near you.";
 
+export const ALL_INDIA = "All India";
+
+/**
+ * The two places a search can look, as links that keep the query.
+ *
+ * Links rather than buttons, because this works with JavaScript off and because a scope is a
+ * different page rather than a different state: it is in the address, and nowhere else. With no
+ * city there is only one of them, since there is no city to be near.
+ */
+export function renderScopeChips(input: ScopeInput): string {
+  const { scope, city, query } = input;
+  const where = city.trim();
+  const chip = (label: string, to: Scope, current: boolean): string => {
+    const params = new URLSearchParams(query);
+    if (to === "india") params.set("scope", "india");
+    else params.delete("scope");
+    return (
+      `<a class="chip filter" href="/parts/?${escapeHtml(params.toString())}"` +
+      ` aria-pressed="${current ? "true" : "false"}">${escapeHtml(label)}</a>`
+    );
+  };
+  const chips = [
+    ...(where === "" ? [] : [chip(`Near ${where}`, "near", scope === "near")]),
+    chip(ALL_INDIA, "india", scope === "india"),
+  ];
+  return `<div class="scopes">
+          ${chips.join("\n          ")}
+        </div>`;
+}
+
+export interface ScopeInput {
+  scope: Scope;
+  city: string;
+  /** The page's own parameters, so a chip keeps the query it was rendered beside. */
+  query: Record<string, string>;
+}
+
 /**
  * What the section says when the user gave everything it needs - a number, a brand, a city - and
  * the supplier search still cannot run because this Worker is not configured for it.
@@ -171,10 +208,21 @@ function renderGhosts(): string {
           </ol>`;
 }
 
+/** "Suppliers near Bengaluru", or "Suppliers in India" when there is no city to be near. */
+export function suppliersHeading(scope: Scope, city: string): string {
+  const where = city.trim();
+  return scope === "near" && where !== ""
+    ? `Suppliers near ${escapeHtml(where)}`
+    : "Suppliers in India";
+}
+
 export interface PendingInput {
   groups: readonly BrandGroup[];
   country: Country;
   city: string;
+  scope: Scope;
+  /** The page's own parameters, for the scope chips' links. */
+  query: Record<string, string>;
   /** Public by design: Turnstile reads it off the widget's own element. */
   siteKey: string;
   /** Whether to draw the map box at all. Without a browser key nothing can fill it. */
@@ -200,9 +248,10 @@ export function renderPending(input: PendingInput): string {
   ];
   return `<section class="suppliers">
         <div class="suphead">
-          <h2>Suppliers near ${escapeHtml(where)}</h2>
+          <h2>${suppliersHeading(input.scope, city)}</h2>
           <p class="status" id="pf-status" aria-live="polite">${escapeHtml(FINDING)}</p>
         </div>
+        ${renderScopeChips({ scope: input.scope, city, query: input.query })}
         ${googleMapsBox(inner.join("\n          "))}
         <div class="turnstile" id="pf-turnstile" data-sitekey="${escapeHtml(siteKey)}"
           data-appearance="interaction-only"></div>
@@ -228,6 +277,8 @@ export interface CardsInput {
   note: string;
   /** What distances are measured from: "you" or "<city> centre". */
   originLabel: string;
+  /** Near a city, or the whole country. Decides whether a card says how far or where. */
+  scope: Scope;
   /** Shops past MAX_LISTED, counted rather than hidden. */
   omitted: number;
 }
@@ -321,6 +372,11 @@ function renderShop(supplier: Supplier, number: number, input: CardsInput): stri
       `<span class="sdist">${escapeHtml(formatDistance(distanceKm))} from ` +
         `${escapeHtml(originLabel)}</span>`,
     );
+  } else {
+    // All India, with no location shared: a distance from a city nobody named means nothing, so
+    // the card says where the shop is instead.
+    const area = areaOf(place);
+    if (area !== "") facts.push(`<span class="sarea">${escapeHtml(area)}</span>`);
   }
   const rated = ratingLine(supplier);
   if (rated !== "") facts.push(rated);

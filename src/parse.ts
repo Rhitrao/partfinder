@@ -3,7 +3,8 @@
 // suffix and alternate spellings are all returned.
 
 import { HINT_WORDS } from "./hints";
-import { RULES, SUFFIXES, UNCONFIRMED_SUFFIXES, type FormatRule, type Strength } from "./rules";
+import { MAX_NAME_WORDS, isStopword } from "./words";
+import { RULES, SUFFIXES, UNCONFIRMED_SUFFIXES, oemsOf, type FormatRule, type Strength } from "./rules";
 
 export interface Candidate {
   oem: string;
@@ -25,6 +26,44 @@ export interface ParseResult {
   compact: string;
   candidates: Candidate[];
   reason?: string;
+  /** Set when this card is a part the message described rather than numbered. */
+  described?: DescribedPart;
+  /** The descriptive words the message carried, for the card's queries and its message line. */
+  words?: string[];
+  /**
+   * A token that reads as a part number but that no rule places.
+   *
+   * It is still a part. The buyer typed it because a customer asked for it, and "we do not
+   * recognise the manufacturer" is an answer - one that leaves the number searchable and
+   * sendable. Without this the number fell off the page into a "Not recognised" line and out of
+   * every message, which is the one thing it must not do.
+   */
+  unplaced?: boolean;
+}
+
+/**
+ * A bare digit run shaped like a phone number: 10 digits starting 0 or 6 to 9, or 11 to 15
+ * digits. "Bare" means the user typed no separators, so 6754-61-1102 is never phone-shaped.
+ *
+ * It lives here rather than in the page because it is a statement about a token, and both the
+ * page and the parser have to agree on it.
+ */
+export const PHONE_SHAPED = /^(?:[06-9]\d{9}|\d{11,15})$/;
+
+/**
+ * Whether a token nobody could place still reads as a part number.
+ *
+ * Six characters, at least one digit, and either a letter or a separator. The letter-or-separator
+ * test is what keeps a bare run of digits out: a year, an invoice number and a quantity are all
+ * digits and nothing else, and none of them is a part. Prices never reach here - they are blanked
+ * before the text is tokenised - and a phone number is excluded outright.
+ */
+export function looksLikePartNumber(token: string): boolean {
+  const upper = token.trim().toUpperCase();
+  if (upper.length < 6) return false;
+  if (!/\d/.test(upper)) return false;
+  if (PHONE_SHAPED.test(upper)) return false;
+  return /[A-Z]/.test(upper) || /[-/.]/.test(upper);
 }
 
 const TOKEN = /[^\s,;]+/g;
@@ -151,6 +190,98 @@ export function extractHints(text: string): string[] {
   return found;
 }
 
+/**
+ * A part described rather than numbered: "pin pivot for EX200".
+ *
+ * Half the messages a parts buyer gets name no number at all. The customer knows the machine and
+ * what the thing is called, and that is enough to search with and more than enough to forward to
+ * a supplier. Before step 9 such a message produced an empty page.
+ */
+export interface DescribedPart {
+  /** The model word, uppercased: "EX200". Empty when the message named a brand but no model. */
+  machine: string;
+  /** The manufacturers the machine or brand word hints at. */
+  brands: string[];
+  /** At most five words, lowercased, in the order they were typed. */
+  name: string;
+}
+
+/**
+ * The words in a message that are not doing another job.
+ *
+ * Everything with a job is taken out first: prices, part-number tokens, phone numbers, brand and
+ * model words, bare digit runs, and the stopwords in src/words.ts. What is left is what the
+ * customer called the thing.
+ *
+ * One rule here is not on that list. The word immediately before a phone number is dropped as
+ * well, because in these messages that is a person - "Ramesh 9876543210" - and a customer's name
+ * has no business in a card, a search or a message to a third party. It costs a real word only
+ * when a part name ends immediately before a bare ten-digit run, which is not a thing people
+ * write.
+ */
+export function descriptiveWords(text: string): string[] {
+  const tokens = rawTokens(withoutPrices(text)).map((t) => t.text).filter((t) => t !== "");
+  const partTokens = new Set(extractTokens(text));
+  const drop = new Set<number>();
+  tokens.forEach((token, at) => {
+    if (PHONE_SHAPED.test(token)) {
+      drop.add(at);
+      // Whoever is named right before a number is a contact, not a part.
+      drop.add(at - 1);
+    }
+  });
+  const words: string[] = [];
+  tokens.forEach((token, at) => {
+    if (drop.has(at)) return;
+    if (partTokens.has(token)) return;
+    if (isHintToken(token)) return;
+    if (!/[A-Z]/.test(token)) return;
+    if (isStopword(token)) return;
+    words.push(token.toLowerCase());
+  });
+  return words;
+}
+
+/**
+ * The one part a message describes, or null when it describes none.
+ *
+ * Null in three cases, and each is deliberate. No brand or model word: there is nothing to say
+ * the words are about a machine at all, and "please send urgently" is not a part. Any
+ * part-number token: the numbers are the parts, and the machine word is only a hint that
+ * re-ranks them - a message with both does not also describe a third thing. And no words left
+ * after the padding is removed: a bare "EX200" names a machine, not a part on it.
+ *
+ * Phone-shaped tokens do not count as part numbers for the second test. "Ramesh 9876543210
+ * EX200 pivot pin" describes a part; the number in it is a person's.
+ */
+export function describedPart(text: string): DescribedPart | null {
+  const brands = extractHints(text);
+  if (brands.length === 0) return null;
+  const numbers = extractTokens(text).filter((token) => !PHONE_SHAPED.test(token));
+  if (numbers.length > 0) return null;
+  const words = descriptiveWords(text);
+  if (words.length === 0) return null;
+  const model = rawTokens(text)
+    .map((t) => t.text)
+    .find((token) => MODEL_PATTERNS.some(({ pattern }) => pattern.test(token)));
+  return {
+    machine: model ?? "",
+    brands,
+    name: words.slice(0, MAX_NAME_WORDS).join(" "),
+  };
+}
+
+/** A described part as a card: the same shape as a number's, with no candidates to rank. */
+export function describedResult(part: DescribedPart): ParseResult {
+  const input = describedInput(part);
+  return { input, compact: compact(input.toUpperCase()), candidates: [], described: part };
+}
+
+/** What a described part is called in a query, a card title's URL and the back-link. */
+export function describedInput(part: DescribedPart): string {
+  return [part.machine, part.name].filter((piece) => piece !== "").join(" ");
+}
+
 /** Remove spaces, dashes, dots, slashes and backslashes. */
 export function compact(token: string): string {
   return token.replace(SEPARATORS, "");
@@ -210,8 +341,9 @@ interface Ranked extends Candidate {
 }
 
 function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): Candidate[] {
+  const oems = oemsOf(rule);
   if (v.suffix && !rule.suffixes) return [];
-  if (rule.requiresHint && !hints.includes(rule.oem)) return [];
+  if (rule.requiresHint && !oems.some((oem) => hints.includes(oem))) return [];
   const m = rule.regex.exec(rule.matchOn === "typed" ? v.typed : v.compact);
   if (!m) return [];
   let groupSets: (string | undefined)[][] = [[...m]];
@@ -225,18 +357,22 @@ function candidatesFor(rule: FormatRule, v: Variant, hints: readonly string[]): 
   const warnings: string[] = [];
   if (rule.warning) warnings.push(rule.warning);
   if (v.suffix && UNCONFIRMED_SUFFIXES.includes(v.suffix)) warnings.push("suffix meaning unconfirmed");
-  return groupSets.map((groups) => ({
-    oem: rule.oem,
-    canonical: expand(rule.canonical, groups),
-    base: v.compact,
-    ...(v.suffix ? { suffix: v.suffix } : {}),
-    alternates: rule.alternates.map((a) => expand(a, groups)),
-    basis: "T5" as const,
-    ruleId: rule.id,
-    strength: rule.strength,
-    warnings: [...warnings],
-    hintMatched: hints.includes(rule.oem),
-  }));
+  // One candidate per manufacturer the rule speaks for: the same reading, offered under each
+  // name, because the number itself does not say which.
+  return groupSets.flatMap((groups) =>
+    oems.map((oem) => ({
+      oem,
+      canonical: expand(rule.canonical, groups),
+      base: v.compact,
+      ...(v.suffix ? { suffix: v.suffix } : {}),
+      alternates: rule.alternates.map((a) => expand(a, groups)),
+      basis: "T5" as const,
+      ruleId: rule.id,
+      strength: rule.strength,
+      warnings: [...warnings],
+      hintMatched: hints.includes(oem),
+    })),
+  );
 }
 
 /**
@@ -319,6 +455,9 @@ export function parse(token: string, hints: readonly string[] = []): ParseResult
     result.candidates.push(c);
   }
 
-  if (result.candidates.length === 0) result.reason = "no_rule_matched";
+  if (result.candidates.length === 0) {
+    result.reason = "no_rule_matched";
+    if (looksLikePartNumber(upper)) result.unplaced = true;
+  }
   return result;
 }

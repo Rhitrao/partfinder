@@ -17,6 +17,8 @@ import { FINDING, MAP_UNAVAILABLE, SUPPLIERS_UNAVAILABLE, jsonForScript } from "
 /** What the script is told before it fetches anything: the part keys, for the filter chips. */
 export interface PageData {
   parts: string[];
+  /** "india" or "near": what the page was rendered for, echoed back with every request. */
+  scope: string;
 }
 
 /** Every string this script can end up showing, handed to it rather than written into it. */
@@ -68,6 +70,9 @@ export const CLIENT_SCRIPT = String.raw`
   var data;
   try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
   var parts = data.parts || [];
+  // Near a city or all of India, as the server decided when it rendered this page. The endpoint
+  // derives it again from the city and this flag; nothing is stored on either side.
+  var scope = data.scope || "";
   // Every constant this script shows or waits on arrives in that same block rather than being
   // written into the script body. A property that is missing reads as undefined; a bare name
   // that is missing throws, which is how this script spent a week not running at all. It is
@@ -87,7 +92,16 @@ export const CLIENT_SCRIPT = String.raw`
   var pins = [];
   var near = null;
   var widgetId = null;
-  var running = false;
+  var running = null;
+  /**
+   * Whether anybody has asked for a search since the last one finished.
+   *
+   * Turnstile resets its widget when a token expires, and a reset mints a token, and a token
+   * arriving calls search(). Left alone, an open tab therefore started a fresh round of Google
+   * calls every five minutes, for nobody. Expiry now resets only when a search is actually
+   * wanted; the first render, Retry and "Use my location" are the three things that want one.
+   */
+  var searchWanted = true;
 
   function make(tag, className, text) {
     var node = document.createElement(tag);
@@ -129,6 +143,7 @@ export const CLIENT_SCRIPT = String.raw`
   function again() {
     clearRetry();
     if (!window.turnstile || widgetId === null) return;
+    searchWanted = true;
     say(words.finding);
     window.turnstile.reset(widgetId);
   }
@@ -152,8 +167,12 @@ export const CLIENT_SCRIPT = String.raw`
   }
 
   function search(token) {
-    if (running) return;
-    running = true;
+    // A round already in flight is abandoned rather than allowed to block this one. It used to
+    // return here, which threw away the token Turnstile had just minted and, worse, threw away
+    // what the user had just asked for: tapping "Use my location" while the status still said
+    // "Finding suppliers..." did nothing at all, and the list that arrived was measured from the
+    // city centre. The newer token is always about the newer question.
+    if (running) running.abort();
     clearRetry();
     say(words.finding);
     var payload = {
@@ -162,13 +181,24 @@ export const CLIENT_SCRIPT = String.raw`
       city: field("city"),
       country: field("country"),
       note: field("note"),
+      scope: scope,
       qty: quantities()
     };
     if (near) payload.near = near;
 
     var controller = new AbortController();
+    running = controller;
     var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
-    var done = function () { clearTimeout(timer); running = false; };
+    /**
+     * Ends this round. The timer is always cleared - a superseded round still owns one - but
+     * only the round that is still the current one goes on to report anything.
+     */
+    function finish() {
+      clearTimeout(timer);
+      if (running !== controller) return false;
+      running = null;
+      return true;
+    }
 
     fetch("/parts/api/suppliers", {
       method: "POST",
@@ -180,11 +210,11 @@ export const CLIENT_SCRIPT = String.raw`
     }).then(function (response) {
       return response.json();
     }).then(function (body) {
-      done();
-      handle(body);
+      if (finish()) handle(body);
     }).catch(function () {
-      done();
-      fail(words.unavailable, true);
+      // An abort is this code's own doing, not a failure to report: the round that replaced it
+      // is already saying "Finding suppliers..." and will say what happened.
+      if (finish()) fail(words.unavailable, true);
     });
   }
 
@@ -218,6 +248,8 @@ export const CLIENT_SCRIPT = String.raw`
 
     shops = body.queue || [];
     pins = body.pins || [];
+    // Answered. Nothing is wanted again until somebody asks.
+    searchWanted = false;
     say(shops.length === 1 ? "1 supplier found" : shops.length + " suppliers found");
     visible = null;
     buildFilters();
@@ -234,7 +266,11 @@ export const CLIENT_SCRIPT = String.raw`
       appearance: widget.getAttribute("data-appearance") || "interaction-only",
       callback: search,
       "error-callback": function () { fail(words.verify, true); },
-      "expired-callback": function () { if (window.turnstile) window.turnstile.reset(widgetId); }
+      // Only when a search is actually wanted. A token expiring on a tab nobody is looking at is
+      // not a reason to spend the day's Google allowance again.
+      "expired-callback": function () {
+        if (searchWanted && window.turnstile) window.turnstile.reset(widgetId);
+      }
     });
   };
 

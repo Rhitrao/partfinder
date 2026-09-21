@@ -5,7 +5,16 @@
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
 import { findFitment, machineCount, sourceLabel, type Fitment } from "./fitments";
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "./manifest";
-import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
+import {
+  PHONE_SHAPED,
+  describedPart,
+  describedResult,
+  descriptiveWords,
+  extractHints,
+  extractTokens,
+  parse,
+  type ParseResult,
+} from "./parse";
 import { quantityFor } from "./quantity";
 
 export interface Country {
@@ -52,19 +61,23 @@ export const MAX_CARDS = 50;
 export const WHATSAPP_LIMIT = 1000;
 
 /**
- * A bare digit run shaped like a phone number: 10 digits starting 0 or 6 to 9, or 11 to 15
- * digits. "Bare" means the user typed no separators, so 6754-61-1102 is never phone-shaped.
+ * Everything that gets a card: a placed number, one nobody could place but that reads as one, or
+ * a part the message described rather than numbered.
  */
-const PHONE_SHAPED = /^(?:[06-9]\d{9}|\d{11,15})$/;
+export function isPart(result: ParseResult): boolean {
+  return result.candidates.length > 0 || result.unplaced === true || result.described !== undefined;
+}
 
 /**
- * The numbers that may leave this page: recognised, and not shaped like a phone number.
+ * The parts that may leave this page: anything with a card, and not shaped like a phone number.
  *
  * What a user pastes can hold a customer's name and number; only what Partfinder reads as a part
- * number goes into a message to a third party, or onto a card, or into the "Not recognised" line.
+ * goes into a message to a third party, or onto a card, or into the "Not recognised" line. Since
+ * step 9 a number no rule placed is one of those - it is still what the customer asked for, and
+ * dropping it from the message was the surest way to lose an order.
  */
 export function outbound(results: readonly ParseResult[]): ParseResult[] {
-  return results.filter((r) => r.candidates.length > 0 && !PHONE_SHAPED.test(r.input));
+  return results.filter((r) => isPart(r) && !PHONE_SHAPED.test(r.input));
 }
 
 const ESCAPES: Record<string, string> = {
@@ -100,6 +113,10 @@ export function spellings(result: ParseResult): string[] {
 
 /** Every spelling of one number, quoted and joined with OR: the query behind every Check link. */
 export function spellingQuery(result: ParseResult): string {
+  // A description is searched as a phrase, unquoted: "EX200 pin pivot". Quoting a description
+  // asks Google for those words in that order and nothing else, which is the opposite of what
+  // somebody looking for a part by name wants. A number is quoted, because there it is the point.
+  if (result.described) return result.input;
   return spellings(result)
     .map((s) => `"${s}"`)
     .join(" OR ");
@@ -166,6 +183,37 @@ export interface MessageOptions {
  *
  * No spellings. A supplier reading "1U-3352" does not need to be told it is also written 1U3352.
  */
+/**
+ * One part, as a supplier reads it.
+ *
+ * A number is followed by whatever the customer called it and then by its likely makers:
+ * "24370-2E000 CVVT (likely Hyundai / Kia or Toyota)". The word is the customer's own, not a
+ * guess about the part, and it is worth more to a supplier than either half alone - a
+ * counterman who does not stock that number may well know the CVVT sensor for it. Every card
+ * gets it, placed or not; a card with no words left reads exactly as it did before.
+ *
+ * A described part is the exception, and only because it would be saying the same thing twice:
+ * its name is already those words. It reads as the sentence it is instead: "Pin pivot for EX200
+ * (Hitachi or Tata Hitachi)".
+ *
+ * No spellings anywhere. A supplier reading "1U-3352" does not need to be told it is also
+ * written 1U3352.
+ */
+export function describeForMessage(result: ParseResult): string {
+  if (result.described) {
+    const { machine, brands, name } = result.described;
+    const title = name.charAt(0).toUpperCase() + name.slice(1);
+    const where = machine === "" ? "" : ` for ${machine}`;
+    const who = brands.length === 0 ? "" : ` (${brands.join(" or ")})`;
+    return `${title}${where}${who}`;
+  }
+  const words = (result.words ?? []).join(" ").toUpperCase();
+  const called = words === "" ? "" : ` ${words}`;
+  const makers = [...new Set(result.candidates.map((c) => c.oem))];
+  const who = makers.length === 0 ? "" : ` (likely ${makers.join(" or ")})`;
+  return `${partKey(result)}${called}${who}`;
+}
+
 export function requirementMessage(
   results: readonly ParseResult[],
   options: MessageOptions = {},
@@ -180,9 +228,8 @@ export function requirementMessage(
   ];
   const line = (result: ParseResult, index: number): string => {
     const quantity = quantities[partKey(result)];
-    const makers = [...new Set(result.candidates.map((c) => c.oem))].join(" or ");
     const amount = quantity === undefined ? "" : `, qty ${quantity}`;
-    return `${index + 1}. ${partKey(result)} (likely ${makers})${amount}`;
+    return `${index + 1}. ${describeForMessage(result)}${amount}`;
   };
   const assemble = (count: number): string => {
     const lines = results.slice(0, count).map(line);
@@ -423,7 +470,9 @@ details > summary {
 .check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
 .check > .link { display: flex; margin-top: var(--s8); }
 h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
-.fitment { margin: var(--s8) 0 var(--s12); }
+.fitline { font-size: 14px; margin: var(--s12) 0 var(--s4); }
+.fitline.none { color: var(--muted); }
+.fitment { margin: 0 0 var(--s12); }
 .fitment summary { font-size: 14px; font-weight: 600; }
 .fitgroup h4 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .machines { font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0; }
@@ -455,6 +504,10 @@ h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
   word-break: break-all;
 }
 .maker { font-weight: 600; margin: var(--s8) 0 var(--s4); }
+.maker.described, .maker.unplaced { font-weight: 500; color: var(--muted); }
+/* A name, not a number: the same size, but set in the page's own face. */
+.card .number:not(.plain) { font-family: var(--mono); }
+.number.plain { font-family: var(--font); }
 .badge {
   font-size: 12px;
   font-weight: 500;
@@ -573,7 +626,12 @@ a.chip, button.chip { min-height: var(--tap); }
   cursor: pointer;
 }
 .select input { width: auto; min-height: 0; margin: 0; }
-.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.filters, .scopes { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.scopes .chip[aria-pressed="true"] {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+}
 .filters:empty { display: none; }
 .filter { cursor: pointer; background: var(--bg); }
 .filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
@@ -740,7 +798,8 @@ function renderAsk(q: string, hint: string, country: Country, city: string, note
       <textarea id="q" name="q" rows="5" autofocus
         placeholder="Paste a WhatsApp message or part numbers">${escapeHtml(q)}</textarea>
       <label for="city">City</label>
-      <input id="city" name="city" type="text" value="${escapeHtml(city)}" placeholder="e.g. Bengaluru"
+      <input id="city" name="city" type="text" value="${escapeHtml(city)}"
+        placeholder="Optional, leave empty for all of India"
         autocomplete="address-level2">
       <button type="submit" class="primary">Find parts &amp; suppliers</button>
       <details class="more">
@@ -771,7 +830,15 @@ function cardSuffix(result: ParseResult): string {
  * supplier's "Ask about" chip. Canonical plus the suffix, so 1U-3352 and 1U-3352RC stay apart.
  */
 export function partKey(result: ParseResult): string {
+  // A described part has no number to be keyed by, so it is keyed by what it is: the machine and
+  // the name. The prefix keeps it out of the way of anything a rule could ever produce.
+  if (result.described) return `desc:${result.described.machine}:${result.described.name}`;
   return cardNumber(result) + cardSuffix(result);
+}
+
+/** What a card is titled: the number, or the name the customer used. */
+export function cardTitle(result: ParseResult): string {
+  return result.described ? result.described.name : cardNumber(result);
 }
 
 /** The manufacturers a number could be, in ranked order, without duplicates. */
@@ -819,16 +886,44 @@ function hintUrl(input: PageInput, oem: string): string {
  * internally; the spellings themselves are never shown - that is the parser's business.
  */
 function renderCheck(result: ParseResult, country: Country): string {
-  // Only where an entry exists. A part nobody has looked up shows nothing here, because the
-  // alternative is a list Partfinder made up about somebody's machine.
-  const fitment = findFitment(partKey(result));
   return `<details class="check">
           <summary>Check this part</summary>
-          ${fitment === undefined ? "" : renderFitment(fitment)}
           ${link(imagesUrl(result, country), "See images")}
           ${link(fitsUrl(result, country), "Which machines it fits")}
           ${link(searchUrl(result, country), "Search Google")}
         </details>`;
+}
+
+/** How many machines a card names before "and the rest" takes over. */
+const FITMENT_PREVIEW = 4;
+
+export const NO_FITMENT = "Fitment not in our list yet";
+
+/**
+ * What this part fits, on the card itself rather than folded away.
+ *
+ * It was inside "Check this part", which is where things go when they are for the moment of
+ * doubt. This is not one of those: what a part fits is most of what the buyer is being asked on
+ * the phone, and a collapsed <details> with three link-outs in it is not where anybody looks for
+ * it. So the first four machines and the count are on the card, and the full grouped list, the
+ * note and the sources are one tap behind "See all".
+ *
+ * Every other card says so and offers the search. Saying nothing would read as "no", and a
+ * missing entry means nobody has looked yet - which is a different thing, and the buyer can look.
+ */
+function renderFitmentLine(result: ParseResult, country: Country): string {
+  const fitment = findFitment(partKey(result));
+  if (fitment === undefined) {
+    return `<p class="fitline none">${NO_FITMENT} &middot; ` +
+      `${anchor(fitsUrl(result, country), "Check on Google", "link inline")}</p>`;
+  }
+  const machines = fitment.machines.flatMap((group) => group.machines);
+  const count = machines.length;
+  const preview = machines.slice(0, FITMENT_PREVIEW).join(", ");
+  const more = count > FITMENT_PREVIEW ? "\u2026" : "";
+  return `<p class="fitline">Fits ${count} machine${count === 1 ? "" : "s"}, incl.
+            ${escapeHtml(preview)}${more}</p>
+          ${renderFitment(fitment)}`;
 }
 
 /**
@@ -857,7 +952,7 @@ function renderFitment(fitment: Fitment): string {
     .join(", ");
   const label = fitment.sources.length === 1 ? "Source" : "Sources";
   return `<details class="fitment">
-            <summary>Commonly fitted to (${count} machine${count === 1 ? "" : "s"})</summary>
+            <summary>See all ${count} machine${count === 1 ? "" : "s"}</summary>
             ${groups}
             <p class="fitnote">${escapeHtml(fitment.note)}
               ${label}: ${sources}, checked ${escapeHtml(fitment.checkedOn)}.</p>
@@ -877,20 +972,34 @@ function quantityLine(parsed: number | null, typed: boolean): string {
 }
 
 function renderCard(result: ParseResult, input: PageInput, index: number): string {
-  const number = cardNumber(result);
+  const number = cardTitle(result);
   const suffix = cardSuffix(result);
   const key = partKey(result);
   const makers = oems(result);
   const quantity = input.quantities?.[key] ?? null;
   const typed = input.typedQuantities?.[key] !== undefined;
 
-  const lines = [`<p class="number">${escapeHtml(number)}</p>`];
-  if (result.input !== number) {
+  const titleClass = result.described ? "number plain" : "number";
+  const lines = [`<p class="${titleClass}">${escapeHtml(number)}</p>`];
+  if (!result.described && result.input !== number) {
     lines.push(`<p class="astyped">as typed: ${escapeHtml(result.input)}</p>`);
   }
   if (suffix !== "") lines.push(`<p class="tag">${escapeHtml(suffix)}</p>`);
 
-  if (makers.length === 1) {
+  if (result.described) {
+    // What it is for, and who makes that. No "format match" badge: nothing was matched, the
+    // customer said it.
+    const { machine, brands } = result.described;
+    const parts = [
+      ...(machine === "" ? [] : [escapeHtml(machine)]),
+      escapeHtml(brands.join(" or ")),
+    ].filter((piece) => piece !== "");
+    lines.push(`<p class="maker described">for ${parts.join(" &middot; ")}</p>`);
+  } else if (result.unplaced) {
+    // No rule placed it, so there is no manufacturer to name and no format match to claim. The
+    // number is still the title, and every link-out below still works on it.
+    lines.push(`<p class="maker unplaced">${UNPLACED}</p>`);
+  } else if (makers.length === 1) {
     lines.push(
       `<p class="maker">${escapeHtml(makers[0]!)} <span class="badge">format match</span></p>`,
     );
@@ -912,12 +1021,15 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
               placeholder="Qty" aria-label="Quantity for ${escapeHtml(number)}">
           </p>`);
 
+  lines.push(renderFitmentLine(result, input.country));
   lines.push(renderCheck(result, input.country));
 
   return `<section class="card">
           ${lines.join("\n          ")}
         </section>`;
 }
+
+export const UNPLACED = "Manufacturer not recognised";
 
 export const FORMAT_CAVEAT =
   "Manufacturer matched from the number's format, not confirmed. Suppliers confirm fitment.";
@@ -932,8 +1044,11 @@ export const FORMAT_CAVEAT =
  */
 function renderResults(results: readonly ParseResult[], input: PageInput): string {
   const shown = results.filter((r) => !PHONE_SHAPED.test(r.input));
-  const recognised = shown.filter((r) => r.candidates.length > 0);
-  const unrecognised = shown.filter((r) => r.candidates.length === 0);
+  // Three groups now, not two. A number that reads as a part gets a card whether or not a rule
+  // placed it; only what does not read as one at all - too short, or bare digits - is left to
+  // the line at the bottom.
+  const recognised = shown.filter(isPart);
+  const unrecognised = shown.filter((r) => !isPart(r));
 
   const parts: string[] = ["<h2>Parts</h2>"];
   if (recognised.length === 0) {
@@ -1099,7 +1214,18 @@ export function readQuery(q: string, hint: string): ParsedQuery {
   const hints = [...extractHints(q)];
   for (const h of extractHints(hint)) if (!hints.includes(h)) hints.push(h);
   const tokens = extractTokens(q);
-  const results = tokens.slice(0, MAX_CARDS).map((token) => parse(token, hints));
+  // The words the message carried that are not doing another job. They belong to the message
+  // rather than to any one number, so every card on it gets the same list: with two numbers and
+  // one word like "CVVT", the word is about both of them or about neither.
+  const words = descriptiveWords(q);
+  const results = tokens.slice(0, MAX_CARDS).map((token) => {
+    const parsed = parse(token, hints);
+    return words.length > 0 ? { ...parsed, words } : parsed;
+  });
+  // Only when the message names no number at all. describedPart enforces that itself: with
+  // numbers present the machine word stays a hint and nothing new is built.
+  const described = describedPart(q);
+  if (described !== null) results.push(describedResult(described));
   const quantities: Record<string, number> = {};
   for (const result of results) {
     const quantity = quantityFor(q, result.input);

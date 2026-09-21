@@ -75,19 +75,24 @@ describe("the seed data", () => {
 });
 
 describe("a part with an entry", () => {
-  it("lists the machines inside Check this part, with the count in the summary", async () => {
+  it("says on the card what it fits, and holds the rest one tap behind", async () => {
     const html = await page("1u3352");
-    expect(html).toContain("<summary>Check this part</summary>");
+    // Step 9 moved this out of "Check this part". What a part fits is most of what the buyer is
+    // asked on the phone, and a collapsed block of link-outs is not where anyone looks for it.
+    expect(html).toContain('<p class="fitline">Fits 52 machines, incl.');
+    expect(html).toContain("213B, 214B, 215B, 224B");
+    expect(html.indexOf('<p class="fitline">')).toBeLessThan(
+      html.indexOf('<details class="check">'),
+    );
+
     const fitment = block(html);
-    expect(fitment).toContain("<summary>Commonly fitted to (52 machines)</summary>");
+    expect(fitment).toContain("<summary>See all 52 machines</summary>");
     expect(fitment).toContain("<h4>Excavators</h4>");
     expect(fitment).toContain("<h4>Wheel loaders</h4>");
     expect(fitment).toContain("<h4>Track loaders and other</h4>");
     expect(fitment).toContain("320D2");
     expect(fitment).toContain("966K");
     expect(fitment).toContain("633E");
-    // Inside the check block, not loose on the card.
-    expect(html.indexOf('<details class="check">')).toBeLessThan(html.indexOf('<details class="fitment">'));
   });
 
   it("says what the list is, where it came from, and when it was read", async () => {
@@ -108,18 +113,29 @@ describe("a part with an entry", () => {
 });
 
 describe("a part with no entry", () => {
-  it("renders nothing extra at all, rather than guessing", async () => {
+  it("says so plainly and offers the search, rather than guessing or saying nothing", async () => {
     const html = await page("40/300893");
     expect(html).toContain("<summary>Check this part</summary>");
-    expect(html).not.toContain("Commonly fitted to");
-    expect(html).not.toContain('class="fitment"');
+    // Saying nothing would read as "this fits nothing". A missing entry means nobody has looked.
+    expect(html).toContain("Fitment not in our list yet");
+    expect(html).toContain(">Check on Google");
+    expect(html).not.toContain("See all");
+    expect(html).not.toContain('<details class="fitment">');
     expect(html).not.toContain("romacparts");
     expect(block(html)).toBe("");
+  });
+
+  it("points the Check on Google link at the same fitment query the card already had", async () => {
+    const html = await page("40/300893");
+    const line = /<p class="fitline none">([\s\S]*?)<\/p>/.exec(html)![1]!;
+    const href = /href="([^"]*)"/.exec(line)![1]!.replaceAll("&amp;", "&");
+    expect(decodeURIComponent(new URL(href).searchParams.get("q")!)).toContain("fits models");
   });
 
   it("does not carry the entry across to a suffixed variant of the same number", async () => {
     const html = await page("1u3352rc");
     expect(html).toContain("1U-3352");
-    expect(html).not.toContain("Commonly fitted to");
+    expect(html).toContain("Fitment not in our list yet");
+    expect(html).not.toContain("See all");
   });
 });

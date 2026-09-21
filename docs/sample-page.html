@@ -172,7 +172,9 @@ details > summary {
 .check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
 .check > .link { display: flex; margin-top: var(--s8); }
 h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
-.fitment { margin: var(--s8) 0 var(--s12); }
+.fitline { font-size: 14px; margin: var(--s12) 0 var(--s4); }
+.fitline.none { color: var(--muted); }
+.fitment { margin: 0 0 var(--s12); }
 .fitment summary { font-size: 14px; font-weight: 600; }
 .fitgroup h4 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .machines { font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0; }
@@ -204,6 +206,10 @@ h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
   word-break: break-all;
 }
 .maker { font-weight: 600; margin: var(--s8) 0 var(--s4); }
+.maker.described, .maker.unplaced { font-weight: 500; color: var(--muted); }
+/* A name, not a number: the same size, but set in the page's own face. */
+.card .number:not(.plain) { font-family: var(--mono); }
+.number.plain { font-family: var(--font); }
 .badge {
   font-size: 12px;
   font-weight: 500;
@@ -322,7 +328,12 @@ a.chip, button.chip { min-height: var(--tap); }
   cursor: pointer;
 }
 .select input { width: auto; min-height: 0; margin: 0; }
-.filters { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.filters, .scopes { display: flex; flex-wrap: wrap; gap: var(--s8); margin: var(--s12) 0; }
+.scopes .chip[aria-pressed="true"] {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-color: var(--btn-bg);
+}
 .filters:empty { display: none; }
 .filter { cursor: pointer; background: var(--bg); }
 .filter[aria-pressed="true"] { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
@@ -478,7 +489,8 @@ body {
       <textarea id="q" name="q" rows="5" autofocus
         placeholder="Paste a WhatsApp message or part numbers">need 1u3352 and 40/300893 for JCB 3CX</textarea>
       <label for="city">City</label>
-      <input id="city" name="city" type="text" value="Bengaluru" placeholder="e.g. Bengaluru"
+      <input id="city" name="city" type="text" value="Bengaluru"
+        placeholder="Optional, leave empty for all of India"
         autocomplete="address-level2">
       <button type="submit" class="primary">Find parts &amp; suppliers</button>
       <details class="more">
@@ -510,10 +522,10 @@ body {
               name="qty_1U-3352" value=""
               placeholder="Qty" aria-label="Quantity for 1U-3352">
           </p>
-          <details class="check">
-          <summary>Check this part</summary>
+          <p class="fitline">Fits 52 machines, incl.
+            213B, 214B, 215B, 224B…</p>
           <details class="fitment">
-            <summary>Commonly fitted to (52 machines)</summary>
+            <summary>See all 52 machines</summary>
             <div class="fitgroup">
               <h4>Excavators</h4>
               <p class="machines">213B, 214B, 215B, 224B, 225, 229, 245, 318B, 318C, 320, 320B, 320C, 320D, 320D2, 320E, 321D LCR, 322, 322B, 322C, 323D L, 324D, 325, 325B, 325C, 330, 330B L, E200B, E240, E240C, EL240B</p>
@@ -529,6 +541,8 @@ body {
             <p class="fitnote">Compiled from aftermarket seller listings, not Caterpillar&#39;s own catalogue. Lists vary between sellers.
               Source: <a class="link inline" href="https://www.romacparts.com/1u3352-teeth.html" rel="noopener">romacparts.com <span class="ext" aria-hidden="true">&#8599;</span></a>, checked 2026-09-18.</p>
           </details>
+          <details class="check">
+          <summary>Check this part</summary>
           <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22&amp;tbm=isch" rel="noopener">See images <span class="ext" aria-hidden="true">&#8599;</span></a>
           <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22%20fits%20models" rel="noopener">Which machines it fits <span class="ext" aria-hidden="true">&#8599;</span></a>
           <a class="link" href="https://www.google.co.in/search?q=%221U3352%22%20OR%20%221U-3352%22" rel="noopener">Search Google <span class="ext" aria-hidden="true">&#8599;</span></a>
@@ -543,9 +557,9 @@ body {
               name="qty_40/300893" value=""
               placeholder="Qty" aria-label="Quantity for 40/300893">
           </p>
+          <p class="fitline none">Fitment not in our list yet &middot; <a class="link inline" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models" rel="noopener">Check on Google <span class="ext" aria-hidden="true">&#8599;</span></a></p>
           <details class="check">
           <summary>Check this part</summary>
-          
           <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22&amp;tbm=isch" rel="noopener">See images <span class="ext" aria-hidden="true">&#8599;</span></a>
           <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22%20fits%20models" rel="noopener">Which machines it fits <span class="ext" aria-hidden="true">&#8599;</span></a>
           <a class="link" href="https://www.google.co.in/search?q=%2240%2F300893%22%20OR%20%2240%5C300893%22%20OR%20%2240-300893%22%20OR%20%2240300893%22" rel="noopener">Search Google <span class="ext" aria-hidden="true">&#8599;</span></a>
@@ -561,6 +575,10 @@ body {
         <div class="suphead">
           <h2>Suppliers near Bengaluru</h2>
           <p class="status" id="pf-status" aria-live="polite">Finding suppliers…</p>
+        </div>
+        <div class="scopes">
+          <a class="chip filter" href="/parts/?q=need+1u3352+and+40%2F300893+for+JCB+3CX&amp;city=Bengaluru&amp;country=IN" aria-pressed="true">Near Bengaluru</a>
+          <a class="chip filter" href="/parts/?q=need+1u3352+and+40%2F300893+for+JCB+3CX&amp;city=Bengaluru&amp;country=IN&amp;scope=india" aria-pressed="false">All India</a>
         </div>
         <section class="gmaps" aria-label="Google Maps">
           <div class="map" id="pf-map">Map unavailable. The list below has everything.</div>
@@ -664,7 +682,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     <footer class="footer">
       <a href="/parts/terms">Terms</a> &middot; <a href="/parts/privacy">Privacy</a>
     </footer>
-    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"],"text":{"finding":"Finding suppliers…","unavailable":"Supplier list unavailable right now","verify":"Couldn't verify this browser.","mapUnavailable":"Map unavailable. The list below has everything.","queueHint":"WhatsApp opens one chat at a time. Tap each supplier in turn."},"timeoutMs":15000}</script>
+    <script type="application/json" id="pf-data" nonce="sample-nonce">{"parts":["1U-3352","40/300893"],"scope":"near","text":{"finding":"Finding suppliers…","unavailable":"Supplier list unavailable right now","verify":"Couldn't verify this browser.","mapUnavailable":"Map unavailable. The list below has everything.","queueHint":"WhatsApp opens one chat at a time. Tap each supplier in turn."},"timeoutMs":15000}</script>
     <script nonce="sample-nonce">
 (function () {
   "use strict";
@@ -673,6 +691,9 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   var data;
   try { data = JSON.parse(el.textContent || "{}"); } catch (e) { return; }
   var parts = data.parts || [];
+  // Near a city or all of India, as the server decided when it rendered this page. The endpoint
+  // derives it again from the city and this flag; nothing is stored on either side.
+  var scope = data.scope || "";
   // Every constant this script shows or waits on arrives in that same block rather than being
   // written into the script body. A property that is missing reads as undefined; a bare name
   // that is missing throws, which is how this script spent a week not running at all. It is
@@ -692,7 +713,16 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   var pins = [];
   var near = null;
   var widgetId = null;
-  var running = false;
+  var running = null;
+  /**
+   * Whether anybody has asked for a search since the last one finished.
+   *
+   * Turnstile resets its widget when a token expires, and a reset mints a token, and a token
+   * arriving calls search(). Left alone, an open tab therefore started a fresh round of Google
+   * calls every five minutes, for nobody. Expiry now resets only when a search is actually
+   * wanted; the first render, Retry and "Use my location" are the three things that want one.
+   */
+  var searchWanted = true;
 
   function make(tag, className, text) {
     var node = document.createElement(tag);
@@ -734,6 +764,7 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   function again() {
     clearRetry();
     if (!window.turnstile || widgetId === null) return;
+    searchWanted = true;
     say(words.finding);
     window.turnstile.reset(widgetId);
   }
@@ -757,8 +788,12 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
   }
 
   function search(token) {
-    if (running) return;
-    running = true;
+    // A round already in flight is abandoned rather than allowed to block this one. It used to
+    // return here, which threw away the token Turnstile had just minted and, worse, threw away
+    // what the user had just asked for: tapping "Use my location" while the status still said
+    // "Finding suppliers..." did nothing at all, and the list that arrived was measured from the
+    // city centre. The newer token is always about the newer question.
+    if (running) running.abort();
     clearRetry();
     say(words.finding);
     var payload = {
@@ -767,13 +802,24 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       city: field("city"),
       country: field("country"),
       note: field("note"),
+      scope: scope,
       qty: quantities()
     };
     if (near) payload.near = near;
 
     var controller = new AbortController();
+    running = controller;
     var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
-    var done = function () { clearTimeout(timer); running = false; };
+    /**
+     * Ends this round. The timer is always cleared - a superseded round still owns one - but
+     * only the round that is still the current one goes on to report anything.
+     */
+    function finish() {
+      clearTimeout(timer);
+      if (running !== controller) return false;
+      running = null;
+      return true;
+    }
 
     fetch("/parts/api/suppliers", {
       method: "POST",
@@ -785,11 +831,11 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
     }).then(function (response) {
       return response.json();
     }).then(function (body) {
-      done();
-      handle(body);
+      if (finish()) handle(body);
     }).catch(function () {
-      done();
-      fail(words.unavailable, true);
+      // An abort is this code's own doing, not a failure to report: the round that replaced it
+      // is already saying "Finding suppliers..." and will say what happened.
+      if (finish()) fail(words.unavailable, true);
     });
   }
 
@@ -823,6 +869,8 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
 
     shops = body.queue || [];
     pins = body.pins || [];
+    // Answered. Nothing is wanted again until somebody asks.
+    searchWanted = false;
     say(shops.length === 1 ? "1 supplier found" : shops.length + " suppliers found");
     visible = null;
     buildFilters();
@@ -839,7 +887,11 @@ Details: https://rohitrao.in/parts/?q=1U3352%2040%2F300893</textarea>
       appearance: widget.getAttribute("data-appearance") || "interaction-only",
       callback: search,
       "error-callback": function () { fail(words.verify, true); },
-      "expired-callback": function () { if (window.turnstile) window.turnstile.reset(widgetId); }
+      // Only when a search is actually wanted. A token expiring on a tab nobody is looking at is
+      // not a reason to spend the day's Google allowance again.
+      "expired-callback": function () {
+        if (searchWanted && window.turnstile) window.turnstile.reset(widgetId);
+      }
     });
   };
 

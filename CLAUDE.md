@@ -70,6 +70,16 @@ The user is a parts buyer holding a customer's WhatsApp message. The job:
 Everything on the page serves that order: product cards, then supplier cards and a map, then
 sending. Anything that doesn't serve it is hidden or removed.
 
+What counts as a part:
+
+- **A part can arrive as a number, as a description (machine plus part name), or both.** Every one
+  of them gets a card. Nothing the user meant as a part is silently dropped.
+- **An unplaceable number is still a part.** Say "manufacturer not recognised", and keep it
+  searchable and sendable.
+- **Fitment only ever comes from curated, sourced data in `src/fitments.ts`.** It is never
+  generated and never guessed. Where there is none, the card says so plainly.
+- **Reading messages stays rule-based.** No model call in the request path, ever.
+
 Rules that follow:
 
 - **One screen.** No extra pages between pasting and messaging a supplier.

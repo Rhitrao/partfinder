@@ -132,8 +132,9 @@ describe("the requirement message", () => {
     expect(href).not.toContain("+");
   });
 
-  it("offers nothing to send when no number was recognised", async () => {
-    const html = await page(q("HELLO12"));
+  it("offers nothing to send when nothing reads as a part at all", async () => {
+    // "12345" is bare digits: a year or an invoice number, not a part. HELLO12 would be a card.
+    const html = await page(q("12345"));
     expect(html).toContain("Nothing here looks like a part number yet.");
     expect(html).not.toContain('<textarea id="message"');
     expect(html).not.toContain("https://wa.me/");

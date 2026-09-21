@@ -21,7 +21,14 @@ import {
   type ParsedQuery,
 } from "../page";
 import type { ParseResult } from "../parse";
-import { MAX_LISTED, findSuppliers, groupByOem, type Supplier } from "./search";
+import {
+  MAX_LISTED,
+  asksFor,
+  findSuppliers,
+  groupByOem,
+  resolveScope,
+  type Supplier,
+} from "./search";
 import { phoneFor } from "./phone";
 import { pinsFor, renderSupplierCards, type Pin } from "./suppliers";
 import { verifyTurnstile } from "./turnstile";
@@ -46,6 +53,8 @@ interface SupplierRequest {
   country: string;
   near: string;
   note: string;
+  /** "india" asks for the whole country. Anything else, including nothing, means near the city. */
+  scope: string;
   quantities: Record<string, number>;
 }
 
@@ -92,6 +101,7 @@ function readBody(payload: unknown): SupplierRequest | null {
     country: text(raw.country),
     near: text(raw.near),
     note: text(raw.note),
+    scope: text(raw.scope),
   };
   for (const value of Object.values(fields)) {
     if (value.length > MAX_QUERY_LENGTH) return null;
@@ -217,13 +227,17 @@ export async function handleSupplierApi(request: Request, env: Env): Promise<Res
   const { groups } = groupByOem(sending);
   const quantities = { ...parsed.quantities, ...body.quantities };
   const near = readNear(body.near);
+  // The browser sends what it was rendered with; the scope is re-derived here from the city and
+  // the flag, exactly as the page derived it, and is stored nowhere on either side.
+  const scope = resolveScope(body.city, body.scope);
 
   const answer = await findSuppliers(
     env.GOOGLE_PLACES_KEY,
-    groups,
+    asksFor(sending, groups),
     country,
     body.city,
     near,
+    scope,
   );
   if (answer.failure === "city") return json(200, { error: "city" });
   if (answer.failure !== null) return json(200, { error: "unavailable" });
@@ -236,6 +250,7 @@ export async function handleSupplierApi(request: Request, env: Env): Promise<Res
     quantities,
     note: body.note,
     originLabel,
+    scope,
     omitted: answer.suppliers.length - listed.length,
   });
 
