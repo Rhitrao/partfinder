@@ -42,6 +42,15 @@ export interface Harness {
   resets: number;
   /** Renders the Turnstile widget, as Cloudflare's loader does, and returns its callbacks. */
   turnstile(): Widget;
+  /**
+   * Turnstile solving a challenge: a token nobody has seen before, handed to the callback.
+   *
+   * Real Turnstile does this by itself on render and again after every reset(). Here it is
+   * explicit, so a test can say when the callback arrives and can see which token it carried.
+   */
+  solve(): string;
+  /** Every token the widget has minted, in order. */
+  minted: string[];
   /** What the status line says now. */
   status(): string;
   byId(id: string): El | null;
@@ -49,6 +58,8 @@ export interface Harness {
   reply(body: unknown): void;
   /** Rejects the next fetch, as a timeout or a dropped connection does. */
   rejectNext(): void;
+  /** Everything the script sent to console.warn, in order. */
+  warnings: string[];
   /** Lets the script's promise chain run to the end. */
   settle(): Promise<void>;
 }
@@ -73,6 +84,7 @@ export function runScript(html: string, script: string, options: RunOptions = {}
   let reject = false;
   let resets = 0;
   let widget: Widget | null = null;
+  const minted: string[] = [];
 
   const fetchStub = (url: string, init: Record<string, unknown>) => {
     calls.push({
@@ -85,8 +97,12 @@ export function runScript(html: string, script: string, options: RunOptions = {}
   };
 
   let cleared = 0;
+  const warnings: string[] = [];
   const sandbox: Record<string, unknown> = {
     document: doc,
+    // Recorded rather than printed: the script logs Turnstile's reason here and nowhere else,
+    // so a test has to be able to read it.
+    console: { warn: (...args: unknown[]) => warnings.push(args.join(" ")) },
     JSON,
     Number,
     Math,
@@ -131,6 +147,7 @@ export function runScript(html: string, script: string, options: RunOptions = {}
 
   return {
     doc,
+    warnings,
     window: sandbox,
     calls,
     timeouts,
@@ -144,6 +161,14 @@ export function runScript(html: string, script: string, options: RunOptions = {}
       (sandbox.pfTurnstile as () => void)();
       if (widget === null) throw new Error("Turnstile was never asked to render a widget");
       return widget;
+    },
+    minted,
+    solve(): string {
+      if (widget === null) throw new Error("Turnstile has not rendered a widget yet");
+      const token = `pf-token-${minted.length + 1}`;
+      minted.push(token);
+      widget.callback(token);
+      return token;
     },
     status: () => doc.getElementById("pf-status")?.textContent ?? "",
     byId: (id: string) => doc.getElementById(id),

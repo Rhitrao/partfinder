@@ -27,27 +27,32 @@ const MAX_CODE_LENGTH = 64;
 /**
  * A code shaped like Cloudflare's own: lowercase, digits and hyphens, and nothing else.
  *
- * This is the guarantee that nothing secret rides out on the back of an error code. A Turnstile
- * token holds dots, underscores and capitals; a secret key holds capitals too. Neither can match
- * this pattern, so even a siteverify body that was not what we expected cannot leak one through.
+ * Real Turnstile keys and tokens carry dots, underscores and capitals, so this alone stops
+ * almost everything. It is not relied on as the guarantee, though - `secrets` below is.
  */
 const CODE = /^[a-z0-9-]+$/;
 
 /**
  * Cloudflare's error-codes array, reduced to what may be shown to the caller.
  *
- * Anything that is not a string, is too long, or is not shaped like a code is dropped rather
- * than trimmed: a value that does not look like one of Cloudflare's codes is not one, and
- * guessing at it is how a response body grows something it should not have.
+ * Two filters, and they are not the same kind of thing. The shape check drops anything that does
+ * not look like one of Cloudflare's codes, because a value that does not look like one is not
+ * one, and guessing at it is how a response body grows something it should not have. `secrets`
+ * is the guarantee: every value this request holds that must not leave is passed in, and any
+ * code equal to one, or containing one, is dropped whatever it looks like. An argument about
+ * character classes is not a guarantee - a secret could be lowercase - and this is the one
+ * place in the Worker where a third party's bytes are copied into a response.
  */
-export function readCodes(value: unknown): string[] {
+export function readCodes(value: unknown, secrets: readonly string[] = []): string[] {
   if (!Array.isArray(value)) return [];
+  const guarded = secrets.filter((secret) => secret !== "");
   const codes: string[] = [];
   for (const entry of value) {
     if (codes.length >= MAX_CODES) break;
     if (typeof entry !== "string") continue;
     if (entry.length > MAX_CODE_LENGTH) continue;
     if (!CODE.test(entry)) continue;
+    if (guarded.some((secret) => entry.includes(secret))) continue;
     if (!codes.includes(entry)) codes.push(entry);
   }
   return codes;
@@ -119,6 +124,6 @@ export async function verifyTurnstile(
   if (typeof payload !== "object" || payload === null) return no(UNREACHABLE);
   const body = payload as { success?: unknown; "error-codes"?: unknown };
   if (body.success === true) return { ok: true, codes: [] };
-  const codes = readCodes(body["error-codes"]);
+  const codes = readCodes(body["error-codes"], [key, token]);
   return no(...(codes.length > 0 ? codes : [UNKNOWN]));
 }
