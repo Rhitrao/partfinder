@@ -18,7 +18,7 @@ import { MAX_QUERY_LENGTH, partKey, readQuery, renderPage, resolveCountry } from
 import { handleVendors } from "./vendors/index";
 import { handleSupplierApi } from "./vendors/api";
 import { renderScripts } from "./vendors/script";
-import { resolveScope } from "./vendors/search";
+import { linkOutsFor, resolveScope } from "./vendors/search";
 import { NOT_CONFIGURED, renderLinkOuts, renderPending } from "./vendors/suppliers";
 
 function respond(status: number, body: unknown, extra: Record<string, string> = {}): Response {
@@ -73,7 +73,7 @@ function handlePage(request: Request, url: URL, env: Env): Response {
   // Near the city the buyer typed, or the whole country when they typed none. Derived here and
   // sent to nobody: no cookie, no record, nothing but this render and the request the page makes.
   const scope = resolveScope(city, url.searchParams.get("scope") ?? "");
-  const { sending, groups } = gate;
+  const { sending, groups, cards } = gate;
   // Quantities the user typed on a card, one field per part key, capped like everything else.
   const typedQuantities: Record<string, number> = {};
   for (const [name, value] of url.searchParams) {
@@ -95,14 +95,16 @@ function handlePage(request: Request, url: URL, env: Env): Response {
   // "Other ways to send" is the only way out when there is no Suppliers section, so it opens
   // then, and stays collapsed when the section is there to be used instead.
   let sendOpen = true;
-  // Three things have to hold before the page promises a list: a city to search in, a brand to
-  // search for, and a site key, because without one no token can be minted and the endpoint
-  // would refuse every request the script made. supplierGate checks all of them.
-  if (groups.length > 0) {
+  // A card a supplier search can act on, and a site key - without one no token can be minted and
+  // the endpoint would refuse every request the script made. supplierGate decides both, and the
+  // endpoint's search plan reads the same definition of a searchable card, so the section cannot
+  // promise a list nobody will look for or refuse one somebody would have.
+  if (cards.length > 0) {
+    const blocks = linkOutsFor(sending, groups);
     if (gate.render) {
       nonce = newNonce();
       suppliers = renderPending({
-        groups,
+        blocks,
         country,
         city,
         scope,
@@ -122,7 +124,7 @@ function handlePage(request: Request, url: URL, env: Env): Response {
       // Never silently. Nothing but the configuration can stop the search now - a missing city
       // means All India rather than nothing - so the page says that much rather than showing the
       // link-outs bare, which is what a working page with nothing nearby would look like.
-      suppliers = renderLinkOuts(groups, country, city, NOT_CONFIGURED);
+      suppliers = renderLinkOuts(blocks, country, city, NOT_CONFIGURED);
     }
   }
 

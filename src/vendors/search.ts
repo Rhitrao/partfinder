@@ -5,7 +5,7 @@
 // search once per group, add one search that names no brand at all, then merge by place id so a
 // shop that came back for two brands is one row, not two.
 
-import { partKey, type Country } from "../page";
+import { cardTitle, outbound, partKey, type Country } from "../page";
 import type { ParseResult } from "../parse";
 import { genericVendorQueryFor } from "../rules";
 import {
@@ -161,6 +161,29 @@ export interface Ask {
   parts: string[];
 }
 
+/**
+ * Whether this card gives a supplier search anything to look for.
+ *
+ * A recognised number has a manufacturer. A described part has its machine's brands and its own
+ * name. A number nobody placed has only the words the message carried around it, and without
+ * those it has nothing: "9ZZ123456 spare parts" is not a query, it is noise.
+ *
+ * This is the one definition. The page's gate and the endpoint's search plan both read it, so
+ * the section cannot appear with nothing behind it, and - which is what went wrong in step 9 -
+ * it cannot fail to appear when there was something.
+ */
+export function isSearchable(result: ParseResult): boolean {
+  if (result.candidates.length > 0) return true;
+  if (result.described !== undefined) return true;
+  if (result.unplaced === true) return (result.words ?? []).length > 0;
+  return false;
+}
+
+/** The cards a supplier search can act on, out of the ones that may leave the page at all. */
+export function searchableCards(results: readonly ParseResult[]): ParseResult[] {
+  return outbound(results).filter(isSearchable);
+}
+
 /** Brand queries per page view, and the ceiling on calls: the asks plus the one that names none. */
 export const MAX_ASKS = MAX_GROUPS + 1;
 
@@ -188,19 +211,18 @@ export function asksFor(
     parts: group.results.map(partKey),
   }));
 
-  for (const result of results) {
+  // The recognised numbers are already covered by their brand groups; what is left is the two
+  // kinds of card that have no group. The filter is what decides which of those are worth a
+  // call, and the gate reads the same filter.
+  for (const result of searchableCards(results)) {
     const key = partKey(result);
     if (result.described) {
       for (const brand of result.described.brands.slice(0, MAX_DESCRIBED_BRANDS)) {
         asks.push({ subject: brandSubject(brand), oem: brand, parts: [key] });
       }
       asks.push({ subject: `${result.described.name} supplier`, oem: null, parts: [key] });
-      continue;
-    }
-    if (result.unplaced) {
-      const words = (result.words ?? []).join(" ");
-      if (words === "") continue;
-      asks.push({ subject: `${words} spare parts`, oem: null, parts: [key] });
+    } else if (result.unplaced) {
+      asks.push({ subject: `${(result.words ?? []).join(" ")} spare parts`, oem: null, parts: [key] });
     }
   }
 
@@ -209,6 +231,45 @@ export function asksFor(
     asks.push({ subject: trade, oem: null, parts: [] });
   }
   return asks.slice(0, MAX_ASKS);
+}
+
+/**
+ * One block of link-outs: what a buyer can still do by hand when the list cannot be fetched, or
+ * when JavaScript is off and it never will be.
+ *
+ * Built from the same cards as the asks, for the same reason. A described part's blocks are its
+ * brands; a number nobody placed has no brand, so its block is headed by the number itself and
+ * offers the one search there is.
+ */
+export interface LinkOut {
+  heading: string;
+  /** The brand to search Maps for, and to look for a dealer locator under. Null when none. */
+  oem: string | null;
+  /** The card whose spellings drive the "Search suppliers on Google" link. */
+  result: ParseResult;
+}
+
+export function linkOutsFor(
+  results: readonly ParseResult[],
+  groups: readonly BrandGroup[],
+): LinkOut[] {
+  const blocks: LinkOut[] = [];
+  const add = (block: LinkOut) => {
+    if (!blocks.some((b) => b.heading === block.heading)) blocks.push(block);
+  };
+  for (const group of groups.slice(0, MAX_GROUPS)) {
+    add({ heading: group.oem, oem: group.oem, result: group.results[0]! });
+  }
+  for (const result of searchableCards(results)) {
+    if (result.described) {
+      for (const brand of result.described.brands.slice(0, MAX_DESCRIBED_BRANDS)) {
+        add({ heading: brand, oem: brand, result });
+      }
+    } else if (result.unplaced) {
+      add({ heading: cardTitle(result), oem: null, result });
+    }
+  }
+  return blocks;
 }
 
 /**

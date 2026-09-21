@@ -16,13 +16,13 @@ import type { Env } from "./env";
 import { outbound } from "./page";
 import type { ParseResult } from "./parse";
 import { extractHints, extractTokens, parse } from "./parse";
-import { groupByOem, type BrandGroup } from "./vendors/search";
+import { groupByOem, searchableCards, type BrandGroup } from "./vendors/search";
 
 /**
  * Why the live Suppliers section - the status line, the placeholders, the Turnstile container
  * and the script - would not render. One code per condition, in the order handlePage checks them.
  */
-export type SupplierBlocker = "no_parts" | "no_brand" | "no_site_key";
+export type SupplierBlocker = "no_parts" | "no_searchable_part" | "no_site_key";
 
 /**
  * Plain words for each code, for the health endpoint. The page never shows one of these: a
@@ -31,8 +31,9 @@ export type SupplierBlocker = "no_parts" | "no_brand" | "no_site_key";
 export const BLOCKER_REASONS: Record<SupplierBlocker, string> = {
   no_parts:
     "The query holds no number Partfinder recognises, so there is nothing to search for.",
-  no_brand:
-    "No manufacturer was read from those numbers, so there is no brand to search Google for.",
+  no_searchable_part:
+    "The parts on the page give a supplier search nothing to look for: no manufacturer, no " +
+    "machine, and no words describing them.",
   no_site_key:
     "TURNSTILE_SITE_KEY is missing or empty, so the page cannot mint a token and the supplier " +
     "endpoint would refuse every request the page's script made.",
@@ -40,10 +41,12 @@ export const BLOCKER_REASONS: Record<SupplierBlocker, string> = {
 
 /** What the /parts/ render path decides about the Suppliers section, and why. */
 export interface SupplierGate {
-  /** The numbers that may leave the page: recognised, and not shaped like a phone number. */
+  /** Everything that may leave the page: recognised, described or unplaced, never phone-shaped. */
   sending: ParseResult[];
-  /** Those numbers grouped by manufacturer, which is what a supplier search searches for. */
+  /** The recognised numbers grouped by manufacturer. Empty on a page of described parts alone. */
   groups: BrandGroup[];
+  /** The subset a supplier search can act on. This, not the groups, is what opens the section. */
+  cards: ParseResult[];
   /** Every condition that failed, in check order. Empty means the live section renders. */
   blockers: SupplierBlocker[];
   /** Whether the live section renders. True exactly when `blockers` is empty. */
@@ -68,11 +71,16 @@ export interface GateInput {
 export function supplierGate(input: GateInput): SupplierGate {
   const sending = outbound(input.results);
   const { groups } = groupByOem(sending);
+  // searchableCards, not the brand groups. Grouping by manufacturer was the whole of this test
+  // until step 9, and step 9 added two kinds of card that have no manufacturer: a described part
+  // and a number nobody placed. The endpoint learned about both and this did not, so the page
+  // rendered their cards and then refused to look for anybody to buy them from.
+  const cards = searchableCards(input.results);
   const blockers: SupplierBlocker[] = [];
   if (sending.length === 0) blockers.push("no_parts");
-  else if (groups.length === 0) blockers.push("no_brand");
+  else if (cards.length === 0) blockers.push("no_searchable_part");
   if (input.siteKey === "") blockers.push("no_site_key");
-  return { sending, groups, blockers, render: blockers.length === 0 };
+  return { sending, groups, cards, blockers, render: blockers.length === 0 };
 }
 
 /**

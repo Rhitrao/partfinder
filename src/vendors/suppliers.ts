@@ -6,6 +6,7 @@
 import { findDealerLocator } from "../dealers";
 import {
   anchor,
+  cardTitle,
   escapeHtml,
   mapsUrl,
   partKey,
@@ -16,7 +17,13 @@ import {
 } from "../page";
 import type { ParseResult } from "../parse";
 import { WHATSAPP_LABEL, phoneFor } from "./phone";
-import { areaOf, formatDistance, type BrandGroup, type Scope, type Supplier } from "./search";
+import {
+  areaOf,
+  formatDistance,
+  type LinkOut,
+  type Scope,
+  type Supplier,
+} from "./search";
 
 /**
  * Google's attribution for Places results shown without a Google map, and for the map itself.
@@ -60,20 +67,22 @@ export function renderMapBox(): string {
  * need no key, so the section is useful with Google's API shut off entirely.
  */
 export function renderFallback(
-  groups: readonly BrandGroup[],
+  blocks: readonly LinkOut[],
   country: Country,
   city: string,
 ): string {
-  if (groups.length === 0) return "";
-  return groups
-    .map((group) => {
-      const first = group.results[0]!;
-      const locator = findDealerLocator(group.oem, country.code);
+  if (blocks.length === 0) return "";
+  return blocks
+    .map((block) => {
+      const { heading, oem, result } = block;
+      const locator = oem === null ? undefined : findDealerLocator(oem, country.code);
+      // A number nobody placed names no brand, so there is no Maps search for one and no dealer
+      // locator to offer. The supplier search on its own is still the answer it has.
       return `<div class="group">
-          <h3>${escapeHtml(group.oem)}</h3>
-          ${anchor(mapsUrl(group.oem, country, city), `${group.oem} parts shops on Google Maps`)}
-          ${anchor(suppliersUrl(first, country, city), "Search suppliers on Google")}
-          ${locator ? anchor(locator.url, `Authorised ${group.oem} dealers`) : ""}
+          <h3>${escapeHtml(heading)}</h3>
+          ${oem === null ? "" : anchor(mapsUrl(oem, country, city), `${oem} parts shops on Google Maps`)}
+          ${anchor(suppliersUrl(result, country, city), "Search suppliers on Google")}
+          ${locator ? anchor(locator.url, `Authorised ${oem} dealers`) : ""}
         </div>`;
     })
     .join("\n        ");
@@ -163,7 +172,7 @@ export const NOT_CONFIGURED = "Supplier search isn't set up right now.";
 
 /** No city, or nothing set up: the section is the link-outs, under a line saying which it is. */
 export function renderLinkOuts(
-  groups: readonly BrandGroup[],
+  blocks: readonly LinkOut[],
   country: Country,
   city: string,
   notice = "",
@@ -172,7 +181,7 @@ export function renderLinkOuts(
   return `<section class="suppliers">
         <h2>Suppliers${where === "" ? "" : ` near ${escapeHtml(where)}`}</h2>
         ${notice === "" ? "" : `<p class="warn">${escapeHtml(notice)}</p>`}
-        ${renderFallback(groups, country, city)}
+        ${renderFallback(blocks, country, city)}
       </section>`;
 }
 
@@ -217,7 +226,8 @@ export function suppliersHeading(scope: Scope, city: string): string {
 }
 
 export interface PendingInput {
-  groups: readonly BrandGroup[];
+  /** The by-hand link-outs, for no JavaScript and for a search that will not answer. */
+  blocks: readonly LinkOut[];
   country: Country;
   city: string;
   scope: Scope;
@@ -239,7 +249,7 @@ export interface PendingInput {
  * now rather than with the cards, so the cards can never appear without it.
  */
 export function renderPending(input: PendingInput): string {
-  const { groups, country, city, siteKey, map } = input;
+  const { blocks, country, city, siteKey, map } = input;
   const where = city.trim();
   const inner = [
     ...(map ? [renderMapBox()] : []),
@@ -258,11 +268,11 @@ export function renderPending(input: PendingInput): string {
         <div id="pf-locate">${LOCATE_BUTTON}</div>
         <noscript>
           <p class="warn">${escapeHtml(NO_SCRIPT)}</p>
-          ${renderFallback(groups, country, city)}
+          ${renderFallback(blocks, country, city)}
         </noscript>
         <details class="elsewhere" id="pf-elsewhere">
           <summary>Search on Google instead</summary>
-          ${renderFallback(groups, country, city)}
+          ${renderFallback(blocks, country, city)}
         </details>
       </section>`;
 }
@@ -392,9 +402,15 @@ function renderShop(supplier: Supplier, number: number, input: CardsInput): stri
   } else {
     const chips = matched
       .map((part) => {
+        // What the card is called, never its key. A described part's key is desc:EX200:pin
+        // pivot, which is plumbing, and this chip is the one place it reached a reader.
+        const label = cardTitle(part);
         const oem = part.candidates[0]?.oem ?? "";
         const brand = matchedGroups.includes(oem) ? oem : matchedGroups[0] ?? oem;
-        return `<span class="chip">${escapeHtml(partKey(part))} (listed for ${escapeHtml(brand)})</span>`;
+        // A shop found by the words around a number was listed for no brand at all, so there is
+        // nothing to have been listed for. It read "(listed for )".
+        const listed = brand === "" ? "" : ` (listed for ${escapeHtml(brand)})`;
+        return `<span class="chip">${escapeHtml(label)}${listed}</span>`;
       })
       .join("\n              ");
     lines.push(`<p class="sask">Ask about:</p>
