@@ -3,6 +3,7 @@
 // stored or logged. Every piece of user input is HTML-escaped wherever it appears.
 
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
+import { findFitment, machineCount, type Fitment } from "./fitments";
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "./manifest";
 import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
 import { quantityFor } from "./quantity";
@@ -420,6 +421,22 @@ details > summary {
 .more > * { margin-top: var(--s8); }
 .how { margin-top: var(--s48); color: var(--muted); font-size: 14px; }
 .check summary { font-size: 14px; font-weight: 500; color: var(--muted); }
+.check > .link { display: flex; margin-top: var(--s8); }
+h4 { font-size: 13px; font-weight: 600; margin: var(--s12) 0 var(--s4); }
+.fitment { margin: var(--s8) 0 var(--s12); }
+.fitment summary { font-size: 14px; font-weight: 600; }
+.fitgroup h4 { text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.machines { font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0; }
+.fitnote { font-size: 13px; color: var(--muted); margin: var(--s12) 0 0; }
+/* A link inside a sentence, not a button like the link-outs around it. */
+.link.inline {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+}
 .elsewhere { margin-top: var(--s16); }
 
 /* ---- Part cards --------------------------------------------------------------------------- */
@@ -791,12 +808,44 @@ function hintUrl(input: PageInput, oem: string): string {
  * internally; the spellings themselves are never shown - that is the parser's business.
  */
 function renderCheck(result: ParseResult, country: Country): string {
+  // Only where an entry exists. A part nobody has looked up shows nothing here, because the
+  // alternative is a list Partfinder made up about somebody's machine.
+  const fitment = findFitment(partKey(result));
   return `<details class="check">
           <summary>Check this part</summary>
+          ${fitment === undefined ? "" : renderFitment(fitment)}
           ${link(imagesUrl(result, country), "See images")}
           ${link(fitsUrl(result, country), "Which machines it fits")}
           ${link(searchUrl(result, country), "Search Google")}
         </details>`;
+}
+
+/**
+ * "Commonly fitted to (52 machines)", collapsed, with the groups inside and the provenance under
+ * them.
+ *
+ * The note and the source are not a footnote to be tucked away: the list is a compilation of
+ * other people's listings, it disagrees with itself between sellers, and it goes stale. So the
+ * same line always carries all three - what the list is, where it came from, and when it was
+ * read - and it renders from the entry rather than from anything written here.
+ */
+function renderFitment(fitment: Fitment): string {
+  const groups = fitment.machines
+    .map(
+      (group) => `<div class="fitgroup">
+              <h4>${escapeHtml(group.heading)}</h4>
+              <p class="machines">${escapeHtml(group.machines.join(", "))}</p>
+            </div>`,
+    )
+    .join("\n            ");
+  const count = machineCount(fitment);
+  return `<details class="fitment">
+            <summary>Commonly fitted to (${count} machine${count === 1 ? "" : "s"})</summary>
+            ${groups}
+            <p class="fitnote">${escapeHtml(fitment.note)}
+              ${anchor(fitment.sourceUrl, "Source", "link inline")},
+              checked ${escapeHtml(fitment.checkedOn)}.</p>
+          </details>`;
 }
 
 /**
