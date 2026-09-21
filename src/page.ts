@@ -640,6 +640,13 @@ a.chip, button.chip { min-height: var(--tap); }
 
 /* ---- Other ways to send --------------------------------------------------------------------- */
 .send { margin-top: var(--s32); }
+/*
+ * Inside a form the fields stack because the form is a flex column. "Other ways to send" is a
+ * <details>, which is not, so an inline-flex .whatsapp and an inline <label> sat on one line and
+ * the button ran into the words "The message". Both are given a line of their own.
+ */
+.send > .whatsapp { display: flex; margin: var(--s12) 0; }
+.send > label { display: block; }
 .send textarea { min-height: 0; font-size: 14px; }
 .sendbar {
   position: fixed;
