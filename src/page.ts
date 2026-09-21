@@ -607,6 +607,61 @@ a.chip, button.chip { min-height: var(--tap); }
   padding-top: var(--s16);
   border-top: 1px solid var(--border);
 }
+
+/* ---- Layout ------------------------------------------------------------------------------------
+ * Mobile first: one column, 16px of side padding, capped at 760px and centred. The second column
+ * arrives at 960px and only when there is something to put in it - an empty right half would just
+ * squeeze the form to half width on a page that has not been searched yet.
+ */
+.wrap { max-width: var(--maxw); margin: 0 auto; }
+.cols { display: grid; gap: var(--s32); }
+.col { min-width: 0; }
+
+/* One column's width at the two-column breakpoint. The send bar is fixed, so it cannot inherit
+ * the grid's geometry and has to be told it. */
+:root {
+  --col-w: calc((min(100vw - (2 * var(--s16)), var(--maxw)) - var(--s32)) / 2);
+  /* The fixed send bar's height, which is also the room the page leaves under its last card. */
+  --bar-h: 72px;
+}
+
+@media (min-width: 960px) {
+  .cols.two { grid-template-columns: 1fr 1fr; align-items: start; }
+  /*
+   * The left column sticks while it is shorter than the viewport, and scrolls with the page once
+   * it is taller - which is what position: sticky does on its own, given align-self: start. CSS
+   * has no way to ask how tall the column's content is, so this is the behaviour rather than the
+   * measurement.
+   */
+  .cols.two > .left { position: sticky; top: var(--s16); align-self: start; }
+  /* Fixed, so it cannot sit inside the column; placed over it instead, to the pixel. */
+  .sendbar, .sendpanel {
+    left: calc(50% + (var(--s32) / 2));
+    right: auto;
+    width: var(--col-w);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--r) var(--r) 0 0;
+  }
+}
+
+/* The map: a strip on a phone, taller on a tablet, and as much of its column as it can have on a
+ * desktop, up to 480px. */
+@media (min-width: 700px) { .map { height: 320px; } }
+@media (min-width: 960px) { .map { height: clamp(320px, 52vh, 480px); } }
+
+/*
+ * Safe areas. The viewport meta carries viewport-fit=cover so that env() is not simply zero,
+ * which means the page now reaches under a notch and has to hold its own gutters back out of it.
+ */
+body {
+  padding-left: max(var(--s16), env(safe-area-inset-left));
+  padding-right: max(var(--s16), env(safe-area-inset-right));
+  /* Exactly the bar's height, so a fixed bar never covers the last card. */
+  padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
+}
+.sendbar { padding-bottom: calc(var(--s12) + env(safe-area-inset-bottom)); }
+.sendpanel { padding-bottom: calc(var(--s16) + env(safe-area-inset-bottom)); }
 `.trim();
 
 /**
@@ -883,7 +938,7 @@ export function renderDocument(main: string, options: DocumentOptions = {}): str
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex">
     <meta name="theme-color" content="${THEME_COLOR_LIGHT}" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="${THEME_COLOR_DARK}" media="(prefers-color-scheme: dark)">
@@ -1003,17 +1058,32 @@ export function renderPage(input: PageInput): string {
     after.push(renderSend(withQuantities, results));
   }
 
-  const sections = [
+  // What the buyer types and what Partfinder read out of it, on the left; who can be asked and
+  // how, on the right. On a phone that is one column in that order, which is the order of the
+  // job. The right column only exists once there is a search, so the empty page stays one column
+  // at every width.
+  const left = [
     ...(input.notice ? [`<p class="note">${escapeHtml(input.notice)}</p>`] : []),
-    form.join("\n      "),
-    ...after,
-  ];
+    form.join("\n          "),
+  ].join("\n          ");
+  const right = after.filter((part) => part !== "").join("\n          ");
+  const columns = right === "" ? "cols" : "cols two";
+  const rightColumn =
+    right === ""
+      ? ""
+      : `\n        <div class="col right">
+          ${right}
+        </div>`;
 
-  return renderDocument(`<main>
+  return renderDocument(`<main class="wrap">
       <h1>Partfinder</h1>
       <p class="lede">Paste a customer's message. Get the parts, nearby suppliers, and ready
       WhatsApp messages.</p>
-      ${sections.join("\n      ")}
+      <div class="${columns}">
+        <div class="col left">
+          ${left}
+        </div>${rightColumn}
+      </div>
       ${HOW_IT_WORKS}
     </main>`, {
     ...(input.nonce === undefined ? {} : { nonce: input.nonce }),
