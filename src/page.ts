@@ -5,7 +5,13 @@
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
 import { findFitment, machineCount, sourceLabel, type Fitment } from "./fitments";
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "./manifest";
-import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
+import {
+  PHONE_SHAPED,
+  extractHints,
+  extractTokens,
+  parse,
+  type ParseResult,
+} from "./parse";
 import { quantityFor } from "./quantity";
 
 export interface Country {
@@ -51,20 +57,21 @@ export const MAX_CARDS = 50;
 /** Target length of the WhatsApp message, in characters. */
 export const WHATSAPP_LIMIT = 1000;
 
-/**
- * A bare digit run shaped like a phone number: 10 digits starting 0 or 6 to 9, or 11 to 15
- * digits. "Bare" means the user typed no separators, so 6754-61-1102 is never phone-shaped.
- */
-const PHONE_SHAPED = /^(?:[06-9]\d{9}|\d{11,15})$/;
+/** Everything that gets a card: a placed number, or one nobody could place but that reads as one. */
+export function isPart(result: ParseResult): boolean {
+  return result.candidates.length > 0 || result.unplaced === true;
+}
 
 /**
- * The numbers that may leave this page: recognised, and not shaped like a phone number.
+ * The parts that may leave this page: anything with a card, and not shaped like a phone number.
  *
  * What a user pastes can hold a customer's name and number; only what Partfinder reads as a part
- * number goes into a message to a third party, or onto a card, or into the "Not recognised" line.
+ * goes into a message to a third party, or onto a card, or into the "Not recognised" line. Since
+ * step 9 a number no rule placed is one of those - it is still what the customer asked for, and
+ * dropping it from the message was the surest way to lose an order.
  */
 export function outbound(results: readonly ParseResult[]): ParseResult[] {
-  return results.filter((r) => r.candidates.length > 0 && !PHONE_SHAPED.test(r.input));
+  return results.filter((r) => isPart(r) && !PHONE_SHAPED.test(r.input));
 }
 
 const ESCAPES: Record<string, string> = {
@@ -182,7 +189,9 @@ export function requirementMessage(
     const quantity = quantities[partKey(result)];
     const makers = [...new Set(result.candidates.map((c) => c.oem))].join(" or ");
     const amount = quantity === undefined ? "" : `, qty ${quantity}`;
-    return `${index + 1}. ${partKey(result)} (likely ${makers})${amount}`;
+    // Nothing placed it, so there is no "likely" to claim. The number goes on its own.
+    const who = makers === "" ? "" : ` (likely ${makers})`;
+    return `${index + 1}. ${partKey(result)}${who}${amount}`;
   };
   const assemble = (count: number): string => {
     const lines = results.slice(0, count).map(line);
@@ -890,7 +899,11 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
   }
   if (suffix !== "") lines.push(`<p class="tag">${escapeHtml(suffix)}</p>`);
 
-  if (makers.length === 1) {
+  if (result.unplaced) {
+    // No rule placed it, so there is no manufacturer to name and no format match to claim. The
+    // number is still the title, and every link-out below still works on it.
+    lines.push(`<p class="maker unplaced">${UNPLACED}</p>`);
+  } else if (makers.length === 1) {
     lines.push(
       `<p class="maker">${escapeHtml(makers[0]!)} <span class="badge">format match</span></p>`,
     );
@@ -919,6 +932,8 @@ function renderCard(result: ParseResult, input: PageInput, index: number): strin
         </section>`;
 }
 
+export const UNPLACED = "Manufacturer not recognised";
+
 export const FORMAT_CAVEAT =
   "Manufacturer matched from the number's format, not confirmed. Suppliers confirm fitment.";
 
@@ -932,8 +947,11 @@ export const FORMAT_CAVEAT =
  */
 function renderResults(results: readonly ParseResult[], input: PageInput): string {
   const shown = results.filter((r) => !PHONE_SHAPED.test(r.input));
-  const recognised = shown.filter((r) => r.candidates.length > 0);
-  const unrecognised = shown.filter((r) => r.candidates.length === 0);
+  // Three groups now, not two. A number that reads as a part gets a card whether or not a rule
+  // placed it; only what does not read as one at all - too short, or bare digits - is left to
+  // the line at the bottom.
+  const recognised = shown.filter(isPart);
+  const unrecognised = shown.filter((r) => !isPart(r));
 
   const parts: string[] = ["<h2>Parts</h2>"];
   if (recognised.length === 0) {

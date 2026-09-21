@@ -208,17 +208,18 @@ describe("escaping", () => {
 
 describe("not determined", () => {
   it("is an answer, not an error", async () => {
-    const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${q("HELLO12")}`), {});
+    // Since step 9 HELLO12 reads as a part number nobody could place, so it is a card. "12345"
+    // is the case that is still only a line: bare digits are a year or an invoice, not a part.
+    const res = await worker.fetch(new Request(`https://rohitrao.in/parts/${q("12345")}`), {});
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Not recognised: HELLO12");
-    // One line naming it, not a card explaining itself.
+    expect(html).toContain("Not recognised: 12345");
     expect(html).not.toContain('class="card"');
     expect(html).not.toContain("left out of the WhatsApp message");
   });
 
-  it("offers nothing to send when no number was recognised", async () => {
-    const html = await page(q("HELLO12"));
+  it("offers nothing to send when nothing reads as a part at all", async () => {
+    const html = await page(q("12345"));
     expect(whatsappLink(html)).toBeUndefined();
     expect(html).toContain("Nothing here looks like a part number yet.");
   });

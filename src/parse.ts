@@ -25,6 +25,40 @@ export interface ParseResult {
   compact: string;
   candidates: Candidate[];
   reason?: string;
+  /**
+   * A token that reads as a part number but that no rule places.
+   *
+   * It is still a part. The buyer typed it because a customer asked for it, and "we do not
+   * recognise the manufacturer" is an answer - one that leaves the number searchable and
+   * sendable. Without this the number fell off the page into a "Not recognised" line and out of
+   * every message, which is the one thing it must not do.
+   */
+  unplaced?: boolean;
+}
+
+/**
+ * A bare digit run shaped like a phone number: 10 digits starting 0 or 6 to 9, or 11 to 15
+ * digits. "Bare" means the user typed no separators, so 6754-61-1102 is never phone-shaped.
+ *
+ * It lives here rather than in the page because it is a statement about a token, and both the
+ * page and the parser have to agree on it.
+ */
+export const PHONE_SHAPED = /^(?:[06-9]\d{9}|\d{11,15})$/;
+
+/**
+ * Whether a token nobody could place still reads as a part number.
+ *
+ * Six characters, at least one digit, and either a letter or a separator. The letter-or-separator
+ * test is what keeps a bare run of digits out: a year, an invoice number and a quantity are all
+ * digits and nothing else, and none of them is a part. Prices never reach here - they are blanked
+ * before the text is tokenised - and a phone number is excluded outright.
+ */
+export function looksLikePartNumber(token: string): boolean {
+  const upper = token.trim().toUpperCase();
+  if (upper.length < 6) return false;
+  if (!/\d/.test(upper)) return false;
+  if (PHONE_SHAPED.test(upper)) return false;
+  return /[A-Z]/.test(upper) || /[-/.]/.test(upper);
 }
 
 const TOKEN = /[^\s,;]+/g;
@@ -324,6 +358,9 @@ export function parse(token: string, hints: readonly string[] = []): ParseResult
     result.candidates.push(c);
   }
 
-  if (result.candidates.length === 0) result.reason = "no_rule_matched";
+  if (result.candidates.length === 0) {
+    result.reason = "no_rule_matched";
+    if (looksLikePartNumber(upper)) result.unplaced = true;
+  }
   return result;
 }
