@@ -259,3 +259,109 @@ describe("every path that used to hold an undefined name", () => {
     expect(app.calls[1]!.body.near).toBe("12.972,77.595");
   });
 });
+
+/**
+ * The map, drawn rather than failed.
+ *
+ * The step 7b report had the map box reading "Map unavailable" as a second symptom. It was not:
+ * drawMap() returns at once while there are no pins, so the box kept the line the server had
+ * already put in it for browsers with no JavaScript. Nothing about the map was broken, and these
+ * cases are the proof - the same script, the same page, with Google's objects in place.
+ */
+describe("the map, once the crash is out of the way", () => {
+  /** Just enough of Google's Maps JavaScript API for drawMap() to finish. */
+  function googleStub() {
+    const markers: { title: string; position: { lat: number; lng: number }; clicks: (() => void)[] }[] = [];
+    const bounded: { lat: number; lng: number }[] = [];
+    const map = {
+      options: null as unknown,
+      fits: 0,
+      fitBounds() {
+        this.fits++;
+      },
+      panTo() {},
+    };
+    const api = {
+      maps: {
+        importLibrary: (name: string) =>
+          Promise.resolve(
+            name === "maps"
+              ? {
+                  Map: function (this: unknown, _box: unknown, options: unknown) {
+                    map.options = options;
+                    return map;
+                  },
+                }
+              : {
+                  PinElement: function (this: Record<string, unknown>) {
+                    this.element = { pin: true };
+                  },
+                  AdvancedMarkerElement: function (
+                    this: Record<string, unknown>,
+                    options: Record<string, unknown>,
+                  ) {
+                    const clicks: (() => void)[] = [];
+                    markers.push({
+                      title: String(options.title ?? ""),
+                      position: options.position as { lat: number; lng: number },
+                      clicks,
+                    });
+                    this.map = options.map;
+                    this.addListener = (_event: string, handler: () => void) => clicks.push(handler);
+                  },
+                },
+          ),
+        LatLngBounds: function (this: Record<string, unknown>) {
+          this.extend = (point: { lat: number; lng: number }) => bounded.push(point);
+        },
+      },
+    };
+    return { api, markers, bounded, map };
+  }
+
+  /** Google's loader calls initMap; the endpoint's answer supplies the pins. */
+  async function drawn() {
+    const app = await boot();
+    const google = googleStub();
+    app.window.google = google.api;
+    (app.window.initMap as () => void)();
+    const widget = app.turnstile();
+    app.reply(ANSWER);
+    widget.callback("a-token");
+    await app.settle();
+    return { app, google };
+  }
+
+  it("replaces the placeholder and drops a pin per shop", async () => {
+    const { app, google } = await drawn();
+    expect(app.byId("pf-map")!.textContent).not.toBe(MAP_UNAVAILABLE);
+    expect(app.byId("pf-map")!.textContent).toBe("");
+    expect(google.markers.map((marker) => marker.title)).toEqual(["Shared Spares", "Cat Corner"]);
+    expect(google.markers[0]!.position).toEqual({ lat: 12.978, lng: 77.64 });
+    expect(google.map.fits).toBeGreaterThan(0);
+    expect(google.bounded).toHaveLength(2);
+  });
+
+  it("ties each pin to its card, both ways", async () => {
+    const { app, google } = await drawn();
+    // A tap on the pin marks the card it belongs to.
+    expect(() => google.markers[1]!.clicks[0]!()).not.toThrow();
+    expect(app.byId("pf-shop-2")!.classList.contains("here")).toBe(true);
+    expect(app.byId("pf-shop-1")!.classList.contains("here")).toBe(false);
+    // And every card gains the way back to the pin.
+    const showMap = app.byId("pf-shop-1")!.querySelector(".showmap")!;
+    expect(showMap.textContent).toBe("Show on map");
+    expect(() => showMap.fire("click")).not.toThrow();
+  });
+
+  it("draws nothing at all before there are pins, which is what step 7 looked like", async () => {
+    const app = await boot();
+    const google = googleStub();
+    app.window.google = google.api;
+    expect(() => (app.window.initMap as () => void)()).not.toThrow();
+    await app.settle();
+    // No search has answered, so there is nothing to draw and the server's line still stands.
+    expect(google.markers).toHaveLength(0);
+    expect(app.byId("pf-map")!.textContent).toBe(MAP_UNAVAILABLE);
+  });
+});
