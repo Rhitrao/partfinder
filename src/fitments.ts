@@ -24,9 +24,21 @@ export interface Fitment {
   part: string;
   /** Grouped by machine family, because fifty model numbers in one run is not a list. */
   machines: readonly MachineGroup[];
-  /** The source tier from CLAUDE.md's table. */
+  /**
+   * The source tier from CLAUDE.md's table, and it follows from `sources` rather than being
+   * chosen: one seller's listing is T4, and two or more independent domains agreeing is T3. The
+   * tier is stored rather than computed because counting URLs is not the same as reading them -
+   * five domains reposting one listing count once, and only a person can see that.
+   */
   basis: string;
-  sourceUrl: string;
+  /**
+   * Every page this list was read off, each one printed on the page as a link.
+   *
+   * An array rather than a single URL because that is what the tier turns on. A second
+   * independent domain agreeing raises this entry from T4 to T3, and that should be one line of
+   * data and a changed tier, not a change to the shape of the file.
+   */
+  sources: readonly string[];
   /** ISO date the source page was read. Printed as is: a fitment list goes stale. */
   checkedOn: string;
   /** What the list is and is not. Printed under it, every time, in muted text. */
@@ -36,8 +48,10 @@ export interface Fitment {
 export const FITMENTS: readonly Fitment[] = [
   {
     part: "1U-3352",
-    basis: "T3",
-    sourceUrl: "https://www.romacparts.com/1u3352-teeth.html",
+    // One seller's listing. CLAUDE.md: T4 is "One seller or one tender claims it"; T3 needs two
+    // or more independent domains to agree, and there is one domain here.
+    basis: "T4",
+    sources: ["https://www.romacparts.com/1u3352-teeth.html"],
     checkedOn: "2026-09-18",
     note:
       "Compiled from aftermarket seller listings, not Caterpillar's own catalogue. " +
@@ -72,6 +86,17 @@ export const FITMENTS: readonly Fitment[] = [
 /** The entry for a part key, or undefined. An exact match only: a near miss is a guess. */
 export function findFitment(part: string): Fitment | undefined {
   return FITMENTS.find((entry) => entry.part === part);
+}
+
+/** The host a source is on, without "www.", which is what the page prints as the link's label.
+ * Whether two sources are independent domains is the whole of the T4/T3 question, so the page
+ * shows the domains rather than the word "Source" twice. */
+export function sourceLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 /** How many machines the entry names, across every group. The summary says this number. */

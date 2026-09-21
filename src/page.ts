@@ -3,7 +3,7 @@
 // stored or logged. Every piece of user input is HTML-escaped wherever it appears.
 
 import { DEALER_LOCATORS, findDealerLocator, type DealerLocator } from "./dealers";
-import { findFitment, machineCount, type Fitment } from "./fitments";
+import { findFitment, machineCount, sourceLabel, type Fitment } from "./fitments";
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT } from "./manifest";
 import { extractHints, extractTokens, parse, type ParseResult } from "./parse";
 import { quantityFor } from "./quantity";
@@ -839,12 +839,17 @@ function renderFitment(fitment: Fitment): string {
     )
     .join("\n            ");
   const count = machineCount(fitment);
+  // Each source by its domain, because whether two of them are independent domains is exactly
+  // what decides the tier, and a reader can see that for themselves this way.
+  const sources = fitment.sources
+    .map((url) => anchor(url, sourceLabel(url), "link inline"))
+    .join(", ");
+  const label = fitment.sources.length === 1 ? "Source" : "Sources";
   return `<details class="fitment">
             <summary>Commonly fitted to (${count} machine${count === 1 ? "" : "s"})</summary>
             ${groups}
             <p class="fitnote">${escapeHtml(fitment.note)}
-              ${anchor(fitment.sourceUrl, "Source", "link inline")},
-              checked ${escapeHtml(fitment.checkedOn)}.</p>
+              ${label}: ${sources}, checked ${escapeHtml(fitment.checkedOn)}.</p>
           </details>`;
 }
 
